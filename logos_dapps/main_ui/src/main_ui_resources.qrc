@@ -1,0 +1,10 @@
+<!DOCTYPE RCC>
+<RCC>
+    <qresource prefix="/">
+        <file>icons/home.png</file>
+        <file>icons/settings.png</file>
+        <file>icons/profile.png</file>
+        <file>icons/chart.png</file>
+        <file>icons/modules.png</file>
+    </qresource>
+</RCC> 

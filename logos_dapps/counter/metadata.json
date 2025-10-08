@@ -1,0 +1,24 @@
+{
+  "name": "counter",
+  "version": "1.0.0",
+  "description": "Simple counter plugin for demonstration purposes",
+  "author": "Logos Core Team",
+  "type": "ui",
+  "main": "counter",
+  "dependencies": [],
+  "category": "misc",
+  "build": {
+    "type": "cmake",
+    "files": [
+      "src/counter_plugin.cpp",
+      "src/counter_plugin.h",
+      "src/counterview.cpp",
+      "src/counterview.h",
+      "src/counter_resources.qrc"
+    ]
+  },
+  "capabilities": [
+    "ui_components",
+    "demo"
+  ]
+} 

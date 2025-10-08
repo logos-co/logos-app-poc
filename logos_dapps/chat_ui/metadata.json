@@ -1,0 +1,26 @@
+{
+  "name": "chat_ui",
+  "version": "1.0.0",
+  "description": "Chat interface for the Logos application",
+  "author": "Logos Core Team",
+  "type": "ui",
+  "main": "chat_ui",
+  "dependencies": ["chat"],
+  "category": "chat",
+  "build": {
+    "type": "cmake",
+    "files": [
+      "src/chat_ui_plugin.cpp",
+      "src/chat_ui_plugin.h",
+      "src/chatwindow.cpp",
+      "src/chatwindow.h",
+      "src/messagewidget.cpp",
+      "src/messagewidget.h",
+      "src/chat_ui_resources.qrc"
+    ]
+  },
+  "capabilities": [
+    "ui_components",
+    "messaging"
+  ]
+} 
