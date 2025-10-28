@@ -38,7 +38,7 @@ void Window::setupUi()
     #endif
 
     // Load the main_ui plugin with the appropriate extension
-    QString pluginPath = QCoreApplication::applicationDirPath() + "/plugins/main_ui" + pluginExtension;
+    QString pluginPath = QCoreApplication::applicationDirPath() + "/../plugins/main_ui" + pluginExtension;
     QPluginLoader loader(pluginPath);
 
     QWidget* mainContent = nullptr;

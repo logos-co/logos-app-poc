@@ -1,6 +1,6 @@
 #include "window.h"
-#include "../../logos-cpp-sdk/cpp/logos_api.h"
-#include "../../logos-cpp-sdk/cpp/token_manager.h"
+#include "logos_api.h"
+#include "token_manager.h"
 #include <QApplication>
 #include <QIcon>
 #include <QDir>
@@ -37,10 +37,10 @@ int main(int argc, char *argv[])
     // Create QApplication first
     QApplication app(argc, argv);
 
-    // Set the plugins directory
-    QString pluginsDir = QDir::cleanPath(QCoreApplication::applicationDirPath() + "/bin/modules");
-    std::cout << "Setting plugins directory to: " << pluginsDir.toStdString() << std::endl;
-    logos_core_set_plugins_dir(pluginsDir.toUtf8().constData());
+    // Set the modules directory (for liblogos modules)
+    QString modulesDir = QDir::cleanPath(QCoreApplication::applicationDirPath() + "/../modules");
+    std::cout << "Setting modules directory to: " << modulesDir.toStdString() << std::endl;
+    logos_core_set_plugins_dir(modulesDir.toUtf8().constData());
 
     // Start the core
     logos_core_start();
@@ -56,7 +56,7 @@ int main(int argc, char *argv[])
     pluginExtension = ".so";
 #endif
 
-    QString pluginPath = pluginsDir + "/package_manager_plugin" + pluginExtension;
+    QString pluginPath = modulesDir + "/package_manager_plugin" + pluginExtension;
     logos_core_process_plugin(pluginPath.toUtf8().constData());
     bool loaded = logos_core_load_plugin("package_manager");
 

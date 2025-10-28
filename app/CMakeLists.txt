@@ -22,27 +22,62 @@ find_package(Qt6 COMPONENTS Widgets REQUIRED)
 # Add interfaces directory to include path
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
-# Add logos_core include directories - use a variable for the core path
-# First try to find logos-liblogos in logos-core-poc (when running from there)
-# Get the real path of current source directory to handle symlinks
-get_filename_component(REAL_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" REALPATH)
-set(_core_poc_liblogos "${REAL_SOURCE_DIR}/../../logos-liblogos")
-if(EXISTS "${_core_poc_liblogos}/interface.h")
-    set(LOGOS_CORE_DIR "${_core_poc_liblogos}")
-else()
-    # Fallback to relative path
-    set(LOGOS_CORE_DIR "${REAL_SOURCE_DIR}/../../logos-liblogos")
+# Allow override from environment or command line (for nix builds)
+if(NOT DEFINED LOGOS_LIBLOGOS_ROOT)
+    # Get the real path of current source directory to handle symlinks
+    get_filename_component(REAL_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" REALPATH)
+    set(_core_poc_liblogos "${REAL_SOURCE_DIR}/../../logos-liblogos")
+    if(EXISTS "${_core_poc_liblogos}/interface.h")
+        set(LOGOS_LIBLOGOS_ROOT "${_core_poc_liblogos}")
+    else()
+        # Fallback to relative path
+        set(LOGOS_LIBLOGOS_ROOT "${REAL_SOURCE_DIR}/../../logos-liblogos")
+    endif()
 endif()
 
-message(STATUS "Using logos-liblogos at: ${LOGOS_CORE_DIR}")
+# Check if dependencies are available (support both source and installed layouts)
+set(_liblogos_found FALSE)
+if(EXISTS "${LOGOS_LIBLOGOS_ROOT}/interface.h")
+    set(_liblogos_found TRUE)
+    set(_liblogos_is_source TRUE)
+elseif(EXISTS "${LOGOS_LIBLOGOS_ROOT}/include/interface.h")
+    set(_liblogos_found TRUE)
+    set(_liblogos_is_source FALSE)
+endif()
 
-include_directories(
-    ${LOGOS_CORE_DIR}/host
-    ${LOGOS_CORE_DIR}
-)
+if(NOT _liblogos_found)
+    message(FATAL_ERROR "logos-liblogos not found at ${LOGOS_LIBLOGOS_ROOT}. "
+                        "Set LOGOS_LIBLOGOS_ROOT or run git submodule update --init --recursive.")
+endif()
 
-# Set logos_core library path using the variable
-link_directories(${LOGOS_CORE_DIR}/build/lib)
+message(STATUS "Using logos-liblogos at: ${LOGOS_LIBLOGOS_ROOT}")
+message(STATUS "logos-liblogos layout: ${_liblogos_is_source}")
+
+# Include directories based on layout type
+if(_liblogos_is_source)
+    include_directories(
+        ${LOGOS_LIBLOGOS_ROOT}/host
+        ${LOGOS_LIBLOGOS_ROOT}
+    )
+    # Set logos_core library path for source layout
+    link_directories(${LOGOS_LIBLOGOS_ROOT}/build/lib)
+else()
+    include_directories(
+        ${LOGOS_LIBLOGOS_ROOT}/include
+    )
+    # Set logos_core library path for installed layout
+    link_directories(${LOGOS_LIBLOGOS_ROOT}/lib)
+endif()
+
+# Add logos-cpp-sdk include directories (for nix builds)
+if(DEFINED LOGOS_CPP_SDK_ROOT)
+    include_directories(
+        ${LOGOS_CPP_SDK_ROOT}/include
+        ${LOGOS_CPP_SDK_ROOT}/include/cpp
+        ${LOGOS_CPP_SDK_ROOT}/include/core
+    )
+    link_directories(${LOGOS_CPP_SDK_ROOT}/lib)
+endif()
 
 set(PROJECT_SOURCES
     main.cpp
@@ -64,20 +99,39 @@ target_link_libraries(LogosApp PRIVATE
 
 # Copy the core library to the app's lib directory and fix its install name
 if(APPLE)
-    add_custom_command(TARGET LogosApp POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/lib
-        COMMAND ${CMAKE_COMMAND} -E copy ${LOGOS_CORE_DIR}/build/lib/liblogos_core.dylib ${CMAKE_CURRENT_BINARY_DIR}/lib/
-        COMMAND install_name_tool -id @rpath/liblogos_core.dylib ${CMAKE_CURRENT_BINARY_DIR}/lib/liblogos_core.dylib
-        # Add additional rpath entries for flexibility when moving the binary
-        COMMAND install_name_tool -add_rpath "@executable_path/lib" ${CMAKE_CURRENT_BINARY_DIR}/LogosApp
-        COMMAND install_name_tool -add_rpath "@loader_path/lib" ${CMAKE_CURRENT_BINARY_DIR}/LogosApp
-        COMMENT "Copying logos_core library and fixing installation paths"
-    )
+    if(_liblogos_is_source)
+        add_custom_command(TARGET LogosApp POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/lib
+            COMMAND ${CMAKE_COMMAND} -E copy ${LOGOS_LIBLOGOS_ROOT}/build/lib/liblogos_core.dylib ${CMAKE_CURRENT_BINARY_DIR}/lib/
+            COMMAND install_name_tool -id @rpath/liblogos_core.dylib ${CMAKE_CURRENT_BINARY_DIR}/lib/liblogos_core.dylib
+            # Add additional rpath entries for flexibility when moving the binary
+            COMMAND install_name_tool -add_rpath "@executable_path/lib" ${CMAKE_CURRENT_BINARY_DIR}/LogosApp
+            COMMAND install_name_tool -add_rpath "@loader_path/lib" ${CMAKE_CURRENT_BINARY_DIR}/LogosApp
+            COMMENT "Copying logos_core library and fixing installation paths"
+        )
+    else()
+        add_custom_command(TARGET LogosApp POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/lib
+            COMMAND ${CMAKE_COMMAND} -E copy ${LOGOS_LIBLOGOS_ROOT}/lib/liblogos_core.dylib ${CMAKE_CURRENT_BINARY_DIR}/lib/
+            COMMAND install_name_tool -id @rpath/liblogos_core.dylib ${CMAKE_CURRENT_BINARY_DIR}/lib/liblogos_core.dylib
+            # Add additional rpath entries for flexibility when moving the binary
+            COMMAND install_name_tool -add_rpath "@executable_path/lib" ${CMAKE_CURRENT_BINARY_DIR}/LogosApp
+            COMMAND install_name_tool -add_rpath "@loader_path/lib" ${CMAKE_CURRENT_BINARY_DIR}/LogosApp
+            COMMENT "Copying logos_core library and fixing installation paths"
+        )
+    endif()
 elseif(UNIX AND NOT APPLE)
-    add_custom_command(TARGET LogosApp POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/lib
-        COMMAND ${CMAKE_COMMAND} -E copy ${LOGOS_CORE_DIR}/build/lib/liblogos_core.so ${CMAKE_CURRENT_BINARY_DIR}/lib/
-    )
+    if(_liblogos_is_source)
+        add_custom_command(TARGET LogosApp POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/lib
+            COMMAND ${CMAKE_COMMAND} -E copy ${LOGOS_LIBLOGOS_ROOT}/build/lib/liblogos_core.so ${CMAKE_CURRENT_BINARY_DIR}/lib/
+        )
+    else()
+        add_custom_command(TARGET LogosApp POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/lib
+            COMMAND ${CMAKE_COMMAND} -E copy ${LOGOS_LIBLOGOS_ROOT}/lib/liblogos_core.so ${CMAKE_CURRENT_BINARY_DIR}/lib/
+        )
+    endif()
 
     # For Linux, CMake's RPATH settings above should handle most needs
     # Check if patchelf is available as an alternative for more complex cases
@@ -94,10 +148,17 @@ elseif(UNIX AND NOT APPLE)
 endif()
 
 # Copy the logos_host executable from the core build directory
-add_custom_command(TARGET LogosApp POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy ${LOGOS_CORE_DIR}/build/bin/logos_host ${CMAKE_CURRENT_BINARY_DIR}/logos_host
-    COMMENT "Copying logos_host executable to app directory"
-)
+if(_liblogos_is_source)
+    add_custom_command(TARGET LogosApp POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy ${LOGOS_LIBLOGOS_ROOT}/build/bin/logos_host ${CMAKE_CURRENT_BINARY_DIR}/logos_host
+        COMMENT "Copying logos_host executable to app directory"
+    )
+else()
+    add_custom_command(TARGET LogosApp POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy ${LOGOS_LIBLOGOS_ROOT}/bin/logos_host ${CMAKE_CURRENT_BINARY_DIR}/logos_host
+        COMMENT "Copying logos_host executable to app directory"
+    )
+endif()
 
 # Create bin/plugins directory in build folder
 add_custom_command(TARGET LogosApp POST_BUILD

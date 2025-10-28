@@ -10,8 +10,40 @@ set(CMAKE_AUTOUIC ON)
 # Find Qt packages
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets RemoteObjects)
 
-# Get the real path to handle symlinks correctly
-get_filename_component(REAL_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" REALPATH)
+# Allow override from environment or command line (for nix builds)
+if(NOT DEFINED LOGOS_CPP_SDK_ROOT)
+    # Get the real path to handle symlinks correctly
+    get_filename_component(REAL_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" REALPATH)
+    set(_parent_cpp_sdk "${REAL_SOURCE_DIR}/../../../logos-cpp-sdk")
+    if(EXISTS "${_parent_cpp_sdk}/cpp/logos_api.h")
+        set(LOGOS_CPP_SDK_ROOT "${_parent_cpp_sdk}")
+    else()
+        # Fallback to relative path
+        set(LOGOS_CPP_SDK_ROOT "${REAL_SOURCE_DIR}/../../../logos-cpp-sdk")
+    endif()
+endif()
+
+# Check if dependencies are available (support both source and installed layouts)
+set(_cpp_sdk_found FALSE)
+if(EXISTS "${LOGOS_CPP_SDK_ROOT}/cpp/logos_api.h")
+    set(_cpp_sdk_found TRUE)
+    set(_cpp_sdk_is_source TRUE)
+elseif(EXISTS "${LOGOS_CPP_SDK_ROOT}/include/cpp/logos_api.h")
+    set(_cpp_sdk_found TRUE)
+    set(_cpp_sdk_is_source FALSE)
+elseif(EXISTS "${LOGOS_CPP_SDK_ROOT}/lib/liblogos_sdk.a" OR EXISTS "${LOGOS_CPP_SDK_ROOT}/lib/liblogos_sdk.dylib" OR EXISTS "${LOGOS_CPP_SDK_ROOT}/lib/liblogos_sdk.so")
+    # If we have the SDK library but no source files, it's definitely installed layout
+    set(_cpp_sdk_found TRUE)
+    set(_cpp_sdk_is_source FALSE)
+endif()
+
+if(NOT _cpp_sdk_found)
+    message(FATAL_ERROR "logos-cpp-sdk not found at ${LOGOS_CPP_SDK_ROOT}. "
+                        "Set LOGOS_CPP_SDK_ROOT or run git submodule update --init --recursive.")
+endif()
+
+message(STATUS "Using logos-cpp-sdk at: ${LOGOS_CPP_SDK_ROOT}")
+message(STATUS "logos-cpp-sdk layout: ${_cpp_sdk_is_source}")
 
 # Try to find the component-interfaces package first
 find_package(component-interfaces QUIET)
@@ -39,61 +71,100 @@ set(SOURCES
     src/pluginmethodsview.cpp
     src/packagemanagerview.cpp
     src/main_ui_resources.qrc
-    ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/logos_api.cpp
-    ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/logos_api.h
-    ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/logos_api_client.cpp
-    ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/logos_api_client.h
-    ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/logos_api_consumer.cpp
-    ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/logos_api_consumer.h
-    ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/logos_api_provider.cpp
-    ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/logos_api_provider.h
-    ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/token_manager.cpp
-    ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/token_manager.h
-    ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/module_proxy.cpp
-    ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/module_proxy.h
 )
 
-# Use umbrella source that includes all generated wrappers to avoid duplicate symbols
-set(GENERATED_LOGOS_SDK_DIR ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/generated)
-set(GENERATED_LOGOS_SDK_CPP ${GENERATED_LOGOS_SDK_DIR}/logos_sdk.cpp)
-set(GENERATED_LOGOS_SDK_H   ${GENERATED_LOGOS_SDK_DIR}/logos_sdk.h)
-set_source_files_properties(${GENERATED_LOGOS_SDK_CPP} PROPERTIES GENERATED TRUE)
-list(APPEND SOURCES ${GENERATED_LOGOS_SDK_CPP})
-
-# Run Logos C++ generator on metadata before compilation
-set(REPO_ROOT "${REAL_SOURCE_DIR}/../../..")
-set(CPP_GENERATOR "${REPO_ROOT}/build/cpp-generator/bin/logos-cpp-generator")
-set(PLUGINS_OUTPUT_DIR "${REPO_ROOT}/modules/build/modules")
-set(METADATA_JSON "${CMAKE_CURRENT_SOURCE_DIR}/src/metadata.json")
-
-if(APPLE)
-    set(PLUGIN_SUFFIX ".dylib")
-elseif(WIN32)
-    set(PLUGIN_SUFFIX ".dll")
-else()
-    set(PLUGIN_SUFFIX ".so")
+# Add SDK sources based on layout type
+if(_cpp_sdk_is_source)
+    list(APPEND SOURCES
+        ${LOGOS_CPP_SDK_ROOT}/cpp/logos_api.cpp
+        ${LOGOS_CPP_SDK_ROOT}/cpp/logos_api.h
+        ${LOGOS_CPP_SDK_ROOT}/cpp/logos_api_client.cpp
+        ${LOGOS_CPP_SDK_ROOT}/cpp/logos_api_client.h
+        ${LOGOS_CPP_SDK_ROOT}/cpp/logos_api_consumer.cpp
+        ${LOGOS_CPP_SDK_ROOT}/cpp/logos_api_consumer.h
+        ${LOGOS_CPP_SDK_ROOT}/cpp/logos_api_provider.cpp
+        ${LOGOS_CPP_SDK_ROOT}/cpp/logos_api_provider.h
+        ${LOGOS_CPP_SDK_ROOT}/cpp/token_manager.cpp
+        ${LOGOS_CPP_SDK_ROOT}/cpp/token_manager.h
+        ${LOGOS_CPP_SDK_ROOT}/cpp/module_proxy.cpp
+        ${LOGOS_CPP_SDK_ROOT}/cpp/module_proxy.h
+    )
 endif()
 
-# Always run the generator before building this plugin so new wrappers (e.g. package_manager) are produced
-add_custom_target(run_cpp_generator_main_ui
-    COMMAND "${CPP_GENERATOR}" --metadata "${METADATA_JSON}" --module-dir "${PLUGINS_OUTPUT_DIR}"
-    WORKING_DIRECTORY "${REPO_ROOT}"
-    DEPENDS ${METADATA_JSON}
-    COMMENT "Running logos-cpp-generator for main_ui"
-    VERBATIM
-)
+# Use umbrella source that includes all generated wrappers to avoid duplicate symbols
+if(_cpp_sdk_is_source)
+    set(GENERATED_LOGOS_SDK_DIR ${LOGOS_CPP_SDK_ROOT}/cpp/generated)
+else()
+    # For nix builds, generated files are in the source directory
+    set(GENERATED_LOGOS_SDK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/generated_code)
+endif()
+set(GENERATED_LOGOS_SDK_CPP ${GENERATED_LOGOS_SDK_DIR}/logos_sdk.cpp)
+set(GENERATED_LOGOS_SDK_H   ${GENERATED_LOGOS_SDK_DIR}/logos_sdk.h)
+
+# Only add generated source if it exists and we're not using installed layout
+if(_cpp_sdk_is_source AND EXISTS ${GENERATED_LOGOS_SDK_CPP})
+    set_source_files_properties(${GENERATED_LOGOS_SDK_CPP} PROPERTIES GENERATED TRUE)
+    list(APPEND SOURCES ${GENERATED_LOGOS_SDK_CPP})
+elseif(NOT _cpp_sdk_is_source)
+    # For installed layout, we don't include the generated source file
+    # The functionality comes from the linked SDK library
+    message(STATUS "Using installed SDK layout - not including generated logos_sdk.cpp")
+endif()
+
+# Run Logos C++ generator on metadata before compilation (only for source layout)
+set(METADATA_JSON "${CMAKE_CURRENT_SOURCE_DIR}/src/metadata.json")
+
+# Only run generator for source layout - nix builds already have generated files
+if(_cpp_sdk_is_source)
+    # Source layout: build and run the generator
+    set(REPO_ROOT "${REAL_SOURCE_DIR}/../../..")
+    set(CPP_GENERATOR "${REPO_ROOT}/build/cpp-generator/bin/logos-cpp-generator")
+    set(PLUGINS_OUTPUT_DIR "${REPO_ROOT}/modules/build/modules")
+    
+    if(APPLE)
+        set(PLUGIN_SUFFIX ".dylib")
+    elseif(WIN32)
+        set(PLUGIN_SUFFIX ".dll")
+    else()
+        set(PLUGIN_SUFFIX ".so")
+    endif()
+
+    # Always run the generator before building this plugin so new wrappers (e.g. package_manager) are produced
+    add_custom_target(run_cpp_generator_main_ui
+        COMMAND "${CPP_GENERATOR}" --metadata "${METADATA_JSON}" --module-dir "${PLUGINS_OUTPUT_DIR}"
+        WORKING_DIRECTORY "${REPO_ROOT}"
+        DEPENDS ${METADATA_JSON}
+        COMMENT "Running logos-cpp-generator for main_ui"
+        VERBATIM
+    )
+endif()
 
 add_library(main_ui SHARED ${SOURCES})
 
-# Ensure generator runs before building the plugin
-add_dependencies(main_ui run_cpp_generator_main_ui)
+# Ensure generator runs before building the plugin (only for source layout)
+if(_cpp_sdk_is_source)
+    add_dependencies(main_ui run_cpp_generator_main_ui)
+endif()
 
 # Add include directories before target_link_libraries
 target_include_directories(main_ui PRIVATE 
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../logos-cpp-sdk/cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/generated
 )
+
+# Add SDK include directories based on layout type
+if(_cpp_sdk_is_source)
+    target_include_directories(main_ui PRIVATE 
+        ${LOGOS_CPP_SDK_ROOT}/cpp
+        ${LOGOS_CPP_SDK_ROOT}/cpp/generated
+    )
+else()
+    target_include_directories(main_ui PRIVATE 
+        ${LOGOS_CPP_SDK_ROOT}/include
+        ${LOGOS_CPP_SDK_ROOT}/include/cpp
+        ${LOGOS_CPP_SDK_ROOT}/include/core
+        ${GENERATED_LOGOS_SDK_DIR}
+    )
+endif()
 
 # Add Qt definitions
 target_compile_definitions(main_ui PRIVATE
@@ -108,6 +179,12 @@ target_link_libraries(main_ui
         Qt6::RemoteObjects
         component-interfaces
 )
+
+# Link SDK library if using installed layout
+if(NOT _cpp_sdk_is_source)
+    find_library(LOGOS_SDK_LIB logos_sdk PATHS ${LOGOS_CPP_SDK_ROOT}/lib NO_DEFAULT_PATH REQUIRED)
+    target_link_libraries(main_ui PRIVATE ${LOGOS_SDK_LIB})
+endif()
 
 # For macOS, we need to set the bundle properties
 if(APPLE)

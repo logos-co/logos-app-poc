@@ -13,8 +13,8 @@
 #include "coremoduleview.h"
 #include "packagemanagerview.h"
 #include "modulesgenericview.h"
-#include "../../../../logos-cpp-sdk/cpp/logos_api.h"
-#include "../../../../logos-cpp-sdk/cpp/token_manager.h"
+#include "logos_api.h"
+#include "token_manager.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QWidget(parent)

@@ -545,7 +545,7 @@ void PackageManagerView::onApplyClicked()
         if (info.type.compare("UI", Qt::CaseInsensitive) == 0) {
             // Get the application directory path and create the plugins directory path
             QString appDir = QCoreApplication::applicationDirPath();
-            QString pluginsDir = appDir + "/plugins";
+            QString pluginsDir = appDir + "/../plugins";
 
             // Make sure the plugins directory exists
             QDir dir;

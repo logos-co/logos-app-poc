@@ -203,7 +203,7 @@ QStringList ModulesView::findAvailablePlugins()
     QStringList plugins;
     
     // Get the plugins directory path
-    QString pluginsPath = QCoreApplication::applicationDirPath() + "/plugins";
+    QString pluginsPath = QCoreApplication::applicationDirPath() + "/../plugins";
     QDir pluginsDir(pluginsPath);
     
     qDebug() << "Looking for plugins in:" << pluginsPath;
@@ -265,7 +265,7 @@ QString ModulesView::getPluginPath(const QString& name)
         libExtension = ".so";
     #endif
     
-    return QCoreApplication::applicationDirPath() + "/plugins/" + name + libExtension;
+    return QCoreApplication::applicationDirPath() + "/../plugins/" + name + libExtension;
 }
 
 void ModulesView::onLoadComponent(const QString& name)
