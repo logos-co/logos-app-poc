@@ -10,6 +10,9 @@ set(CMAKE_AUTOUIC ON)
 # Find Qt packages
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets RemoteObjects)
 
+# Get the real path to handle symlinks correctly
+get_filename_component(REAL_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" REALPATH)
+
 # Try to find the component-interfaces package first
 find_package(component-interfaces QUIET)
 
@@ -30,29 +33,29 @@ find_library(LOGOS_CORE_LIB logos_core PATHS ${CMAKE_BINARY_DIR}/../logos-liblog
 set(SOURCES
     ChatUIComponent.cpp
     src/ChatWidget.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/logos_api.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/logos_api.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/logos_api_client.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/logos_api_client.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/logos_api_consumer.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/logos_api_consumer.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/logos_api_provider.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/logos_api_provider.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/token_manager.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/token_manager.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/module_proxy.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/module_proxy.h
+    ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/logos_api.cpp
+    ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/logos_api.h
+    ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/logos_api_client.cpp
+    ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/logos_api_client.h
+    ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/logos_api_consumer.cpp
+    ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/logos_api_consumer.h
+    ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/logos_api_provider.cpp
+    ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/logos_api_provider.h
+    ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/token_manager.cpp
+    ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/token_manager.h
+    ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/module_proxy.cpp
+    ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/module_proxy.h
 )
 
 # Use umbrella source that includes all generated wrappers to avoid duplicate symbols
-set(GENERATED_LOGOS_SDK_CPP ${CMAKE_CURRENT_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/generated/logos_sdk.cpp)
+set(GENERATED_LOGOS_SDK_CPP ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/generated/logos_sdk.cpp)
 set_source_files_properties(${GENERATED_LOGOS_SDK_CPP} PROPERTIES GENERATED TRUE)
 list(APPEND SOURCES ${GENERATED_LOGOS_SDK_CPP})
 
 # Run Logos C++ generator on metadata before compilation
-set(CPP_GENERATOR "${CMAKE_SOURCE_DIR}/../../../build/cpp-generator/bin/logos-cpp-generator")
-set(REPO_ROOT "${CMAKE_SOURCE_DIR}/../../../")
-set(PLUGINS_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/../../../modules/build/modules")
+set(REPO_ROOT "${REAL_SOURCE_DIR}/../../../logos-core-poc/")
+set(CPP_GENERATOR "${REPO_ROOT}/build/cpp-generator/bin/logos-cpp-generator")
+set(PLUGINS_OUTPUT_DIR "${REPO_ROOT}/modules/build/modules")
 set(METADATA_JSON "${CMAKE_CURRENT_SOURCE_DIR}/metadata.json")
 if(APPLE)
     set(PLUGIN_SUFFIX ".dylib")

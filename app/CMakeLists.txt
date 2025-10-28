@@ -23,7 +23,19 @@ find_package(Qt6 COMPONENTS Widgets REQUIRED)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 # Add logos_core include directories - use a variable for the core path
-set(LOGOS_CORE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../logos-liblogos)
+# First try to find logos-liblogos in logos-core-poc (when running from there)
+# Get the real path of current source directory to handle symlinks
+get_filename_component(REAL_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" REALPATH)
+set(_core_poc_liblogos "${REAL_SOURCE_DIR}/../../logos-core-poc/logos-liblogos")
+if(EXISTS "${_core_poc_liblogos}/interface.h")
+    set(LOGOS_CORE_DIR "${_core_poc_liblogos}")
+else()
+    # Fallback to relative path
+    set(LOGOS_CORE_DIR "${REAL_SOURCE_DIR}/../../logos-liblogos")
+endif()
+
+message(STATUS "Using logos-liblogos at: ${LOGOS_CORE_DIR}")
+
 include_directories(
     ${LOGOS_CORE_DIR}/host
     ${LOGOS_CORE_DIR}
