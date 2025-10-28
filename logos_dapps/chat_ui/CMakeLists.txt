@@ -33,27 +33,27 @@ find_library(LOGOS_CORE_LIB logos_core PATHS ${CMAKE_BINARY_DIR}/../logos-liblog
 set(SOURCES
     ChatUIComponent.cpp
     src/ChatWidget.cpp
-    ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/logos_api.cpp
-    ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/logos_api.h
-    ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/logos_api_client.cpp
-    ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/logos_api_client.h
-    ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/logos_api_consumer.cpp
-    ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/logos_api_consumer.h
-    ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/logos_api_provider.cpp
-    ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/logos_api_provider.h
-    ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/token_manager.cpp
-    ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/token_manager.h
-    ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/module_proxy.cpp
-    ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/module_proxy.h
+    ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/logos_api.cpp
+    ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/logos_api.h
+    ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/logos_api_client.cpp
+    ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/logos_api_client.h
+    ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/logos_api_consumer.cpp
+    ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/logos_api_consumer.h
+    ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/logos_api_provider.cpp
+    ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/logos_api_provider.h
+    ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/token_manager.cpp
+    ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/token_manager.h
+    ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/module_proxy.cpp
+    ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/module_proxy.h
 )
 
 # Use umbrella source that includes all generated wrappers to avoid duplicate symbols
-set(GENERATED_LOGOS_SDK_CPP ${REAL_SOURCE_DIR}/../../../logos-core-poc/logos-cpp-sdk/cpp/generated/logos_sdk.cpp)
+set(GENERATED_LOGOS_SDK_CPP ${REAL_SOURCE_DIR}/../../../logos-cpp-sdk/cpp/generated/logos_sdk.cpp)
 set_source_files_properties(${GENERATED_LOGOS_SDK_CPP} PROPERTIES GENERATED TRUE)
 list(APPEND SOURCES ${GENERATED_LOGOS_SDK_CPP})
 
 # Run Logos C++ generator on metadata before compilation
-set(REPO_ROOT "${REAL_SOURCE_DIR}/../../../logos-core-poc/")
+set(REPO_ROOT "${REAL_SOURCE_DIR}/../../..")
 set(CPP_GENERATOR "${REPO_ROOT}/build/cpp-generator/bin/logos-cpp-generator")
 set(PLUGINS_OUTPUT_DIR "${REPO_ROOT}/modules/build/modules")
 set(METADATA_JSON "${CMAKE_CURRENT_SOURCE_DIR}/metadata.json")
