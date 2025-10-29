@@ -10,7 +10,7 @@
     pkgs.cmake 
     pkgs.ninja 
     pkgs.pkg-config
-    pkgs.qt6.wrapQtAppsNoGuiHook
+    pkgs.qt6.wrapQtAppsHook
   ];
   
   # Common runtime dependencies
