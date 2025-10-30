@@ -12,27 +12,31 @@ pkgs.stdenv.mkDerivation rec {
   nativeBuildInputs = common.nativeBuildInputs ++ [ logosSdk pkgs.patchelf pkgs.removeReferencesTo ];
   
   # Provide Qt/GL runtime paths so the wrapper can inject them
-  qtLibPath = pkgs.lib.makeLibraryPath [
-    pkgs.qt6.qtbase
-    pkgs.qt6.qtremoteobjects
-    pkgs.zstd
-    pkgs.krb5
-    pkgs.zlib
-    pkgs.glib
-    pkgs.libglvnd
-    pkgs.mesa.drivers
-    pkgs.stdenv.cc.cc
-    pkgs.xorg.libX11
-    pkgs.xorg.libXext
-    pkgs.xorg.libXrender
-    pkgs.xorg.libXrandr
-    pkgs.xorg.libXcursor
-    pkgs.xorg.libXi
-    pkgs.xorg.libXfixes
-    pkgs.xorg.libxcb
-    pkgs.freetype
-    pkgs.fontconfig
-  ];
+  qtLibPath = pkgs.lib.makeLibraryPath (
+    [
+      pkgs.qt6.qtbase
+      pkgs.qt6.qtremoteobjects
+      pkgs.zstd
+      pkgs.krb5
+      pkgs.zlib
+      pkgs.glib
+      pkgs.stdenv.cc.cc
+      pkgs.freetype
+      pkgs.fontconfig
+    ]
+    ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
+      pkgs.libglvnd
+      pkgs.mesa.drivers
+      pkgs.xorg.libX11
+      pkgs.xorg.libXext
+      pkgs.xorg.libXrender
+      pkgs.xorg.libXrandr
+      pkgs.xorg.libXcursor
+      pkgs.xorg.libXi
+      pkgs.xorg.libXfixes
+      pkgs.xorg.libxcb
+    ]
+  );
   qtPluginPath = "${pkgs.qt6.qtbase}/lib/qt-6/plugins";
   
   preConfigure = ''
