@@ -38,6 +38,7 @@ private slots:
     void onReloadClicked();
     void onApplyClicked();
     void onPackageCheckStateChanged(QTableWidgetItem* item);
+    void onTestPluginCallClicked();
 
 private:
     struct PackageInfo {
@@ -78,6 +79,7 @@ private:
     QTableWidget *m_packageTable;
     QHBoxLayout *m_buttonLayout;
     QPushButton *m_reloadButton;
+    QPushButton *m_testButton;
     QPushButton *m_applyButton;
     QTextEdit *m_detailsTextEdit;
     

@@ -31,6 +31,7 @@ PackageManagerView::PackageManagerView(QWidget *parent)
     , m_packageTable(nullptr)
     , m_buttonLayout(nullptr)
     , m_reloadButton(nullptr)
+    , m_testButton(nullptr)
     , m_applyButton(nullptr)
     , m_detailsTextEdit(nullptr)
     , m_mainWindow(nullptr)
@@ -54,6 +55,7 @@ PackageManagerView::PackageManagerView(LogosAPI* logosAPI, QWidget *parent)
     , m_packageTable(nullptr)
     , m_buttonLayout(nullptr)
     , m_reloadButton(nullptr)
+    , m_testButton(nullptr)
     , m_applyButton(nullptr)
     , m_detailsTextEdit(nullptr)
     , m_mainWindow(nullptr)
@@ -95,17 +97,21 @@ void PackageManagerView::setupUi()
     
     // Create buttons with icons
     m_reloadButton = new QPushButton(QIcon(":/icons/modules.png"), "Reload");
+    m_testButton = new QPushButton(QIcon(":/icons/modules.png"), "Test Call");
     m_applyButton = new QPushButton(QIcon(":/icons/modules.png"), "Install");
     m_applyButton->setEnabled(false);
     
     // Connect reload button
     connect(m_reloadButton, &QPushButton::clicked, this, &PackageManagerView::onReloadClicked);
+    // Connect test button
+    connect(m_testButton, &QPushButton::clicked, this, &PackageManagerView::onTestPluginCallClicked);
     
     // Connect apply button
     connect(m_applyButton, &QPushButton::clicked, this, &PackageManagerView::onApplyClicked);
     
     // Add buttons to layout
     m_buttonLayout->addWidget(m_reloadButton);
+    m_buttonLayout->addWidget(m_testButton);
     m_buttonLayout->addWidget(m_applyButton);
     m_buttonLayout->addStretch();
     
@@ -647,6 +653,19 @@ void PackageManagerView::onApplyClicked()
 
     // call scanPackagesFolder again after 5 seconds
     QTimer::singleShot(5000, this, &PackageManagerView::scanPackagesFolder);
+}
+
+void PackageManagerView::onTestPluginCallClicked()
+{
+    if (m_logosAPI && m_logosAPI->getClient("package_manager")->isConnected()) {
+        LogosModules logos(m_logosAPI);
+        const QString result = logos.package_manager.testPluginCall("my test string");
+        QString html = QString("<h3>Test Call Result</h3><p>%1</p>")
+                           .arg(result.toHtmlEscaped());
+        m_detailsTextEdit->setHtml(html);
+    } else {
+        m_detailsTextEdit->setHtml("<p><b>Error:</b> package_manager not connected</p>");
+    }
 }
 
 QList<QString> PackageManagerView::getSelectedPackages()
