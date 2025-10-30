@@ -9,7 +9,31 @@ pkgs.stdenv.mkDerivation rec {
   inherit (common) buildInputs meta;
   
   # Add logosSdk to nativeBuildInputs for logos-cpp-generator
-  nativeBuildInputs = common.nativeBuildInputs ++ [ logosSdk ];
+  nativeBuildInputs = common.nativeBuildInputs ++ [ logosSdk pkgs.patchelf pkgs.removeReferencesTo ];
+  
+  # Provide Qt/GL runtime paths so the wrapper can inject them
+  qtLibPath = pkgs.lib.makeLibraryPath [
+    pkgs.qt6.qtbase
+    pkgs.qt6.qtremoteobjects
+    pkgs.zstd
+    pkgs.krb5
+    pkgs.zlib
+    pkgs.glib
+    pkgs.libglvnd
+    pkgs.mesa.drivers
+    pkgs.stdenv.cc.cc
+    pkgs.xorg.libX11
+    pkgs.xorg.libXext
+    pkgs.xorg.libXrender
+    pkgs.xorg.libXrandr
+    pkgs.xorg.libXcursor
+    pkgs.xorg.libXi
+    pkgs.xorg.libXfixes
+    pkgs.xorg.libxcb
+    pkgs.freetype
+    pkgs.fontconfig
+  ];
+  qtPluginPath = "${pkgs.qt6.qtbase}/lib/qt-6/plugins";
   
   preConfigure = ''
     runHook prePreConfigure
@@ -41,11 +65,49 @@ pkgs.stdenv.mkDerivation rec {
     runHook postPreConfigure
   '';
   
-  # This is a GUI application, enable Qt wrapping
-  dontWrapQtApps = false;
-  
   # This is an aggregate runtime layout; avoid stripping to prevent hook errors
   dontStrip = true;
+  
+  # Ensure proper Qt environment setup via wrapper
+  qtWrapperArgs = [
+    "--prefix" "LD_LIBRARY_PATH" ":" qtLibPath
+    "--prefix" "QT_PLUGIN_PATH" ":" qtPluginPath
+  ];
+  
+  # Additional environment variables for Qt and RPATH cleanup
+  preFixup = ''
+    runHook prePreFixup
+    
+    # Set up Qt environment variables
+    export QT_PLUGIN_PATH="${pkgs.qt6.qtbase}/lib/qt-6/plugins"
+    export QML_IMPORT_PATH="${pkgs.qt6.qtbase}/lib/qt-6/qml"
+    
+    # Remove any remaining references to /build/ in binaries and set proper RPATH
+    find $out -type f -executable -exec sh -c '
+      if file "$1" | grep -q "ELF.*executable"; then
+        # Use patchelf to clean up RPATH if it contains /build/
+        if patchelf --print-rpath "$1" 2>/dev/null | grep -q "/build/"; then
+          echo "Cleaning RPATH for $1"
+          patchelf --remove-rpath "$1" 2>/dev/null || true
+        fi
+        # Set proper RPATH for the main binary
+        if echo "$1" | grep -q "/LogosApp$"; then
+          echo "Setting RPATH for $1"
+          patchelf --set-rpath "$out/lib" "$1" 2>/dev/null || true
+        fi
+      fi
+    ' _ {} \;
+    
+    # Also clean up shared libraries
+    find $out -name "*.so" -exec sh -c '
+      if patchelf --print-rpath "$1" 2>/dev/null | grep -q "/build/"; then
+        echo "Cleaning RPATH for $1"
+        patchelf --remove-rpath "$1" 2>/dev/null || true
+      fi
+    ' _ {} \;
+    
+    runHook prePostFixup
+  '';
   
   configurePhase = ''
     runHook preConfigure
@@ -70,6 +132,9 @@ pkgs.stdenv.mkDerivation rec {
       -GNinja \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+      -DCMAKE_INSTALL_RPATH_USE_LINK_PATH=FALSE \
+      -DCMAKE_INSTALL_RPATH="" \
+      -DCMAKE_SKIP_BUILD_RPATH=TRUE \
       -DLOGOS_LIBLOGOS_ROOT=${logosLiblogos} \
       -DLOGOS_CPP_SDK_ROOT=$(pwd)/logos-cpp-sdk
     
@@ -91,9 +156,9 @@ pkgs.stdenv.mkDerivation rec {
     # Create output directories
     mkdir -p $out/bin $out/lib $out/modules $out/plugins
     
-    # Install our app binary
+    # Install our app binary (real binary, so Qt hook can wrap it)
     if [ -f "build/LogosApp" ]; then
-      cp build/LogosApp "$out/bin/"
+      cp build/LogosApp "$out/bin/LogosApp"
       echo "Installed LogosApp binary"
     fi
     
@@ -143,6 +208,9 @@ pkgs.stdenv.mkDerivation rec {
       echo "Copied main_ui.$OS_EXT to plugins/"
     fi
 
+    # Create symlink for the expected binary name
+    ln -s $out/bin/LogosApp $out/bin/logos-app-poc-app
+
     # Create a README for reference
     cat > $out/README.txt <<EOF
 Logos App POC - Build Information
@@ -155,7 +223,7 @@ counter-plugin: ${counterPlugin}
 main-ui-plugin: ${mainUIPlugin}
 
 Runtime Layout:
-- Binary: $out/bin/LogosApp
+    - Binary: $out/bin/LogosApp
 - Libraries: $out/lib
 - Modules: $out/modules
 
@@ -165,4 +233,5 @@ EOF
     
     runHook postInstall
   '';
+  
 }
