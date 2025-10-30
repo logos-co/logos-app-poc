@@ -101,14 +101,16 @@ endif()
 set(GENERATED_LOGOS_SDK_CPP ${GENERATED_LOGOS_SDK_DIR}/logos_sdk.cpp)
 set(GENERATED_LOGOS_SDK_H   ${GENERATED_LOGOS_SDK_DIR}/logos_sdk.h)
 
-# Only add generated source if it exists and we're not using installed layout
-if(_cpp_sdk_is_source AND EXISTS ${GENERATED_LOGOS_SDK_CPP})
-    set_source_files_properties(${GENERATED_LOGOS_SDK_CPP} PROPERTIES GENERATED TRUE)
+# Only add logos_sdk.cpp (umbrella that includes all module implementations)
+# Do not add individual *_api.cpp files as they are included by logos_sdk.cpp
+if(EXISTS ${GENERATED_LOGOS_SDK_CPP})
+    set_source_files_properties(${GENERATED_LOGOS_SDK_CPP} PROPERTIES 
+        GENERATED TRUE
+        SKIP_AUTOMOC ON
+        SKIP_AUTOUIC ON
+        SKIP_AUTORCC ON
+    )
     list(APPEND SOURCES ${GENERATED_LOGOS_SDK_CPP})
-elseif(NOT _cpp_sdk_is_source)
-    # For installed layout, we don't include the generated source file
-    # The functionality comes from the linked SDK library
-    message(STATUS "Using installed SDK layout - not including generated logos_sdk.cpp")
 endif()
 
 # Run Logos C++ generator on metadata before compilation (only for source layout)

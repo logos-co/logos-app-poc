@@ -14,6 +14,9 @@ pkgs.stdenv.mkDerivation rec {
   preConfigure = ''
     runHook prePreConfigure
     
+    # Set macOS deployment target to match Qt frameworks
+    export MACOSX_DEPLOYMENT_TARGET=12.0
+    
     # Copy logos-cpp-sdk headers to expected location
     echo "Copying logos-cpp-sdk headers for app..."
     mkdir -p ./logos-cpp-sdk/include/cpp
@@ -66,6 +69,7 @@ pkgs.stdenv.mkDerivation rec {
     cmake -S app -B build \
       -GNinja \
       -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
       -DLOGOS_LIBLOGOS_ROOT=${logosLiblogos} \
       -DLOGOS_CPP_SDK_ROOT=$(pwd)/logos-cpp-sdk
     
