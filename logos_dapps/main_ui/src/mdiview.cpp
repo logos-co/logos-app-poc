@@ -135,6 +135,18 @@ QMdiSubWindow* MdiView::addPluginWindow(QWidget* pluginWidget, const QString& ti
     subWindow->setAttribute(Qt::WA_DeleteOnClose);
     subWindow->setWindowTitle(title);
     
+    // Set minimum size for the subwindow (same as regular MDI windows)
+    subWindow->setMinimumSize(200, 200);
+    
+    // If the widget has a preferred size, use it; otherwise use a default
+    QSize widgetSize = pluginWidget->sizeHint();
+    if (widgetSize.isValid() && widgetSize.width() > 0 && widgetSize.height() > 0) {
+        subWindow->resize(widgetSize);
+    } else {
+        // Default size for plugin windows
+        subWindow->resize(800, 600);
+    }
+    
     // Add the sub-window to the MDI area
     mdiArea->addSubWindow(subWindow);
     

@@ -39,17 +39,23 @@
             inherit pkgs common src logosSdk logosPackageManager; 
           };
           
+          webviewAppPlugin = import ./nix/webview-app.nix { 
+            inherit pkgs common src; 
+          };
+          
           # App package
           app = import ./nix/app.nix { 
             inherit pkgs common src logosLiblogos logosSdk logosPackageManager logosCapabilityModule;
             counterPlugin = counterPlugin;
             mainUIPlugin = mainUIPlugin;
+            webviewAppPlugin = webviewAppPlugin;
           };
         in
         {
           # Individual outputs
           counter-plugin = counterPlugin;
           main-ui-plugin = mainUIPlugin;
+          webview-app-plugin = webviewAppPlugin;
           app = app;
           
           # Default package

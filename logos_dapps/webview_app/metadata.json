@@ -1,0 +1,23 @@
+{
+  "name": "webview_app",
+  "version": "1.0.0",
+  "description": "WebView plugin that displays Wikipedia's main page",
+  "author": "Logos Core Team",
+  "type": "ui",
+  "main": "webview_app",
+  "dependencies": [],
+  "category": "misc",
+  "build": {
+    "type": "cmake",
+    "files": [
+      "WebViewAppComponent.cpp",
+      "WebViewAppComponent.h",
+      "WebViewAppWidget.cpp",
+      "WebViewAppWidget.h"
+    ]
+  },
+  "capabilities": [
+    "ui_components",
+    "webview"
+  ]
+}
