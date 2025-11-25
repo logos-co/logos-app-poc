@@ -70,6 +70,7 @@ set(SOURCES
     src/coremoduleview.cpp
     src/pluginmethodsview.cpp
     src/packagemanagerview.cpp
+    src/applauncher.cpp
     src/main_ui_resources.qrc
 )
 

@@ -143,6 +143,17 @@ QMdiSubWindow* MdiView::addPluginWindow(QWidget* pluginWidget, const QString& ti
     
     // Store the mapping between plugin widget and MDI window
     m_pluginWindows[pluginWidget] = subWindow;
+    m_subWindowToWidget[subWindow] = pluginWidget;
+    
+    // Connect close signal to remove from map when window is closed
+    connect(subWindow, &QMdiSubWindow::destroyed, this, [this, pluginWidget, subWindow]() {
+        if (pluginWidget && m_pluginWindows.contains(pluginWidget)) {
+            m_pluginWindows.remove(pluginWidget);
+        }
+        if (subWindow && m_subWindowToWidget.contains(subWindow)) {
+            m_subWindowToWidget.remove(subWindow);
+        }
+    });
     
     // Update tab close buttons if in tabbed mode
     updateTabCloseButtons();
@@ -161,10 +172,51 @@ void MdiView::removePluginWindow(QWidget* pluginWidget)
         // Detach the plugin widget from the sub-window to prevent it from being deleted
         subWindow->setWidget(nullptr);
         
+        // Remove from reverse map
+        if (m_subWindowToWidget.contains(subWindow)) {
+            m_subWindowToWidget.remove(subWindow);
+        }
+        
         // Close and delete the sub-window
         subWindow->close();
         
         // Remove from the map
         m_pluginWindows.remove(pluginWidget);
+    }
+}
+
+QWidget* MdiView::getWidgetForSubWindow(QMdiSubWindow* subWindow)
+{
+    if (subWindow && m_subWindowToWidget.contains(subWindow)) {
+        return m_subWindowToWidget.value(subWindow);
+    }
+    return nullptr;
+}
+
+void MdiView::activatePluginWindow(QWidget* pluginWidget)
+{
+    if (!pluginWidget) {
+        qDebug() << "MdiView::activatePluginWindow: pluginWidget is null";
+        return;
+    }
+    
+    if (!m_pluginWindows.contains(pluginWidget)) {
+        qDebug() << "MdiView::activatePluginWindow: pluginWidget not found in map";
+        return;
+    }
+    
+    QMdiSubWindow* subWindow = m_pluginWindows[pluginWidget];
+    if (subWindow) {
+        // Check if subwindow still exists and is valid
+        if (subWindow->widget() == pluginWidget) {
+            // Activate and raise the sub-window
+            subWindow->raise();
+            subWindow->activateWindow();
+            mdiArea->setActiveSubWindow(subWindow);
+        } else {
+            qDebug() << "MdiView::activatePluginWindow: subwindow widget mismatch";
+        }
+    } else {
+        qDebug() << "MdiView::activatePluginWindow: subWindow is null";
     }
 } 

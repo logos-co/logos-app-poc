@@ -23,6 +23,12 @@ public:
     
     // Remove a plugin window
     void removePluginWindow(QWidget* pluginWidget);
+    
+    // Activate a plugin window by widget (bring to front)
+    void activatePluginWindow(QWidget* pluginWidget);
+    
+    // Get widget for a plugin window (reverse lookup)
+    QWidget* getWidgetForSubWindow(QMdiSubWindow* subWindow);
 
 private slots:
     void addMdiWindow();
@@ -40,6 +46,8 @@ private:
     
     // Map to keep track of plugin widgets and their MDI windows
     QMap<QWidget*, QMdiSubWindow*> m_pluginWindows;
+    // Reverse map: subwindow -> widget
+    QMap<QMdiSubWindow*, QWidget*> m_subWindowToWidget;
     
     int windowCounter;
 };

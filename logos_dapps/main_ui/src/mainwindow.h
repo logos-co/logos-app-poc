@@ -11,6 +11,7 @@
 
 class ModulesGenericView;
 class LogosAPI;
+class AppLauncher;
 
 class MainWindow : public QWidget
 {
@@ -55,6 +56,9 @@ private:
     
     // Modules View
     ModulesGenericView *m_modulesGenericView;
+    
+    // App Launcher
+    AppLauncher *m_appLauncher;
     
     // LogosAPI instance
     LogosAPI *m_logosAPI;

@@ -371,11 +371,50 @@ void ModulesView::onLoadComponent(const QString& name)
         // Store the component and widget
         m_loadedComponents[name] = component;
         m_componentWidgets[name] = componentWidget;
+        m_widgetToAppName[componentWidget] = name; // Store reverse mapping
         
         // Add the component widget to the MDI view if available
         if (m_mdiView) {
             qDebug() << "Adding plugin" << name << "to MDI view";
-            m_mdiView->addPluginWindow(componentWidget, name);
+            QMdiSubWindow* subWindow = m_mdiView->addPluginWindow(componentWidget, name);
+            
+            // Connect to subwindow destroyed signal to detect when user closes the window
+            if (subWindow) {
+                connect(subWindow, &QObject::destroyed, this, [this, name, componentWidget]() {
+                    qDebug() << "MDI window for" << name << "was destroyed, cleaning up component state";
+                    
+                    // Only clean up if component is still loaded (avoid double cleanup)
+                    if (m_loadedComponents.contains(name)) {
+                        // Get the component
+                        IComponent* component = m_loadedComponents.value(name);
+                        
+                        // Destroy the component widget if it exists
+                        if (component && componentWidget) {
+                            try {
+                                componentWidget->disconnect();
+                                component->destroyWidget(componentWidget);
+                            } catch (const std::exception& ex) {
+                                qDebug() << "Exception while destroying widget for" << name << ":" << ex.what();
+                            } catch (...) {
+                                qDebug() << "Unknown exception while destroying widget for" << name;
+                            }
+                        }
+                        
+                        // Remove from maps
+                        m_loadedComponents.remove(name);
+                        m_widgetToAppName.remove(componentWidget);
+                        m_componentWidgets.remove(name);
+                        
+                        // Update button states
+                        updateButtonStates(name);
+                        
+                        // Emit signal for app launcher
+                        emit appStateChanged(name, false);
+                        
+                        qDebug() << "Cleaned up component state for" << name;
+                    }
+                });
+            }
             
             // Switch to the Apps tab (index 0)
             if (m_mainWindow) {
@@ -388,6 +427,9 @@ void ModulesView::onLoadComponent(const QString& name)
         
         // Update button states
         updateButtonStates(name, false);
+        
+        // Emit signal for app launcher
+        emit appStateChanged(name, true);
         
         qDebug() << "Successfully loaded plugin:" << name;
     } catch (const std::exception& e) {
@@ -425,11 +467,14 @@ void ModulesView::onUnloadComponent(const QString& name)
                 
                 componentWidget->hide();
                 componentWidget->deleteLater();
+                m_widgetToAppName.remove(componentWidget);
                 m_componentWidgets.remove(name);
             }
             
             // Update button states
             updateButtonStates(name);
+            // Emit signal for app launcher
+            emit appStateChanged(name, false);
             return;
         }
         
@@ -439,6 +484,8 @@ void ModulesView::onUnloadComponent(const QString& name)
             
             // Update button states
             updateButtonStates(name);
+            // Emit signal for app launcher
+            emit appStateChanged(name, false);
             return;
         }
         
@@ -465,10 +512,16 @@ void ModulesView::onUnloadComponent(const QString& name)
         // Remove from maps
         qDebug() << "Removing" << name << "from loaded components and widgets maps";
         m_loadedComponents.remove(name);
+        if (componentWidget) {
+            m_widgetToAppName.remove(componentWidget);
+        }
         m_componentWidgets.remove(name);
         
         // Update button states
         updateButtonStates(name);
+        
+        // Emit signal for app launcher
+        emit appStateChanged(name, false);
         
         qDebug() << "Successfully unloaded plugin:" << name;
     } catch (const std::exception& e) {
@@ -528,4 +581,65 @@ void ModulesView::clearPluginList()
     // Clear button maps
     m_loadButtons.clear();
     m_unloadButtons.clear();
+}
+
+QStringList ModulesView::getAvailableApps()
+{
+    QStringList allPlugins = findAvailablePlugins();
+    QStringList apps;
+    
+    // Filter out "main_ui" as it's not an app
+    for (const QString& plugin : allPlugins) {
+        if (plugin != "main_ui") {
+            apps.append(plugin);
+        }
+    }
+    
+    return apps;
+}
+
+bool ModulesView::isAppLoaded(const QString& appName)
+{
+    return m_loadedComponents.contains(appName);
+}
+
+QPixmap ModulesView::getAppIcon(const QString& appName)
+{
+    QPixmap iconPixmap;
+    QString pluginPath = getPluginPath(appName);
+    QPluginLoader loader(pluginPath);
+    
+    if (loader.load()) {
+        // Get embedded metadata from plugin
+        QJsonObject metadata = loader.metaData();
+        QJsonObject metaDataObj = metadata.value("MetaData").toObject();
+        
+        // Extract icon path from embedded metadata
+        if (metaDataObj.contains("icon")) {
+            QString iconPath = metaDataObj.value("icon").toString();
+            if (!iconPath.isEmpty() && iconPath.startsWith(":/")) {
+                // Icon is embedded in plugin resources
+                iconPixmap = QPixmap(iconPath);
+                if (!iconPixmap.isNull()) {
+                    qDebug() << "Loaded embedded icon for" << appName << "from" << iconPath;
+                } else {
+                    qDebug() << "Failed to load embedded icon for" << appName << "from" << iconPath;
+                }
+            }
+        }
+        
+        loader.unload();
+    } else {
+        qDebug() << "Failed to load plugin" << appName << "to access embedded metadata:" << loader.errorString();
+    }
+    
+    return iconPixmap;
+}
+
+QWidget* ModulesView::getAppWidget(const QString& appName)
+{
+    if (m_componentWidgets.contains(appName)) {
+        return m_componentWidgets.value(appName);
+    }
+    return nullptr;
 } 

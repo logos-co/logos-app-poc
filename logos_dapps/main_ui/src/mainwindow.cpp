@@ -13,6 +13,7 @@
 #include "coremoduleview.h"
 #include "packagemanagerview.h"
 #include "modulesgenericview.h"
+#include "applauncher.h"
 #include "logos_api.h"
 #include "token_manager.h"
 
@@ -93,16 +94,29 @@ void MainWindow::setupUi()
     m_sidebarLayout->setContentsMargins(0, 20, 0, 20);
     m_sidebarLayout->setAlignment(Qt::AlignCenter);
     
+    // Create content area with vertical layout (content stack + app launcher)
+    QWidget* contentArea = new QWidget(this);
+    QVBoxLayout* contentLayout = new QVBoxLayout(contentArea);
+    contentLayout->setSpacing(0);
+    contentLayout->setContentsMargins(0, 0, 0, 0);
+    
     // Create content stack
-    m_contentStack = new QStackedWidget(this);
+    m_contentStack = new QStackedWidget(contentArea);
     
     // Enable resizing for the widget and contentStack
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     m_contentStack->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     
+    // Create app launcher
+    m_appLauncher = new AppLauncher(contentArea, this);
+    
+    // Add content stack and launcher to content layout
+    contentLayout->addWidget(m_contentStack);
+    contentLayout->addWidget(m_appLauncher);
+    
     // Add widgets to main layout
     m_mainLayout->addWidget(m_sidebar);
-    m_mainLayout->addWidget(m_contentStack);
+    m_mainLayout->addWidget(contentArea);
     
     // Set a reasonable minimum size for the whole window
     setMinimumSize(800, 600);
@@ -148,6 +162,13 @@ void MainWindow::createContentPages()
     // Modules page (contains both Apps and Core Modules tabs)
     m_modulesGenericView = new ModulesGenericView(nullptr, this);
     m_contentStack->addWidget(m_modulesGenericView);
+    
+    // Connect ModulesView signals to AppLauncher and set ModulesView reference
+    if (m_modulesGenericView && m_modulesGenericView->getModulesView() && m_appLauncher) {
+        ModulesView* modulesView = m_modulesGenericView->getModulesView();
+        m_appLauncher->setModulesView(modulesView);
+        connect(modulesView, &ModulesView::appStateChanged, m_appLauncher, &AppLauncher::updateAppState);
+    }
     
     // Package Manager page
     PackageManagerView *packageManagerView = new PackageManagerView(m_logosAPI);
