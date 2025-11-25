@@ -90,6 +90,9 @@ int main(int argc, char *argv[])
     // Set application icon
     app.setWindowIcon(QIcon(":/icons/logos.png"));
 
+    // Don't quit when last window is closed (for system tray support)
+    app.setQuitOnLastWindowClosed(false);
+
     // Create and show the main window
     Window mainWindow(&logosAPI);
     mainWindow.show();

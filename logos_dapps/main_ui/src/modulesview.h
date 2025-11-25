@@ -27,8 +27,10 @@ public:
     // Refresh the plugin list
     void refreshPluginList();
 
-private slots:
+public slots:
     void onLoadComponent(const QString& name);
+
+private slots:
     void onUnloadComponent(const QString& name);
 
 private:
@@ -38,6 +40,9 @@ private:
     QStringList findAvailablePlugins();
     void updateButtonStates(const QString& name, bool isEnabled = true);
     void clearPluginList();
+    QStringList getDependencies(const QString& pluginName);
+    void loadDependenciesRecursive(const QString& pluginName, QSet<QString>& loading);
+    void loadComponentInternal(const QString& name);
     
     QMap<QString, IComponent*> m_loadedComponents;
     QMap<QString, QWidget*> m_componentWidgets;
