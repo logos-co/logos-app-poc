@@ -11,6 +11,10 @@
 #include <QHBoxLayout>
 #include <QPushButton>
 #include <QSpacerItem>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QFile>
+#include <QPixmap>
 #include "mainwindow.h"
 
 ModulesView::ModulesView(QWidget *parent, MainWindow* mainWindow)
@@ -105,6 +109,47 @@ void ModulesView::setupPluginButtons(QVBoxLayout* buttonLayout)
             
             // Create header layout
             QHBoxLayout* headerLayout = new QHBoxLayout();
+            
+            // Load plugin to get embedded metadata and icon
+            QPixmap iconPixmap;
+            QString pluginPath = getPluginPath(plugin);
+            QPluginLoader loader(pluginPath);
+            
+            if (loader.load()) {
+                // Get embedded metadata from plugin
+                QJsonObject metadata = loader.metaData();
+                QJsonObject metaDataObj = metadata.value("MetaData").toObject();
+                
+                // Extract icon path from embedded metadata
+                if (metaDataObj.contains("icon")) {
+                    QString iconPath = metaDataObj.value("icon").toString();
+                    if (!iconPath.isEmpty() && iconPath.startsWith(":/")) {
+                        // Icon is embedded in plugin resources
+                        iconPixmap = QPixmap(iconPath);
+                        if (!iconPixmap.isNull()) {
+                            qDebug() << "Loaded embedded icon for" << plugin << "from" << iconPath;
+                        } else {
+                            qDebug() << "Failed to load embedded icon for" << plugin << "from" << iconPath;
+                        }
+                    }
+                }
+                
+                // Unload plugin immediately after getting metadata and icon
+                loader.unload();
+            } else {
+                qDebug() << "Failed to load plugin" << plugin << "to access embedded metadata:" << loader.errorString();
+            }
+            
+            // Add icon if available
+            if (!iconPixmap.isNull()) {
+                QLabel* iconLabel = new QLabel(this);
+                iconPixmap = iconPixmap.scaled(48, 48, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                iconLabel->setPixmap(iconPixmap);
+                iconLabel->setAlignment(Qt::AlignCenter);
+                iconLabel->setStyleSheet("background-color: transparent;");
+                headerLayout->addWidget(iconLabel);
+                headerLayout->addSpacing(12); // Add spacing between icon and name
+            }
             
             // Plugin name with bold font
             QLabel* pluginLabel = new QLabel(plugin, this);

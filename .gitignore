@@ -1,5 +1,9 @@
 **/build/**
 .DS_Store
 .vscode/**
+.cursor/
 .cache
 result
+*.swp
+*.swo
+.idea/

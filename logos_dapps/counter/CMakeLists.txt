@@ -25,6 +25,7 @@ endif()
 set(SOURCES
     CounterComponent.cpp
     CounterWidget.cpp
+    counter_resources.qrc
 )
 
 add_library(counter SHARED ${SOURCES})

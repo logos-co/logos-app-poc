@@ -20,5 +20,6 @@
   "capabilities": [
     "ui_components",
     "demo"
-  ]
+  ],
+  "icon": ":/icons/counter.png"
 } 
