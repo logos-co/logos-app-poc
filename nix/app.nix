@@ -1,12 +1,24 @@
 # Builds the logos-app-poc standalone application
-{ pkgs, common, src, logosLiblogos, logosSdk, logosPackageManager, logosCapabilityModule, counterPlugin, mainUIPlugin }:
+{ pkgs, common, src, logosLiblogos, logosSdk, logosPackageManager, logosCapabilityModule, counterPlugin, mainUIPlugin, webviewAppPlugin }:
 
 pkgs.stdenv.mkDerivation rec {
   pname = "logos-app-poc-app";
   version = common.version;
   
   inherit src;
-  inherit (common) buildInputs meta;
+  # Platform-specific build inputs for system webviews
+  buildInputs = common.buildInputs ++ (
+    if pkgs.stdenv.isDarwin then
+      # macOS: WebKit is part of the system
+      []
+    else if pkgs.stdenv.isLinux then
+      # Linux: QtWebView and WebKitGTK
+      [ pkgs.qt6.qtwebview pkgs.qt6.qtquick pkgs.webkitgtk ]
+    else
+      # Windows: WebView2 is loaded at runtime
+      []
+  );
+  inherit (common) meta;
   
   # Add logosSdk to nativeBuildInputs for logos-cpp-generator
   nativeBuildInputs = common.nativeBuildInputs ++ [ logosSdk pkgs.patchelf pkgs.removeReferencesTo ];
@@ -123,6 +135,7 @@ pkgs.stdenv.mkDerivation rec {
     echo "capability-module: ${logosCapabilityModule}"
     echo "counter-plugin: ${counterPlugin}"
     echo "main-ui-plugin: ${mainUIPlugin}"
+    echo "webview-app-plugin: ${webviewAppPlugin}"
     
     # Verify that the built components exist
     test -d "${logosLiblogos}" || (echo "liblogos not found" && exit 1)
@@ -131,6 +144,7 @@ pkgs.stdenv.mkDerivation rec {
     test -d "${logosCapabilityModule}" || (echo "capability-module not found" && exit 1)
     test -d "${counterPlugin}" || (echo "counter-plugin not found" && exit 1)
     test -d "${mainUIPlugin}" || (echo "main-ui-plugin not found" && exit 1)
+    test -d "${webviewAppPlugin}" || (echo "webview-app-plugin not found" && exit 1)
     
     cmake -S app -B build \
       -GNinja \
@@ -211,6 +225,10 @@ pkgs.stdenv.mkDerivation rec {
       cp -L "${mainUIPlugin}/lib/main_ui.$OS_EXT" "$out/plugins/"
       echo "Copied main_ui.$OS_EXT to plugins/"
     fi
+    if [ -f "${webviewAppPlugin}/lib/webview_app.$OS_EXT" ]; then
+      cp -L "${webviewAppPlugin}/lib/webview_app.$OS_EXT" "$out/plugins/"
+      echo "Copied webview_app.$OS_EXT to plugins/"
+    fi
 
     # Create symlink for the expected binary name
     ln -s $out/bin/LogosApp $out/bin/logos-app-poc-app
@@ -225,6 +243,7 @@ package-manager: ${logosPackageManager}
 capability-module: ${logosCapabilityModule}
 counter-plugin: ${counterPlugin}
 main-ui-plugin: ${mainUIPlugin}
+webview-app-plugin: ${webviewAppPlugin}
 
 Runtime Layout:
     - Binary: $out/bin/LogosApp
