@@ -38,17 +38,18 @@ endif()
 
 # Platform-specific sources
 set(SOURCES
-    WebViewAppComponent.cpp
-    WebViewAppWidget.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/WebViewAppComponent.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/WebViewAppWidget.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/WebViewBridge.cpp
 )
 
 if(APPLE)
-    list(APPEND SOURCES WebViewAppWidget_mac.mm)
+    list(APPEND SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/WebViewAppWidget_mac.mm)
 elseif(WIN32)
-    list(APPEND SOURCES WebViewAppWidget_win.cpp)
+    list(APPEND SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/WebViewAppWidget_win.cpp)
 else()
     # Linux
-    list(APPEND SOURCES WebViewAppWidget_linux.cpp)
+    list(APPEND SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/WebViewAppWidget_linux.cpp)
 endif()
 
 add_library(webview_app SHARED ${SOURCES})
