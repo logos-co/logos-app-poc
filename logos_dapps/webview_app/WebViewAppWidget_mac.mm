@@ -14,6 +14,7 @@
 @property (nonatomic, strong) WKWebView* webView;
 - (instancetype)init;
 - (void)loadURL:(NSString*)urlString;
+- (void)loadFile:(NSString*)filePath;
 @end
 
 @implementation WKWebViewContainer
@@ -32,8 +33,22 @@
 - (void)loadURL:(NSString*)urlString {
     NSURL* url = [NSURL URLWithString:urlString];
     if (url) {
-        NSURLRequest* request = [NSURLRequest requestWithURL:url];
-        [self.webView loadRequest:request];
+        if ([url isFileURL]) {
+            // For file URLs, use loadFileURL:allowingReadAccessToURL: for better security
+            NSURL* directoryURL = [url URLByDeletingLastPathComponent];
+            [self.webView loadFileURL:url allowingReadAccessToURL:directoryURL];
+        } else {
+            NSURLRequest* request = [NSURLRequest requestWithURL:url];
+            [self.webView loadRequest:request];
+        }
+    }
+}
+
+- (void)loadFile:(NSString*)filePath {
+    NSURL* fileURL = [NSURL fileURLWithPath:filePath];
+    if (fileURL) {
+        NSURL* directoryURL = [fileURL URLByDeletingLastPathComponent];
+        [self.webView loadFileURL:fileURL allowingReadAccessToURL:directoryURL];
     }
 }
 
@@ -74,8 +89,16 @@ namespace {
         
         void loadURL(const QUrl& url) {
             if (m_container) {
-                NSString* urlString = [NSString stringWithUTF8String:url.toString().toUtf8().constData()];
-                [m_container loadURL:urlString];
+                if (url.isLocalFile()) {
+                    // For local files, use the file path directly
+                    QString localPath = url.toLocalFile();
+                    NSString* filePath = [NSString stringWithUTF8String:localPath.toUtf8().constData()];
+                    [m_container loadFile:filePath];
+                } else {
+                    // For HTTP/HTTPS URLs, use the URL string
+                    NSString* urlString = [NSString stringWithUTF8String:url.toString().toUtf8().constData()];
+                    [m_container loadURL:urlString];
+                }
             }
         }
         
