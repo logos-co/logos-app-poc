@@ -1,191 +1,232 @@
 #include "WebViewAppWidget.h"
-#include "WebViewAppWidget_platform.h"
-#include "WebViewBridge.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QPushButton>
 #include <QLabel>
-#include <QUrl>
-#include <QStandardPaths>
-#include <QDir>
-#include <QFileInfo>
-#include <QCoreApplication>
+#include <QQuickView>
+#include <QQuickItem>
+#include <QQmlContext>
+#include <QQmlEngine>
+#include <QQmlError>
+#include <QtWebView/QtWebView>
+#include <QFile>
 #include <QDebug>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QJsonValue>
-#include <QTimer>
 #include <QDateTime>
 
 WebViewAppWidget::WebViewAppWidget(QWidget* parent) 
-    : QWidget(parent), webView(nullptr), m_wikipediaButton(nullptr), m_localFileButton(nullptr),
-      m_qtButton(nullptr), m_statusLabel(nullptr), m_bridge(nullptr) {
-    // Create bridge instance
-    m_bridge = new WebViewBridge(this);
-    connect(m_bridge, &WebViewBridge::requestReceived, this, &WebViewAppWidget::onBridgeRequest);
-    
-    setupWebView();
+    : QWidget(parent)
+    , m_quickView(nullptr)
+    , m_rootItem(nullptr)
+    , m_wikipediaButton(nullptr)
+    , m_localFileButton(nullptr)
+    , m_sendToWebAppButton(nullptr)
+    , m_statusLabel(nullptr)
+    , m_qmlReady(false)
+{
+    // Initialize QtWebView before creating QML content
+    QtWebView::initialize();
+    setupUI();
 }
 
 WebViewAppWidget::~WebViewAppWidget() {
-    // Bridge will be deleted automatically as child of this widget
 }
 
-void WebViewAppWidget::setupWebView() {
+void WebViewAppWidget::setupUI() {
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(0, 0, 0, 0);
+    mainLayout->setSpacing(0);
     
-    // Create horizontal layout for buttons
-    QHBoxLayout* buttonLayout = new QHBoxLayout();
+    // Button bar
+    QWidget* buttonBar = new QWidget(this);
+    QHBoxLayout* buttonLayout = new QHBoxLayout(buttonBar);
     buttonLayout->setContentsMargins(5, 5, 5, 5);
     
-    // Create buttons
-    m_wikipediaButton = new QPushButton("Wikipedia", this);
-    m_localFileButton = new QPushButton("Local File", this);
-    m_qtButton = new QPushButton("Send Event to WebApp", this);
+    m_wikipediaButton = new QPushButton("Wikipedia", buttonBar);
+    m_localFileButton = new QPushButton("Local File", buttonBar);
+    m_sendToWebAppButton = new QPushButton("Send Event to WebApp", buttonBar);
     
-    // Create status label
-    m_statusLabel = new QLabel("Status: Ready", this);
-    m_statusLabel->setStyleSheet("QLabel { background-color: #f0f0f0; padding: 5px; border: 1px solid #ccc; }");
-    
-    // Connect button signals to slots
     connect(m_wikipediaButton, &QPushButton::clicked, this, &WebViewAppWidget::onWikipediaClicked);
     connect(m_localFileButton, &QPushButton::clicked, this, &WebViewAppWidget::onLocalFileClicked);
-    connect(m_qtButton, &QPushButton::clicked, this, &WebViewAppWidget::onQtButtonClicked);
+    connect(m_sendToWebAppButton, &QPushButton::clicked, this, &WebViewAppWidget::onSendToWebAppClicked);
     
-    // Add buttons to horizontal layout
     buttonLayout->addWidget(m_wikipediaButton);
     buttonLayout->addWidget(m_localFileButton);
-    buttonLayout->addWidget(m_qtButton);
-    buttonLayout->addStretch(); // Push buttons to the left
+    buttonLayout->addWidget(m_sendToWebAppButton);
+    buttonLayout->addStretch();
     
-    // Add button layout to main layout
-    mainLayout->addLayout(buttonLayout);
+    mainLayout->addWidget(buttonBar);
     
-    // Add status label
+    // Status label
+    m_statusLabel = new QLabel("Status: Ready", this);
+    m_statusLabel->setStyleSheet("QLabel { background-color: #f0f0f0; padding: 5px; border: 1px solid #ccc; }");
     mainLayout->addWidget(m_statusLabel);
     
-#if defined(Q_OS_MAC)
-    webView = createMacWebViewWidget(this);
-#elif defined(Q_OS_WIN)
-    webView = createWinWebViewWidget(this);
-#else
-    // Linux
-    webView = createLinuxWebViewWidget(this);
-#endif
+    // Use QQuickView + createWindowContainer for better native view handling
+    m_quickView = new QQuickView();
+    m_quickView->setResizeMode(QQuickView::SizeRootObjectToView);
+    m_quickView->setColor(Qt::white);
     
-    if (webView) {
-        // Inject JavaScript bridge
-        injectJavaScriptBridge();
-        
-        mainLayout->addWidget(webView);
-        loadURLInWebView(QUrl("https://en.wikipedia.org/wiki/Main_Page"));
-    }
+    // Expose this widget to QML
+    m_quickView->rootContext()->setContextProperty("hostWidget", this);
     
-    // Set minimum size for the widget
+    // Connect to status changed
+    connect(m_quickView, &QQuickView::statusChanged, this, [this](QQuickView::Status status) {
+        qDebug() << "QQuickView status:" << status;
+        if (status == QQuickView::Error) {
+            for (const QQmlError& error : m_quickView->errors()) {
+                qWarning() << "QML Error:" << error.toString();
+            }
+            m_statusLabel->setText("Status: QML Error");
+            m_statusLabel->setStyleSheet("QLabel { background-color: #f8d7da; padding: 5px; border: 1px solid #dc3545; }");
+        } else if (status == QQuickView::Ready) {
+            m_rootItem = m_quickView->rootObject();
+            qDebug() << "QML Ready, root item:" << m_rootItem;
+        }
+    });
+    
+    // Load QML from embedded resources
+    qDebug() << "Loading QML from: qrc:/WebView.qml";
+    m_quickView->setSource(QUrl("qrc:/WebView.qml"));
+    
+    // Create a container widget from the QQuickView window
+    QWidget* container = QWidget::createWindowContainer(m_quickView, this);
+    container->setMinimumSize(200, 200);
+    container->setFocusPolicy(Qt::TabFocus);
+    
+    mainLayout->addWidget(container, 1);
+    
     setMinimumSize(800, 600);
-    // Set a reasonable default size
-    resize(800, 600);
+    
+    // Store pending URL - will be loaded when QML is ready
+    m_pendingUrl = QUrl("https://en.wikipedia.org/wiki/Main_Page");
+}
+
+void WebViewAppWidget::qmlReady() {
+    qDebug() << "=== QML component completed, WebView ready ===";
+    m_qmlReady = true;
+    m_rootItem = m_quickView ? m_quickView->rootObject() : nullptr;
+    qDebug() << "Root item:" << m_rootItem;
+    
+    // Load pending URL if any
+    if (!m_pendingUrl.isEmpty()) {
+        qDebug() << "Loading pending URL:" << m_pendingUrl;
+        QUrl url = m_pendingUrl;
+        m_pendingUrl.clear();
+        loadURL(url);
+    }
 }
 
 void WebViewAppWidget::onWikipediaClicked() {
-    if (!webView) return;
-    
-    QUrl wikipediaUrl("https://en.wikipedia.org/wiki/Main_Page");
-    loadURLInWebView(wikipediaUrl);
+    qDebug() << "Wikipedia button clicked";
+    loadURL(QUrl("https://en.wikipedia.org/wiki/Main_Page"));
 }
 
 void WebViewAppWidget::onLocalFileClicked() {
-    loadLocalHTML();
+    qDebug() << "Local File button clicked - loading from qrc:/local.html";
+    loadLocalHtml();
 }
 
-void WebViewAppWidget::loadLocalHTML() {
-    if (!webView) return;
-    
-    // Get the path to the local.html file relative to the executable
-    QDir appDir(QCoreApplication::applicationDirPath());
-    QString htmlPath = appDir.absoluteFilePath("local.html");
-    
-    // Check if file exists, if not try source directory
-    if (!QFileInfo::exists(htmlPath)) {
-        // Try to find it in the source directory
-        QDir sourceDir = QDir::current();
-        if (sourceDir.cd("logos_dapps") && sourceDir.cd("webview_app")) {
-            QString sourcePath = sourceDir.absoluteFilePath("local.html");
-            if (QFileInfo::exists(sourcePath)) {
-                htmlPath = sourcePath;
-            }
-        }
+void WebViewAppWidget::onSendToWebAppClicked() {
+    qDebug() << "Send Event button clicked";
+    QVariantMap data;
+    data["message"] = "Hello from Qt!";
+    data["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    sendEventToJS("qtButtonClicked", data);
+}
+
+void WebViewAppWidget::loadLocalHtml() {
+    if (!m_qmlReady || !m_rootItem) {
+        qDebug() << "Cannot load local HTML - not ready";
+        return;
     }
     
-    qDebug() << "Loading local HTML from:" << htmlPath;
-    qDebug() << "File exists:" << QFileInfo::exists(htmlPath);
+    // Read HTML content from embedded resources
+    QFile file(":/local.html");
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        qWarning() << "Could not open qrc:/local.html";
+        m_statusLabel->setText("Status: Error loading local.html");
+        m_statusLabel->setStyleSheet("QLabel { background-color: #f8d7da; padding: 5px; border: 1px solid #dc3545; }");
+        return;
+    }
     
-    // Convert to file:// URL
-    QUrl fileUrl = QUrl::fromLocalFile(htmlPath);
-    qDebug() << "File URL:" << fileUrl.toString();
+    QString html = QString::fromUtf8(file.readAll());
+    file.close();
     
-    loadURLInWebView(fileUrl);
+    qDebug() << "Loaded HTML content, length:" << html.length();
+    
+    // Call QML function to load HTML content with empty baseUrl
+    // (the HTML is self-contained, no relative URLs need resolving)
+    QMetaObject::invokeMethod(m_rootItem, "loadHtmlContent",
+        Q_ARG(QVariant, html));
 }
 
-void WebViewAppWidget::loadURLInWebView(const QUrl& url) {
-    if (!webView) return;
+void WebViewAppWidget::loadURL(const QUrl& url) {
+    qDebug() << "loadURL called:" << url;
+    qDebug() << "  qmlReady:" << m_qmlReady;
+    qDebug() << "  rootItem:" << m_rootItem;
     
-#if defined(Q_OS_MAC)
-    loadURLInMacWebViewWidget(webView, url);
-#elif defined(Q_OS_WIN)
-    loadURLInWinWebViewWidget(webView, url);
-#else
-    loadURLInLinuxWebViewWidget(webView, url);
-#endif
+    if (!m_qmlReady || !m_rootItem) {
+        m_pendingUrl = url;
+        qDebug() << "  -> Not ready, storing pending URL";
+        return;
+    }
     
-    // Re-inject bridge after page load (with delay to ensure page is ready)
-    QTimer::singleShot(500, this, &WebViewAppWidget::injectJavaScriptBridge);
+    // Call QML function directly
+    qDebug() << "  -> Calling QML loadUrl function";
+    QMetaObject::invokeMethod(m_rootItem, "loadUrl", Q_ARG(QVariant, url));
 }
 
-void WebViewAppWidget::onBridgeRequest(const QString& method, const QVariantMap& params) {
-    qDebug() << "WebViewAppWidget: Handling request - method:" << method << "params:" << params;
+void WebViewAppWidget::runJavaScript(const QString& script) {
+    if (!m_qmlReady || !m_rootItem) {
+        qDebug() << "Cannot run JavaScript - not ready";
+        return;
+    }
+    qDebug() << "Running JavaScript in WebView";
+    QMetaObject::invokeMethod(m_rootItem, "runScript", Q_ARG(QVariant, script));
+}
+
+void WebViewAppWidget::handleLogosRequest(const QString& method, const QVariantMap& params, int requestId) {
+    qDebug() << "Received logos request:" << method << params;
+    
+    QVariantMap result;
     
     if (method == "changeQtLabel") {
         QString text = params.value("text").toString();
         if (m_statusLabel) {
             m_statusLabel->setText("Status: " + text);
             m_statusLabel->setStyleSheet("QLabel { background-color: #d4edda; padding: 5px; border: 1px solid #28a745; }");
-            
-            // Send response back to JavaScript
-            QVariantMap response;
-            response["success"] = true;
-            response["message"] = "Label updated successfully";
-            
-            // For now, we'll use a simple approach - in a real implementation,
-            // we'd need to track request IDs and send proper responses
-            // This is a simplified version for the demo
         }
+        result["success"] = true;
+        result["message"] = "Label updated successfully";
     } else {
-        qDebug() << "WebViewAppWidget: Unknown method:" << method;
+        result["success"] = false;
+        result["error"] = "Unknown method: " + method;
     }
-}
-
-void WebViewAppWidget::onQtButtonClicked() {
-    QVariantMap eventData;
-    eventData["message"] = "Hello from Qt!";
-    eventData["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
-    sendEventToWebApp("qtButtonClicked", eventData);
-}
-
-void WebViewAppWidget::executeJavaScript(const QString& script) {
-    if (!webView) return;
     
-#if defined(Q_OS_MAC)
-    executeJavaScriptInMacWebView(webView, script);
-#elif defined(Q_OS_WIN)
-    executeJavaScriptInWinWebView(webView, script);
-#else
-    executeJavaScriptInLinuxWebView(webView, script);
-#endif
+    sendResponseToJS(requestId, result);
 }
 
-void WebViewAppWidget::sendEventToWebApp(const QString& eventName, const QVariantMap& data) {
+void WebViewAppWidget::sendResponseToJS(int requestId, const QVariantMap& result) {
+    QJsonObject responseObj;
+    responseObj["type"] = "logos_response";
+    responseObj["requestId"] = requestId;
+    
+    QJsonObject resultObj;
+    for (auto it = result.begin(); it != result.end(); ++it) {
+        resultObj[it.key()] = QJsonValue::fromVariant(it.value());
+    }
+    responseObj["result"] = resultObj;
+    
+    QJsonDocument doc(responseObj);
+    QString script = QString("window.postMessage(%1, '*');")
+        .arg(QString::fromUtf8(doc.toJson(QJsonDocument::Compact)));
+    
+    runJavaScript(script);
+}
+
+void WebViewAppWidget::sendEventToJS(const QString& eventName, const QVariantMap& data) {
     QJsonObject eventObj;
     eventObj["type"] = "logos_event";
     eventObj["eventName"] = eventName;
@@ -197,19 +238,8 @@ void WebViewAppWidget::sendEventToWebApp(const QString& eventName, const QVarian
     eventObj["data"] = dataObj;
     
     QJsonDocument doc(eventObj);
-    QString script = QString("window.postMessage(%1, '*');").arg(QString::fromUtf8(doc.toJson()));
+    QString script = QString("window.postMessage(%1, '*');")
+        .arg(QString::fromUtf8(doc.toJson(QJsonDocument::Compact)));
     
-    executeJavaScript(script);
-}
-
-void WebViewAppWidget::injectJavaScriptBridge() {
-    if (!webView || !m_bridge) return;
-    
-#if defined(Q_OS_MAC)
-    injectJavaScriptBridgeInMacWebView(webView, m_bridge);
-#elif defined(Q_OS_WIN)
-    injectJavaScriptBridgeInWinWebView(webView, m_bridge);
-#else
-    injectJavaScriptBridgeInLinuxWebView(webView, m_bridge);
-#endif
+    runJavaScript(script);
 }

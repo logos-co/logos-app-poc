@@ -1,0 +1,7 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+    <qresource prefix="/">
+        <file>WebView.qml</file>
+        <file>local.html</file>
+    </qresource>
+</RCC>

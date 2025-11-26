@@ -7,18 +7,19 @@ pkgs.stdenv.mkDerivation {
   
   inherit src;
   nativeBuildInputs = common.nativeBuildInputs;
-  # Platform-specific build inputs
-  buildInputs = common.buildInputs ++ (
-    if pkgs.stdenv.isDarwin then
-      # macOS: WebKit is part of the system, no extra dependency needed
-      []
-    else if pkgs.stdenv.isLinux then
-      # Linux: QtWebView and WebKitGTK
-      [ pkgs.qt6.qtwebview pkgs.qt6.qtquick pkgs.webkitgtk ]
+  
+  # QtWebView and QuickWidgets needed on all platforms
+  buildInputs = common.buildInputs ++ [
+    pkgs.qt6.qtwebview
+    pkgs.qt6.qtdeclarative  # Provides Qt Quick
+  ] ++ (
+    if pkgs.stdenv.isLinux then
+      # Linux also needs WebKitGTK as the backend for QtWebView
+      [ pkgs.webkitgtk ]
     else
-      # Windows: WebView2 is loaded at runtime
       []
   );
+  
   inherit (common) meta;
   
   # Simple CMake flags for webview_app plugin
@@ -53,6 +54,7 @@ pkgs.stdenv.mkDerivation {
     mkdir -p $out/lib
     
     # Find and copy the built library file
+    # QML and HTML files are now embedded in the library via qrc
     if [ -f "build/webview_app.dylib" ]; then
       cp build/webview_app.dylib $out/lib/
     elif [ -f "build/webview_app.so" ]; then

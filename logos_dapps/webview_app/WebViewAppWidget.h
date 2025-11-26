@@ -2,10 +2,12 @@
 
 #include <QWidget>
 #include <QVariantMap>
+#include <QUrl>
 
 class QPushButton;
 class QLabel;
-class WebViewBridge;
+class QQuickView;
+class QQuickItem;
 
 class WebViewAppWidget : public QWidget {
     Q_OBJECT
@@ -13,25 +15,32 @@ class WebViewAppWidget : public QWidget {
 public:
     explicit WebViewAppWidget(QWidget* parent = nullptr);
     ~WebViewAppWidget();
+    
+    // Invokable method for QML to call when logos request is received
+    Q_INVOKABLE void handleLogosRequest(const QString& method, const QVariantMap& params, int requestId);
+    
+    // Called by QML when ready
+    Q_INVOKABLE void qmlReady();
 
 private slots:
     void onWikipediaClicked();
     void onLocalFileClicked();
-    void onBridgeRequest(const QString& method, const QVariantMap& params);
-    void onQtButtonClicked();
+    void onSendToWebAppClicked();
 
 private:
-    QWidget* webView;
+    QQuickView* m_quickView;
+    QQuickItem* m_rootItem;
     QPushButton* m_wikipediaButton;
     QPushButton* m_localFileButton;
-    QPushButton* m_qtButton;
+    QPushButton* m_sendToWebAppButton;
     QLabel* m_statusLabel;
-    WebViewBridge* m_bridge;
+    QUrl m_pendingUrl;
+    bool m_qmlReady;
     
-    void setupWebView();
-    void loadLocalHTML();
-    void loadURLInWebView(const QUrl& url);
-    void executeJavaScript(const QString& script);
-    void sendEventToWebApp(const QString& eventName, const QVariantMap& data);
-    void injectJavaScriptBridge();
+    void setupUI();
+    void loadURL(const QUrl& url);
+    void loadLocalHtml();
+    void runJavaScript(const QString& script);
+    void sendResponseToJS(int requestId, const QVariantMap& result);
+    void sendEventToJS(const QString& eventName, const QVariantMap& data);
 };

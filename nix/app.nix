@@ -7,15 +7,14 @@ pkgs.stdenv.mkDerivation rec {
   
   inherit src;
   # Platform-specific build inputs for system webviews
-  buildInputs = common.buildInputs ++ (
-    if pkgs.stdenv.isDarwin then
-      # macOS: WebKit is part of the system
-      []
-    else if pkgs.stdenv.isLinux then
-      # Linux: QtWebView and WebKitGTK
-      [ pkgs.qt6.qtwebview pkgs.qt6.qtquick pkgs.webkitgtk ]
+  buildInputs = common.buildInputs ++ [
+    pkgs.qt6.qtwebview
+    pkgs.qt6.qtdeclarative
+  ] ++ (
+    if pkgs.stdenv.isLinux then
+      # Linux: WebKitGTK as backend
+      [ pkgs.webkitgtk ]
     else
-      # Windows: WebView2 is loaded at runtime
       []
   );
   inherit (common) meta;
@@ -28,6 +27,8 @@ pkgs.stdenv.mkDerivation rec {
     [
       pkgs.qt6.qtbase
       pkgs.qt6.qtremoteobjects
+      pkgs.qt6.qtwebview
+      pkgs.qt6.qtdeclarative
       pkgs.zstd
       pkgs.krb5
       pkgs.zlib
@@ -49,7 +50,8 @@ pkgs.stdenv.mkDerivation rec {
       pkgs.xorg.libxcb
     ]
   );
-  qtPluginPath = "${pkgs.qt6.qtbase}/lib/qt-6/plugins";
+  qtPluginPath = "${pkgs.qt6.qtbase}/lib/qt-6/plugins:${pkgs.qt6.qtwebview}/lib/qt-6/plugins";
+  qmlImportPath = "${pkgs.qt6.qtdeclarative}/lib/qt-6/qml:${pkgs.qt6.qtwebview}/lib/qt-6/qml";
   
   preConfigure = ''
     runHook prePreConfigure
@@ -88,6 +90,7 @@ pkgs.stdenv.mkDerivation rec {
   qtWrapperArgs = [
     "--prefix" "LD_LIBRARY_PATH" ":" qtLibPath
     "--prefix" "QT_PLUGIN_PATH" ":" qtPluginPath
+    "--prefix" "QML2_IMPORT_PATH" ":" qmlImportPath
   ];
   
   # Additional environment variables for Qt and RPATH cleanup
@@ -95,8 +98,8 @@ pkgs.stdenv.mkDerivation rec {
     runHook prePreFixup
     
     # Set up Qt environment variables
-    export QT_PLUGIN_PATH="${pkgs.qt6.qtbase}/lib/qt-6/plugins"
-    export QML_IMPORT_PATH="${pkgs.qt6.qtbase}/lib/qt-6/qml"
+    export QT_PLUGIN_PATH="${pkgs.qt6.qtbase}/lib/qt-6/plugins:${pkgs.qt6.qtwebview}/lib/qt-6/plugins"
+    export QML2_IMPORT_PATH="${pkgs.qt6.qtdeclarative}/lib/qt-6/qml:${pkgs.qt6.qtwebview}/lib/qt-6/qml"
     
     # Remove any remaining references to /build/ in binaries and set proper RPATH
     find $out -type f -executable -exec sh -c '
@@ -229,6 +232,8 @@ pkgs.stdenv.mkDerivation rec {
       cp -L "${webviewAppPlugin}/lib/webview_app.$OS_EXT" "$out/plugins/"
       echo "Copied webview_app.$OS_EXT to plugins/"
     fi
+    
+    # Note: webview_app QML and HTML files are now embedded in the plugin via qrc
 
     # Create symlink for the expected binary name
     ln -s $out/bin/LogosApp $out/bin/logos-app-poc-app

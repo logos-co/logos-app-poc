@@ -3,146 +3,202 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Local WebView App - Logos Bridge Demo</title>
+    <title>Logos Bridge Demo</title>
     <style>
+        * {
+            box-sizing: border-box;
+        }
         body {
-            font-family: Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             max-width: 800px;
-            margin: 50px auto;
+            margin: 40px auto;
             padding: 20px;
-            background-color: #f5f5f5;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
         }
         h1 {
             color: #333;
             text-align: center;
+            margin-bottom: 30px;
+            font-weight: 600;
         }
-        .container {
-            background-color: white;
-            padding: 30px;
+        .status-bar {
+            text-align: center;
+            padding: 12px;
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        .status-waiting {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffc107;
+        }
+        .status-ready {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #28a745;
         }
         button {
-            background-color: #4CAF50;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
-            padding: 12px 24px;
+            padding: 14px 28px;
             font-size: 16px;
-            border-radius: 4px;
+            border-radius: 8px;
             cursor: pointer;
             display: block;
-            margin: 10px auto;
-            min-width: 200px;
+            margin: 12px auto;
+            min-width: 280px;
+            font-weight: 500;
+            transition: transform 0.2s, box-shadow 0.2s;
         }
-        button:hover {
-            background-color: #45a049;
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
         }
         button:disabled {
-            background-color: #cccccc;
+            background: #ccc;
             cursor: not-allowed;
+            transform: none;
         }
-        #counter {
-            text-align: center;
-            font-size: 24px;
-            color: #666;
-            margin-top: 20px;
+        .section {
+            margin: 25px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 12px;
         }
-        #status {
-            text-align: center;
+        .section h3 {
+            margin-top: 0;
+            color: #495057;
             font-size: 14px;
-            color: #888;
-            margin-top: 20px;
-            padding: 10px;
-            background-color: #f0f0f0;
-            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
         #eventLog {
-            margin-top: 20px;
+            background: #1a1a2e;
+            color: #eee;
             padding: 15px;
-            background-color: #f9f9f9;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+            border-radius: 8px;
             max-height: 200px;
             overflow-y: auto;
-            font-family: monospace;
+            font-family: 'Monaco', 'Menlo', monospace;
             font-size: 12px;
+            line-height: 1.6;
         }
-        .event-entry {
-            margin: 5px 0;
-            padding: 5px;
-            background-color: #e8f5e9;
-            border-left: 3px solid #4CAF50;
+        .log-entry {
+            padding: 6px 10px;
+            margin: 4px 0;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.1);
         }
-        .error {
-            background-color: #ffebee;
-            border-left-color: #f44336;
+        .log-entry.success {
+            border-left: 3px solid #28a745;
+        }
+        .log-entry.event {
+            border-left: 3px solid #17a2b8;
+        }
+        .log-entry.error {
+            border-left: 3px solid #dc3545;
+            background: rgba(220, 53, 69, 0.2);
+        }
+        .timestamp {
+            color: #888;
+            font-size: 10px;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Logos Bridge Demo</h1>
+        <h1>🔗 Logos Bridge Demo</h1>
         
-        <div id="status">Waiting for logos bridge...</div>
+        <div id="status" class="status-bar status-waiting">
+            ⏳ Waiting for logos bridge...
+        </div>
         
-        <button id="changeQtLabelButton" onclick="changeQtLabel()" disabled>
-            Change Qt Label (WebApp → Qt)
-        </button>
+        <div class="section">
+            <h3>WebApp → Qt Communication</h3>
+            <button id="changeQtLabelButton" onclick="changeQtLabel()" disabled>
+                Change Qt Label
+            </button>
+            <p style="text-align: center; color: #666; font-size: 14px;">
+                Click to update the status label in the Qt host application
+            </p>
+        </div>
         
-        <button id="counterButton" onclick="incrementCounter()">Increment Counter</button>
-        <div id="counter">Count: 0</div>
-        
-        <h3>Event Log (Qt → WebApp)</h3>
-        <div id="eventLog"></div>
+        <div class="section">
+            <h3>Event Log (Qt → WebApp)</h3>
+            <div id="eventLog">
+                <div class="log-entry">Waiting for events...</div>
+            </div>
+        </div>
     </div>
     
     <script>
-        let count = 0;
         let logosReady = false;
         
-        // Wait for logos bridge to be available
+        function log(message, type = 'success') {
+            const logEl = document.getElementById('eventLog');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry ' + type;
+            
+            const time = new Date().toLocaleTimeString();
+            entry.innerHTML = '<span class="timestamp">' + time + '</span> ' + message;
+            
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+            
+            // Keep only last 15 entries
+            while (logEl.children.length > 15) {
+                logEl.removeChild(logEl.firstChild);
+            }
+        }
+        
         function checkLogosBridge() {
             if (typeof window.logos !== 'undefined') {
                 logosReady = true;
-                document.getElementById('status').textContent = 'Logos bridge ready!';
-                document.getElementById('status').style.color = '#4CAF50';
+                
+                const statusEl = document.getElementById('status');
+                statusEl.textContent = '✅ Logos bridge ready!';
+                statusEl.className = 'status-bar status-ready';
+                
                 document.getElementById('changeQtLabelButton').disabled = false;
                 
-                // Set up event listener for events from Qt
+                // Listen for events from Qt
                 window.logos.on('qtButtonClicked', function(data) {
-                    addEventLog('Received event from Qt: ' + JSON.stringify(data, null, 2));
+                    log('📨 Received from Qt: ' + JSON.stringify(data), 'event');
                 });
                 
-                addEventLog('Logos bridge initialized successfully');
+                log('Bridge initialized successfully', 'success');
             } else {
                 setTimeout(checkLogosBridge, 100);
             }
         }
         
-        // Start checking for logos bridge
-        window.addEventListener('logos#initialized', function() {
-            checkLogosBridge();
-        });
+        // Listen for the logos initialized event
+        window.addEventListener('logos#initialized', checkLogosBridge);
         
-        // Also check immediately in case it's already loaded
+        // Also check immediately
         checkLogosBridge();
-        
-        function incrementCounter() {
-            count++;
-            document.getElementById('counter').textContent = 'Count: ' + count;
-        }
         
         async function changeQtLabel() {
             if (!logosReady) {
-                addEventLog('Error: Logos bridge not ready', true);
+                log('Bridge not ready', 'error');
                 return;
             }
             
+            const btn = document.getElementById('changeQtLabelButton');
+            btn.disabled = true;
+            btn.textContent = 'Sending...';
+            
             try {
-                const button = document.getElementById('changeQtLabelButton');
-                button.disabled = true;
-                button.textContent = 'Sending...';
-                
                 const result = await window.logos.request({
                     method: 'changeQtLabel',
                     params: {
@@ -150,31 +206,14 @@
                     }
                 });
                 
-                addEventLog('Request sent successfully: ' + JSON.stringify(result, null, 2));
-                button.textContent = 'Change Qt Label (WebApp → Qt)';
-                button.disabled = false;
+                log('✅ Label changed: ' + JSON.stringify(result), 'success');
             } catch (error) {
-                addEventLog('Error sending request: ' + error.message, true);
-                const button = document.getElementById('changeQtLabelButton');
-                button.textContent = 'Change Qt Label (WebApp → Qt)';
-                button.disabled = false;
-            }
-        }
-        
-        function addEventLog(message, isError) {
-            const log = document.getElementById('eventLog');
-            const entry = document.createElement('div');
-            entry.className = 'event-entry' + (isError ? ' error' : '');
-            entry.textContent = new Date().toLocaleTimeString() + ' - ' + message;
-            log.appendChild(entry);
-            log.scrollTop = log.scrollHeight;
-            
-            // Keep only last 20 entries
-            while (log.children.length > 20) {
-                log.removeChild(log.firstChild);
+                log('❌ Error: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Change Qt Label';
             }
         }
     </script>
 </body>
 </html>
-
