@@ -36,7 +36,7 @@
           };
           
           mainUIPlugin = import ./nix/main-ui.nix { 
-            inherit pkgs common src logosSdk logosPackageManager; 
+            inherit pkgs common src logosSdk logosPackageManager logosLiblogos; 
           };
           
           # App package

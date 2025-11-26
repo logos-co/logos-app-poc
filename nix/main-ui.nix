@@ -1,5 +1,5 @@
 # Builds the main UI plugin
-{ pkgs, common, src, logosSdk, logosPackageManager }:
+{ pkgs, common, src, logosSdk, logosPackageManager, logosLiblogos }:
 
 pkgs.stdenv.mkDerivation {
   pname = "${common.pname}-main-ui-plugin";
@@ -86,15 +86,18 @@ pkgs.stdenv.mkDerivation {
     
     echo "Configuring main UI plugin..."
     echo "logosSdk: ${logosSdk}"
+    echo "logosLiblogos: ${logosLiblogos}"
     
     # Verify that the logosSdk exists
     test -d "${logosSdk}" || (echo "logosSdk not found" && exit 1)
+    test -d "${logosLiblogos}" || (echo "logosLiblogos not found" && exit 1)
     
     cmake -S logos_dapps/main_ui -B build \
       -GNinja \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
-      -DLOGOS_CPP_SDK_ROOT=$(pwd)/logos-cpp-sdk
+      -DLOGOS_CPP_SDK_ROOT=$(pwd)/logos-cpp-sdk \
+      -DLOGOS_LIBLOGOS_ROOT=${logosLiblogos}
     
     runHook postConfigure
   '';

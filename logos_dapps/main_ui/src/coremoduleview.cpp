@@ -1,6 +1,10 @@
 #include "coremoduleview.h"
 #include "logos_api.h"
 #include "logos_api_client.h"
+
+extern "C" {
+    char* logos_core_get_module_stats();
+}
 #include <QFont>
 #include <memory>
 #include <QStringList>
@@ -27,11 +31,18 @@ CoreModuleView::CoreModuleView(QWidget *parent)
     , m_stackedWidget(nullptr)
     , m_pluginsListWidget(nullptr)
     , m_currentMethodsView(nullptr)
+    , m_statsTimer(nullptr)
 {
     setupUi();
 
     // Initial update of plugin list
     updatePluginList();
+
+    // Start timer to update module stats every 2 seconds
+    m_statsTimer = new QTimer(this);
+    connect(m_statsTimer, &QTimer::timeout, this, &CoreModuleView::updateModuleStats);
+    m_statsTimer->start(2000);
+    updateModuleStats(); // Initial update
 }
 
 CoreModuleView::~CoreModuleView()
@@ -187,8 +198,10 @@ void CoreModuleView::updatePluginList()
     qDebug() << "================================";
     qDebug() << "pluginsArray:" << pluginsArray;
 
-    // Clear the current list
+    // Clear the current list and label maps
     m_pluginList->clear();
+    m_cpuLabels.clear();
+    m_memoryLabels.clear();
 
     if (pluginsArray.isEmpty()) {
         qDebug() << "No plugins known";
@@ -229,6 +242,19 @@ void CoreModuleView::updatePluginList()
                                   "color: #4CAF50; font-size: 14px;" :
                                   "color: #F44336; font-size: 14px;");
         itemLayout->addWidget(statusLabel);
+
+        // Add CPU and Memory stats labels (only show values for loaded plugins)
+        QLabel* cpuLabel = new QLabel(isLoaded ? "CPU: --" : "");
+        cpuLabel->setStyleSheet("color: #64B5F6; font-size: 14px;");
+        cpuLabel->setMinimumWidth(80);
+        itemLayout->addWidget(cpuLabel);
+        m_cpuLabels[pluginName] = cpuLabel;
+
+        QLabel* memLabel = new QLabel(isLoaded ? "Mem: -- MB" : "");
+        memLabel->setStyleSheet("color: #81C784; font-size: 14px;");
+        memLabel->setMinimumWidth(100);
+        itemLayout->addWidget(memLabel);
+        m_memoryLabels[pluginName] = memLabel;
 
         // Add spacer to push the button to the right
         itemLayout->addStretch();
@@ -413,4 +439,30 @@ void CoreModuleView::onAddPluginClicked()
 
     // Refresh the plugin list
     updatePluginList();
+}
+
+void CoreModuleView::updateModuleStats()
+{
+    char* stats_json = logos_core_get_module_stats();
+    if (!stats_json) {
+        return;
+    }
+
+    QJsonDocument doc = QJsonDocument::fromJson(stats_json);
+    delete[] stats_json;
+
+    QJsonArray statsArray = doc.array();
+    for (const QJsonValue& val : statsArray) {
+        QJsonObject obj = val.toObject();
+        QString name = obj["name"].toString();
+        double cpu = obj["cpu_percent"].toDouble();
+        double mem = obj["memory_mb"].toDouble();
+
+        if (m_cpuLabels.contains(name)) {
+            m_cpuLabels[name]->setText(QString("CPU: %1%").arg(cpu, 0, 'f', 1));
+        }
+        if (m_memoryLabels.contains(name)) {
+            m_memoryLabels[name]->setText(QString("Mem: %1 MB").arg(mem, 0, 'f', 1));
+        }
+    }
 }

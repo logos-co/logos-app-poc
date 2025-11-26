@@ -6,6 +6,7 @@
 #include <QListWidget>
 #include <QTimer>
 #include <QStackedWidget>
+#include <QMap>
 
 class PluginMethodsView;
 
@@ -25,6 +26,7 @@ private slots:
     void onLoadPluginClicked();
     void onUnloadPluginClicked();
     void onAddPluginClicked();
+    void updateModuleStats();
 
 private:
     void setupUi();
@@ -44,4 +46,9 @@ private:
 
     // The current plugin methods view (if any)
     PluginMethodsView* m_currentMethodsView;
+
+    // Stats timer and labels
+    QTimer* m_statsTimer;
+    QMap<QString, QLabel*> m_cpuLabels;
+    QMap<QString, QLabel*> m_memoryLabels;
 }; 

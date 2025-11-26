@@ -23,6 +23,32 @@ if(NOT DEFINED LOGOS_CPP_SDK_ROOT)
     endif()
 endif()
 
+# Allow override for logos-liblogos (for nix builds)
+if(NOT DEFINED LOGOS_LIBLOGOS_ROOT)
+    get_filename_component(REAL_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" REALPATH)
+    set(_parent_liblogos "${REAL_SOURCE_DIR}/../../../logos-liblogos")
+    if(EXISTS "${_parent_liblogos}/interface.h")
+        set(LOGOS_LIBLOGOS_ROOT "${_parent_liblogos}")
+    else()
+        set(LOGOS_LIBLOGOS_ROOT "${REAL_SOURCE_DIR}/../../../logos-liblogos")
+    endif()
+endif()
+
+# Check if logos-liblogos is available
+set(_liblogos_found FALSE)
+if(EXISTS "${LOGOS_LIBLOGOS_ROOT}/interface.h")
+    set(_liblogos_found TRUE)
+    set(_liblogos_is_source TRUE)
+elseif(EXISTS "${LOGOS_LIBLOGOS_ROOT}/include/interface.h")
+    set(_liblogos_found TRUE)
+    set(_liblogos_is_source FALSE)
+endif()
+
+if(_liblogos_found)
+    message(STATUS "Using logos-liblogos at: ${LOGOS_LIBLOGOS_ROOT}")
+    message(STATUS "logos-liblogos layout: ${_liblogos_is_source}")
+endif()
+
 # Check if dependencies are available (support both source and installed layouts)
 set(_cpp_sdk_found FALSE)
 if(EXISTS "${LOGOS_CPP_SDK_ROOT}/cpp/logos_api.h")
@@ -169,6 +195,20 @@ else()
     )
 endif()
 
+# Add logos-liblogos include directories if available
+if(_liblogos_found)
+    if(_liblogos_is_source)
+        target_include_directories(main_ui PRIVATE 
+            ${LOGOS_LIBLOGOS_ROOT}
+            ${LOGOS_LIBLOGOS_ROOT}/host
+        )
+        target_link_directories(main_ui PRIVATE ${LOGOS_LIBLOGOS_ROOT}/build/lib)
+    else()
+        target_include_directories(main_ui PRIVATE ${LOGOS_LIBLOGOS_ROOT}/include)
+        target_link_directories(main_ui PRIVATE ${LOGOS_LIBLOGOS_ROOT}/lib)
+    endif()
+endif()
+
 # Add Qt definitions
 target_compile_definitions(main_ui PRIVATE
     QT_PLUGIN
@@ -182,6 +222,11 @@ target_link_libraries(main_ui
         Qt6::RemoteObjects
         component-interfaces
 )
+
+# Link logos_core library if available (for logos_core_get_module_stats)
+if(_liblogos_found)
+    target_link_libraries(main_ui PRIVATE logos_core)
+endif()
 
 # Link SDK library if using installed layout
 if(NOT _cpp_sdk_is_source)

@@ -19,6 +19,7 @@ extern "C" {
     char** logos_core_get_loaded_plugins();
     int logos_core_load_plugin(const char* plugin_name);
     char* logos_core_process_plugin(const char* plugin_path);
+    char* logos_core_get_module_stats();
 }
 
 // Helper function to convert C-style array to QStringList
@@ -96,6 +97,17 @@ int main(int argc, char *argv[])
     // Create and show the main window
     Window mainWindow(&logosAPI);
     mainWindow.show();
+
+    // Set up timer to poll module stats every 2 seconds
+    QTimer* statsTimer = new QTimer(&app);
+    QObject::connect(statsTimer, &QTimer::timeout, [&]() {
+        char* stats_json = logos_core_get_module_stats();
+        if (stats_json) {
+            std::cout << "Module stats: " << stats_json << std::endl;
+            delete[] stats_json;
+        }
+    });
+    statsTimer->start(2000);
 
     // Run the application
     int result = app.exec();
