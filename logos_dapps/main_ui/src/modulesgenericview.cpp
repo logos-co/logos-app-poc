@@ -84,6 +84,9 @@ void ModulesGenericView::createTabs()
     m_tabWidget->addTab(uiModulesTab, "Apps");
     m_tabWidget->addTab(coreModulesTab, "Core Modules");
     
+    // Hide the Apps tab
+    m_tabWidget->tabBar()->setTabVisible(0, false);
+    
     // Connect tab bar click to refresh the appropriate view
     connect(m_tabWidget, &QTabWidget::currentChanged, this, [this](int index) {
         if (index == 0 && m_modulesView) {
