@@ -1,9 +1,11 @@
 #include "WebViewAppWidget.h"
+#include "WebViewBridge.h"
 #include <QVBoxLayout>
 #include <QUrl>
 #include <QWidget>
 #include <QDebug>
 #include <QLabel>
+#include <QString>
 
 // WebView2 headers - these may not be available at compile time
 // WebView2Loader.dll will be loaded at runtime
@@ -65,6 +67,20 @@ void loadURLInWinWebViewWidget(QWidget* widget, const QUrl& url) {
     }
 }
 
+void injectJavaScriptBridgeInWinWebView(QWidget* widget, WebViewBridge* bridge) {
+    Q_UNUSED(widget);
+    Q_UNUSED(bridge);
+    // TODO: Implement when WebView2 is integrated
+    // Would use AddScriptToExecuteOnDocumentCreatedAsync
+}
+
+void executeJavaScriptInWinWebView(QWidget* widget, const QString& script) {
+    Q_UNUSED(widget);
+    Q_UNUSED(script);
+    // TODO: Implement when WebView2 is integrated
+    // Would use ExecuteScriptAsync
+}
+
 #else
 // Non-Windows: provide stub implementations
 QWidget* createWinWebViewWidget(QWidget* parent) {
@@ -75,5 +91,15 @@ QWidget* createWinWebViewWidget(QWidget* parent) {
 void loadURLInWinWebViewWidget(QWidget* widget, const QUrl& url) {
     Q_UNUSED(widget);
     Q_UNUSED(url);
+}
+
+void injectJavaScriptBridgeInWinWebView(QWidget* widget, WebViewBridge* bridge) {
+    Q_UNUSED(widget);
+    Q_UNUSED(bridge);
+}
+
+void executeJavaScriptInWinWebView(QWidget* widget, const QString& script) {
+    Q_UNUSED(widget);
+    Q_UNUSED(script);
 }
 #endif

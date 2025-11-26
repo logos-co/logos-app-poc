@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Local WebView App</title>
+    <title>Local WebView App - Logos Bridge Demo</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -31,10 +31,15 @@
             border-radius: 4px;
             cursor: pointer;
             display: block;
-            margin: 20px auto;
+            margin: 10px auto;
+            min-width: 200px;
         }
         button:hover {
             background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
         }
         #counter {
             text-align: center;
@@ -42,21 +47,132 @@
             color: #666;
             margin-top: 20px;
         }
+        #status {
+            text-align: center;
+            font-size: 14px;
+            color: #888;
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+        }
+        #eventLog {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .event-entry {
+            margin: 5px 0;
+            padding: 5px;
+            background-color: #e8f5e9;
+            border-left: 3px solid #4CAF50;
+        }
+        .error {
+            background-color: #ffebee;
+            border-left-color: #f44336;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Hello World</h1>
-        <button id="counterButton" onclick="incrementCounter()">Click Me!</button>
+        <h1>Logos Bridge Demo</h1>
+        
+        <div id="status">Waiting for logos bridge...</div>
+        
+        <button id="changeQtLabelButton" onclick="changeQtLabel()" disabled>
+            Change Qt Label (WebApp → Qt)
+        </button>
+        
+        <button id="counterButton" onclick="incrementCounter()">Increment Counter</button>
         <div id="counter">Count: 0</div>
+        
+        <h3>Event Log (Qt → WebApp)</h3>
+        <div id="eventLog"></div>
     </div>
     
     <script>
         let count = 0;
+        let logosReady = false;
+        
+        // Wait for logos bridge to be available
+        function checkLogosBridge() {
+            if (typeof window.logos !== 'undefined') {
+                logosReady = true;
+                document.getElementById('status').textContent = 'Logos bridge ready!';
+                document.getElementById('status').style.color = '#4CAF50';
+                document.getElementById('changeQtLabelButton').disabled = false;
+                
+                // Set up event listener for events from Qt
+                window.logos.on('qtButtonClicked', function(data) {
+                    addEventLog('Received event from Qt: ' + JSON.stringify(data, null, 2));
+                });
+                
+                addEventLog('Logos bridge initialized successfully');
+            } else {
+                setTimeout(checkLogosBridge, 100);
+            }
+        }
+        
+        // Start checking for logos bridge
+        window.addEventListener('logos#initialized', function() {
+            checkLogosBridge();
+        });
+        
+        // Also check immediately in case it's already loaded
+        checkLogosBridge();
         
         function incrementCounter() {
             count++;
             document.getElementById('counter').textContent = 'Count: ' + count;
+        }
+        
+        async function changeQtLabel() {
+            if (!logosReady) {
+                addEventLog('Error: Logos bridge not ready', true);
+                return;
+            }
+            
+            try {
+                const button = document.getElementById('changeQtLabelButton');
+                button.disabled = true;
+                button.textContent = 'Sending...';
+                
+                const result = await window.logos.request({
+                    method: 'changeQtLabel',
+                    params: {
+                        text: 'Hello from WebApp! (' + new Date().toLocaleTimeString() + ')'
+                    }
+                });
+                
+                addEventLog('Request sent successfully: ' + JSON.stringify(result, null, 2));
+                button.textContent = 'Change Qt Label (WebApp → Qt)';
+                button.disabled = false;
+            } catch (error) {
+                addEventLog('Error sending request: ' + error.message, true);
+                const button = document.getElementById('changeQtLabelButton');
+                button.textContent = 'Change Qt Label (WebApp → Qt)';
+                button.disabled = false;
+            }
+        }
+        
+        function addEventLog(message, isError) {
+            const log = document.getElementById('eventLog');
+            const entry = document.createElement('div');
+            entry.className = 'event-entry' + (isError ? ' error' : '');
+            entry.textContent = new Date().toLocaleTimeString() + ' - ' + message;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+            
+            // Keep only last 20 entries
+            while (log.children.length > 20) {
+                log.removeChild(log.firstChild);
+            }
         }
     </script>
 </body>
