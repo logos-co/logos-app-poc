@@ -19,10 +19,14 @@
         logosLiblogos = logos-liblogos.packages.${system}.default;
         logosPackageManager = logos-package-manager.packages.${system}.default;
         logosCapabilityModule = logos-capability-module.packages.${system}.default;
+        logosCppSdkSrc = logos-cpp-sdk.outPath;
+        logosLiblogosSrc = logos-liblogos.outPath;
+        logosPackageManagerSrc = logos-package-manager.outPath;
+        logosCapabilityModuleSrc = logos-capability-module.outPath;
       });
     in
     {
-      packages = forAllSystems ({ pkgs, logosSdk, logosLiblogos, logosPackageManager, logosCapabilityModule }: 
+      packages = forAllSystems ({ pkgs, logosSdk, logosLiblogos, logosPackageManager, logosCapabilityModule, ... }: 
         let
           # Common configuration
           common = import ./nix/default.nix { 
@@ -57,7 +61,7 @@
         }
       );
 
-      devShells = forAllSystems ({ pkgs, logosSdk, logosLiblogos, logosPackageManager, logosCapabilityModule }: {
+      devShells = forAllSystems ({ pkgs, logosSdk, logosLiblogos, logosPackageManager, logosCapabilityModule, logosCppSdkSrc, logosLiblogosSrc, logosPackageManagerSrc, logosCapabilityModuleSrc }: {
         default = pkgs.mkShell {
           nativeBuildInputs = [
             pkgs.cmake
@@ -73,11 +77,31 @@
           ];
           
           shellHook = ''
+            # Nix package paths (pre-built for host system)
             export LOGOS_CPP_SDK_ROOT="${logosSdk}"
             export LOGOS_LIBLOGOS_ROOT="${logosLiblogos}"
+            export LOGOS_PACKAGE_MANAGER_ROOT="${logosPackageManager}"
+            export LOGOS_CAPABILITY_MODULE_ROOT="${logosCapabilityModule}"
+            
+            # Source paths for iOS builds (from flake inputs)
+            export LOGOS_CPP_SDK_SRC="${logosCppSdkSrc}"
+            export LOGOS_LIBLOGOS_SRC="${logosLiblogosSrc}"
+            export LOGOS_PACKAGE_MANAGER_SRC="${logosPackageManagerSrc}"
+            export LOGOS_CAPABILITY_MODULE_SRC="${logosCapabilityModuleSrc}"
+            
             echo "Logos App POC development environment"
-            echo "LOGOS_CPP_SDK_ROOT: $LOGOS_CPP_SDK_ROOT"
-            echo "LOGOS_LIBLOGOS_ROOT: $LOGOS_LIBLOGOS_ROOT"
+            echo ""
+            echo "Nix packages (host builds):"
+            echo "  LOGOS_CPP_SDK_ROOT: $LOGOS_CPP_SDK_ROOT"
+            echo "  LOGOS_LIBLOGOS_ROOT: $LOGOS_LIBLOGOS_ROOT"
+            echo "  LOGOS_PACKAGE_MANAGER_ROOT: $LOGOS_PACKAGE_MANAGER_ROOT"
+            echo "  LOGOS_CAPABILITY_MODULE_ROOT: $LOGOS_CAPABILITY_MODULE_ROOT"
+            echo ""
+            echo "Source paths (for iOS builds):"
+            echo "  LOGOS_CPP_SDK_SRC: $LOGOS_CPP_SDK_SRC"
+            echo "  LOGOS_LIBLOGOS_SRC: $LOGOS_LIBLOGOS_SRC"
+            echo "  LOGOS_PACKAGE_MANAGER_SRC: $LOGOS_PACKAGE_MANAGER_SRC"
+            echo "  LOGOS_CAPABILITY_MODULE_SRC: $LOGOS_CAPABILITY_MODULE_SRC"
           '';
         };
       });

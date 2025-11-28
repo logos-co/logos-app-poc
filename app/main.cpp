@@ -1,6 +1,7 @@
 #include "window.h"
 #include "logos_api.h"
 #include "token_manager.h"
+#include "logos_mode.h"
 #include <QApplication>
 #include <QIcon>
 #include <QDir>
@@ -35,6 +36,9 @@ QStringList convertPluginsToStringList(char** plugins) {
 
 int main(int argc, char *argv[])
 {
+    // Set logos mode to Local for testing
+    //LogosModeConfig::setMode(LogosMode::Local);
+
     // Create QApplication first
     QApplication app(argc, argv);
 
