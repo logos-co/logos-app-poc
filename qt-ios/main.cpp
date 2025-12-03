@@ -9,6 +9,7 @@
 #include "logos_core.h"
 #include "logos_api.h"
 #include "logos_api_client.h"
+#include "logos_sdk.h"
 
 // Import static plugins - references Qt static plugin symbols, no headers needed
 Q_IMPORT_PLUGIN(PackageManagerPlugin)
@@ -184,22 +185,20 @@ public:
             return;
         }
         
-        LogosAPIClient* client = m_logosAPI->getClient("package_manager");
-        if (!client || !client->isConnected()) {
+        if (!m_logosAPI->getClient("package_manager")->isConnected()) {
             setTestPluginCallResult("Error: package_manager not loaded. Click Start first.");
             return;
         }
         
         setTestPluginCallResult("Calling package_manager:testPluginCall...");
         
-        QVariantList args;
-        args << QVariant::fromValue(QString("hello23"));
-        QVariant result = client->invokeRemoteMethod("package_manager", "testPluginCall", args);
+        LogosModules logos(m_logosAPI);
+        QString result = logos.package_manager.testPluginCall("hello24");
         
-        if (result.isValid()) {
-            setTestPluginCallResult(QString("Success: %1").arg(result.toString()));
+        if (!result.isEmpty()) {
+            setTestPluginCallResult(QString("Success: %1").arg(result));
         } else {
-            setTestPluginCallResult("Error: Method call failed or returned invalid result");
+            setTestPluginCallResult("Error: Method call failed or returned empty result");
         }
     }
 
