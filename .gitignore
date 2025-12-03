@@ -7,3 +7,7 @@ result
 *.swp
 *.swo
 .idea/
+qt-ios/build-ios-sim/*
+qt-ios/build-ios-device/*
+qt-ios/.ios-build-cache/
+build-ios-sim/*

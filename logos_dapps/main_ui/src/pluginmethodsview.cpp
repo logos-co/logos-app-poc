@@ -7,7 +7,6 @@
 #include <QMessageBox>
 #include <QJsonArray>
 #include <QJsonObject>
-#include <QRemoteObjectPendingCall>
 #include "logos_api.h"
 #include "logos_api_client.h"
 #include "logos_sdk.h"
@@ -123,39 +122,15 @@ void PluginMethodsView::setupUi()
 void PluginMethodsView::loadPluginMethods()
 {
     LogosAPI api("core");
-    QObject* pluginObj = api.getClient(m_pluginName)->requestObject(m_pluginName);
-    if (!pluginObj) {
-        qWarning() << "Failed to acquire replica for plugin" << m_pluginName;
-        m_methodsTree->addTopLevelItem(new QTreeWidgetItem(QStringList() << "Error: Failed to acquire plugin replica"));
-        return;
-    }
-
-    QRemoteObjectPendingCall pending;
-    bool ok = QMetaObject::invokeMethod(
-        pluginObj,
-        "getPluginMethods",
-        Qt::DirectConnection,
-        Q_RETURN_ARG(QRemoteObjectPendingCall, pending)
-    );
-
-    if (!ok) {
+    QVariant result = api.getClient(m_pluginName)->invokeRemoteMethod(m_pluginName, "getPluginMethods");
+    
+    if (!result.isValid()) {
         qWarning() << "Failed to invoke getPluginMethods on" << m_pluginName;
-        m_methodsTree->addTopLevelItem(new QTreeWidgetItem(QStringList() << "Error: getPluginMethods invocation failed"));
-        delete pluginObj;
+        m_methodsTree->addTopLevelItem(new QTreeWidgetItem(QStringList() << "Error: getPluginMethods call failed"));
         return;
     }
-
-    pending.waitForFinished(20000);
-    if (!pending.isFinished() || pending.error() != QRemoteObjectPendingCall::NoError) {
-        qWarning() << "getPluginMethods() call failed or timed out for" << m_pluginName << ":" << pending.error();
-        m_methodsTree->addTopLevelItem(new QTreeWidgetItem(QStringList() << "Error: getPluginMethods call failed or timed out"));
-        delete pluginObj;
-        return;
-    }
-
-    QVariant ret = pending.returnValue();
-    displayPluginMethods(ret.toJsonArray());
-    delete pluginObj;
+    
+    displayPluginMethods(qvariant_cast<QJsonArray>(result));
 }
 
 void PluginMethodsView::displayPluginMethods(const QJsonArray& methods)
