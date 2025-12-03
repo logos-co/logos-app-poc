@@ -7,6 +7,8 @@
 #include <QDebug>
 #include <QtPlugin>
 #include "logos_core.h"
+#include "logos_api.h"
+#include "logos_api_client.h"
 
 // Import static plugins - references Qt static plugin symbols, no headers needed
 Q_IMPORT_PLUGIN(PackageManagerPlugin)
@@ -67,6 +69,8 @@ public:
         char* argv[] = { const_cast<char*>("Logos"), nullptr };
         logos_core_init(1, argv);
         logos_core_set_mode(1);
+        
+        m_logosAPI = new LogosAPI("core", this);
         
         m_initialized = true;
         emit initializedChanged();
@@ -180,38 +184,23 @@ public:
             return;
         }
         
-        char** plugins = logos_core_get_loaded_plugins();
-        QStringList currentPlugins;
-        if (plugins) {
-            for (int i = 0; plugins[i] != nullptr; i++) {
-                currentPlugins.append(QString::fromUtf8(plugins[i]));
-                free(plugins[i]);
-            }
-            free(plugins);
-        }
-        
-        if (!currentPlugins.contains("package_manager")) {
+        LogosAPIClient* client = m_logosAPI->getClient("package_manager");
+        if (!client || !client->isConnected()) {
             setTestPluginCallResult("Error: package_manager not loaded. Click Start first.");
             return;
         }
         
         setTestPluginCallResult("Calling package_manager:testPluginCall...");
         
-        const char* params_json = "[{\"name\":\"foo\",\"value\":\"hello23\",\"type\":\"QString\"}]";
-        logos_core_call_plugin_method_async(
-            "package_manager",
-            "testPluginCall",
-            params_json,
-            [](int result, const char* message, void* user_data) {
-                LogosBridge* self = static_cast<LogosBridge*>(user_data);
-                if (result == 1) {
-                    self->setTestPluginCallResult(QString("Success: %1").arg(message ? message : "null"));
-                } else {
-                    self->setTestPluginCallResult(QString("Error: %1").arg(message ? message : "unknown error"));
-                }
-            },
-            this
-        );
+        QVariantList args;
+        args << QVariant::fromValue(QString("hello23"));
+        QVariant result = client->invokeRemoteMethod("package_manager", "testPluginCall", args);
+        
+        if (result.isValid()) {
+            setTestPluginCallResult(QString("Success: %1").arg(result.toString()));
+        } else {
+            setTestPluginCallResult("Error: Method call failed or returned invalid result");
+        }
     }
 
 signals:
@@ -250,6 +239,7 @@ private:
     QStringList m_knownPlugins;
     QString m_lastAsyncResult;
     QString m_testPluginCallResult;
+    LogosAPI* m_logosAPI = nullptr;
 };
 
 int main(int argc, char *argv[])
