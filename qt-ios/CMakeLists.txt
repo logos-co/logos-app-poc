@@ -148,10 +148,13 @@ else()
     message(STATUS "LOGOS_CAPABILITY_MODULE_ROOT not set - building without capability_module")
 endif()
 
+set(GENERATED_CODE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/generated_code")
+
 # Create executable
 qt_add_executable(Logos
     main.cpp
     resources.qrc
+    ${GENERATED_CODE_DIR}/logos_sdk.cpp
 )
 
 # Add Assets.xcassets for iOS app icon
@@ -203,6 +206,10 @@ if(LIBLOGOS_FOUND)
             "${LOGOS_CPP_SDK_ROOT}/include/cpp"
         )
     endif()
+    
+    target_include_directories(Logos PRIVATE
+        "${GENERATED_CODE_DIR}"
+    )
 endif()
 
 # Link package_manager plugin if found

@@ -1,0 +1,14 @@
+{
+  "name": "logos_ios_app",
+  "version": "1.0.0",
+  "description": "Logos iOS application",
+  "author": "Logos Core Team",
+  "type": "app",
+  "dependencies": [
+    "package_manager"
+  ],
+  "build": {
+    "type": "cmake"
+  }
+}
+

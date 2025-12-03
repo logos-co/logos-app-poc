@@ -134,6 +134,59 @@ mkdir -p "${IOS_BUILD_CACHE}/liblogos"
 mkdir -p "${IOS_BUILD_CACHE}/package-manager"
 mkdir -p "${IOS_BUILD_CACHE}/capability-module"
 
+# Step 0: Run code generation using nix environment (before unsetting it)
+echo "=== Step 0: Running Code Generation ==="
+GENERATED_CODE_DIR="${SCRIPT_DIR}/generated_code"
+CPP_GENERATOR_BUILD_DIR="${IOS_BUILD_CACHE}/cpp-generator"
+CPP_GENERATOR="${CPP_GENERATOR_BUILD_DIR}/bin/logos-cpp-generator"
+METADATA_JSON="${SCRIPT_DIR}/metadata.json"
+
+if [[ ! -x "$CPP_GENERATOR" ]]; then
+    echo "Building logos-cpp-generator for macOS host..."
+    rm -rf "${CPP_GENERATOR_BUILD_DIR}"
+    mkdir -p "${CPP_GENERATOR_BUILD_DIR}"
+    
+    cmake "${LOGOS_CPP_SDK_SRC}/cpp-generator" \
+        -B "${CPP_GENERATOR_BUILD_DIR}" \
+        -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_PREFIX_PATH="${QT_HOST_PATH}"
+    
+    cmake --build "${CPP_GENERATOR_BUILD_DIR}"
+    echo "logos-cpp-generator built successfully"
+fi
+
+if [[ -x "$CPP_GENERATOR" && -f "$METADATA_JSON" ]]; then
+    echo "Running logos-cpp-generator with --general-only..."
+    echo "  Generator: ${CPP_GENERATOR}"
+    echo "  Metadata: ${METADATA_JSON}"
+    echo "  Output: ${GENERATED_CODE_DIR}"
+    
+    rm -rf "${GENERATED_CODE_DIR}"
+    mkdir -p "${GENERATED_CODE_DIR}"
+    
+    # Copy pre-generated module API files from nix builds
+    if [[ -d "${LOGOS_PACKAGE_MANAGER_ROOT}/include" ]]; then
+        echo "Copying package_manager API files from nix build..."
+        cp -L "${LOGOS_PACKAGE_MANAGER_ROOT}/include"/*.h "${GENERATED_CODE_DIR}/" 2>/dev/null || true
+        cp -L "${LOGOS_PACKAGE_MANAGER_ROOT}/include"/*.cpp "${GENERATED_CODE_DIR}/" 2>/dev/null || true
+    fi
+    
+    "${CPP_GENERATOR}" --metadata "${METADATA_JSON}" --general-only --output-dir "${GENERATED_CODE_DIR}"
+    
+    echo "Generated files:"
+    ls -la "${GENERATED_CODE_DIR}/"
+else
+    echo "Warning: Skipping code generation"
+    if [[ ! -x "$CPP_GENERATOR" ]]; then
+        echo "  - logos-cpp-generator not found at ${CPP_GENERATOR}"
+    fi
+    if [[ ! -f "$METADATA_JSON" ]]; then
+        echo "  - metadata.json not found at ${METADATA_JSON}"
+    fi
+fi
+echo ""
+
 # Override nix environment completely for iOS builds
 # This is critical: Nix sets many environment variables that interfere with iOS cross-compilation
 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
