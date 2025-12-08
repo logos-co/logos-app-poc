@@ -53,6 +53,22 @@ After building with `nix build`, you can run the application:
 
 The application will automatically load all required modules and dependencies. All components are bundled in the Nix store layout.
 
+#### macOS Distribution (Experimental)
+
+Build a standalone `.app` bundle or DMG installer for macOS. This is experimental and intended for testing purposes.
+
+```bash
+# Build .app bundle
+nix build '.#app-bundle'
+
+# Build DMG installer
+nix build '.#dmg'
+```
+
+The outputs will be at:
+- `result/LogosApp.app/` - Application bundle
+- `result/LogosApp.dmg` - DMG installer
+
 #### Nix Organization
 
 The nix build system is organized into modular files in the `/nix` directory:
@@ -60,6 +76,8 @@ The nix build system is organized into modular files in the `/nix` directory:
 - `nix/app.nix` - Application-specific compilation settings
 - `nix/main-ui.nix` - UI components compilation
 - `nix/counter.nix` - Counter module compilation
+- `nix/macos-bundle.nix` - macOS .app bundle (darwin only)
+- `nix/macos-dmg.nix` - macOS DMG installer (darwin only)
 
 ## Requirements
 

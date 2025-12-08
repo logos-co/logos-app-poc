@@ -49,6 +49,20 @@
             counterPlugin = counterPlugin;
             mainUIPlugin = mainUIPlugin;
           };
+          
+          # macOS distribution packages (only for Darwin)
+          appBundle = if pkgs.stdenv.isDarwin then
+            import ./nix/macos-bundle.nix {
+              inherit pkgs app src;
+            }
+          else null;
+          
+          dmg = if pkgs.stdenv.isDarwin then
+            import ./nix/macos-dmg.nix {
+              inherit pkgs;
+              appBundle = appBundle;
+            }
+          else null;
         in
         {
           # Individual outputs
@@ -58,7 +72,11 @@
           
           # Default package
           default = app;
-        }
+        } // (if pkgs.stdenv.isDarwin then {
+          # macOS distribution outputs
+          app-bundle = appBundle;
+          inherit dmg;
+        } else {})
       );
 
       devShells = forAllSystems ({ pkgs, logosSdk, logosLiblogos, logosPackageManager, logosCapabilityModule, logosCppSdkSrc, logosLiblogosSrc, logosPackageManagerSrc, logosCapabilityModuleSrc }: {
