@@ -1,5 +1,4 @@
 #include "packagemanagerview.h"
-#include "mainwindow.h"
 #include <QFont>
 #include <QHeaderView>
 #include <QIcon>
@@ -34,7 +33,6 @@ PackageManagerView::PackageManagerView(QWidget *parent)
     , m_testButton(nullptr)
     , m_applyButton(nullptr)
     , m_detailsTextEdit(nullptr)
-    , m_mainWindow(nullptr)
     , m_logosAPI(nullptr)
 {
     // Create own LogosAPI instance if none provided
@@ -58,7 +56,6 @@ PackageManagerView::PackageManagerView(LogosAPI* logosAPI, QWidget *parent)
     , m_testButton(nullptr)
     , m_applyButton(nullptr)
     , m_detailsTextEdit(nullptr)
-    , m_mainWindow(nullptr)
     , m_logosAPI(logosAPI)
 {
     setupUi();
@@ -573,22 +570,13 @@ void PackageManagerView::onApplyClicked()
                     QFile::ReadOther | QFile::WriteOther | QFile::ExeOther);
 
                 successfulPlugins << packageName + " (UI plugin copied to plugins directory)";
+                emit packageInstalled(packageName);
             } else {
                 failedPlugins << packageName + " (failed to copy UI plugin)";
             }
 
             continue;
         }
-
-        // // Regular installation process for non-UI plugins
-        // bool installSuccess = false;
-        // QMetaObject::invokeMethod(
-        //     packageManagerPlugin,
-        //     "installPlugin",
-        //     Qt::DirectConnection,
-        //     Q_RETURN_ARG(bool, installSuccess),
-        //     Q_ARG(QString, filePath)
-        // );
 
         // Use new API to install plugin via package_manager wrapper
         bool installSuccess = false;
@@ -599,25 +587,11 @@ void PackageManagerView::onApplyClicked()
             qDebug() << "LogosAPI not connected, cannot install plugin:" << packageName;
         }
 
-        if (!installSuccess) {
+        if (installSuccess) {
+            emit packageInstalled(packageName);
+        } else {
             failedPlugins << packageName + " (installation failed)";
         }
-
-        // Then process the plugin to load it
-        //QString pluginName;
-        //bool success = QMetaObject::invokeMethod(
-        //    coreManagerPlugin,
-        //    "processPlugin",
-        //    Qt::DirectConnection,
-        //    Q_RETURN_ARG(QString, pluginName),
-        //    Q_ARG(QString, filePath)
-        //);
-
-        //if (success) {
-        //    successfulPlugins << packageName + " (" + pluginName + ")";
-        //} else {
-        //    failedPlugins << packageName + " (processing failed)";
-        //}
     }
 
     // Display the results
@@ -639,11 +613,10 @@ void PackageManagerView::onApplyClicked()
         resultText += "</ul>";
     }
 
-    // If we have a reference to the main window, refresh the core modules view
-    if (m_mainWindow && !successfulPlugins.isEmpty()) {
-        m_mainWindow->refreshCoreModuleView();
-        m_mainWindow->refreshModulesView();
-        resultText += "<p><b>Module views refreshed.</b></p>";
+    // Emit signal to notify that packages have changed
+    if (!successfulPlugins.isEmpty()) {
+        emit packagesChanged();
+        resultText += "<p><b>Packages changed signal emitted.</b></p>";
     }
 
     m_detailsTextEdit->setHtml(resultText);
@@ -784,4 +757,4 @@ void PackageManagerView::onPackageCheckStateChanged(QTableWidgetItem* item)
     
     // Update the install button state
     updateInstallButtonState();
-} 
+}

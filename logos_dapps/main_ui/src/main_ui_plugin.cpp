@@ -59,4 +59,11 @@ CoreModuleView* MainUIPlugin::createCoreModuleView(QWidget* parent)
         m_coreModuleView = new CoreModuleView(parent);
     }
     return m_coreModuleView;
+}
+
+void MainUIPlugin::setPackageManagerWidget(QWidget* widget)
+{
+    if (m_mainWindow) {
+        m_mainWindow->setPackageManagerWidget(widget);
+    }
 } 

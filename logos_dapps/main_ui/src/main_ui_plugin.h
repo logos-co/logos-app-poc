@@ -23,6 +23,7 @@ public:
 
     // UI-specific methods
     Q_INVOKABLE CoreModuleView* createCoreModuleView(QWidget* parent = nullptr);
+    Q_INVOKABLE void setPackageManagerWidget(QWidget* widget);
 
 private:
     MainWindow* m_mainWindow;

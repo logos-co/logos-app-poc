@@ -11,7 +11,6 @@
 #include "modulesview.h"
 #include "dashboardview.h"
 #include "coremoduleview.h"
-#include "packagemanagerview.h"
 #include "modulesgenericview.h"
 #include "applauncher.h"
 #include "logos_api.h"
@@ -170,10 +169,9 @@ void MainWindow::createContentPages()
         connect(modulesView, &ModulesView::appStateChanged, m_appLauncher, &AppLauncher::updateAppState);
     }
     
-    // Package Manager page
-    PackageManagerView *packageManagerView = new PackageManagerView(m_logosAPI);
-    packageManagerView->setMainWindow(this);
-    m_contentStack->addWidget(packageManagerView);
+    // Package Manager page - placeholder until setPackageManagerWidget() is called
+    QWidget* packageManagerWidget = createPackageManagerPlaceholder();
+    m_contentStack->addWidget(packageManagerWidget);
     
     // Settings page
     QWidget *settingsPage = new QWidget();
@@ -240,5 +238,51 @@ void MainWindow::onSidebarButtonClicked()
             // Check if there's a CoreModuleView and refresh it too since it's on one of the tabs
             refreshCoreModuleView();
         }
+    }
+}
+
+QWidget* MainWindow::createPackageManagerPlaceholder()
+{
+    QWidget* placeholder = new QWidget();
+    QVBoxLayout* layout = new QVBoxLayout(placeholder);
+    
+    QLabel* title = new QLabel("Package Manager", placeholder);
+    QFont titleFont = title->font();
+    titleFont.setPointSize(24);
+    titleFont.setBold(true);
+    title->setFont(titleFont);
+    title->setAlignment(Qt::AlignCenter);
+    title->setStyleSheet("color: #ffffff;");
+    
+    QLabel* content = new QLabel("Package Manager UI plugin not loaded.\nInstall the package_manager_ui plugin to use this feature.", placeholder);
+    content->setAlignment(Qt::AlignCenter);
+    content->setStyleSheet("color: #a0a0a0;");
+    
+    layout->addStretch();
+    layout->addWidget(title);
+    layout->addWidget(content);
+    layout->addStretch();
+    
+    return placeholder;
+}
+
+void MainWindow::setPackageManagerWidget(QWidget* widget)
+{
+    if (!widget) {
+        return;
+    }
+    
+    // Package Manager is at index 3 (0: Apps/MDI, 1: Dashboard, 2: Modules, 3: Package Manager, 4: Settings)
+    const int packageManagerIndex = 3;
+    
+    if (packageManagerIndex < m_contentStack->count()) {
+        QWidget* oldWidget = m_contentStack->widget(packageManagerIndex);
+        m_contentStack->removeWidget(oldWidget);
+        delete oldWidget;
+        
+        m_contentStack->insertWidget(packageManagerIndex, widget);
+        
+        connect(widget, SIGNAL(packagesChanged()), this, SLOT(refreshCoreModuleView()));
+        connect(widget, SIGNAL(packagesChanged()), this, SLOT(refreshModulesView()));
     }
 } 

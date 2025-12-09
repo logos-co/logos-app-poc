@@ -43,17 +43,23 @@
             inherit pkgs common src logosSdk logosPackageManager logosLiblogos; 
           };
           
+          packageManagerUIPlugin = import ./nix/package-manager-ui.nix { 
+            inherit pkgs common src logosSdk logosPackageManager logosLiblogos; 
+          };
+          
           # App package
           app = import ./nix/app.nix { 
             inherit pkgs common src logosLiblogos logosSdk logosPackageManager logosCapabilityModule;
             counterPlugin = counterPlugin;
             mainUIPlugin = mainUIPlugin;
+            packageManagerUIPlugin = packageManagerUIPlugin;
           };
         in
         {
           # Individual outputs
           counter-plugin = counterPlugin;
           main-ui-plugin = mainUIPlugin;
+          package-manager-ui-plugin = packageManagerUIPlugin;
           app = app;
           
           # Default package

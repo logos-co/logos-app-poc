@@ -18,8 +18,6 @@
 #include "logos_api.h"
 #include "logos_api_client.h"
 
-class MainWindow;
-
 class PackageManagerView : public QWidget
 {
     Q_OBJECT
@@ -28,9 +26,12 @@ public:
     explicit PackageManagerView(QWidget *parent = nullptr);
     explicit PackageManagerView(LogosAPI* logosAPI, QWidget *parent = nullptr);
     ~PackageManagerView();
-    
-    // Set the main window reference
-    void setMainWindow(MainWindow* mainWindow) { m_mainWindow = mainWindow; }
+
+signals:
+    // Emitted when packages are installed or changed
+    void packagesChanged();
+    // Emitted when a specific package is installed
+    void packageInstalled(const QString& packageName);
 
 private slots:
     void onCategorySelected(int row);
@@ -85,12 +86,9 @@ private:
     
     QMap<QString, PackageInfo> m_packages;
     
-    // Reference to the main window
-    MainWindow* m_mainWindow;
-    
     // Flag to prevent circular dependency selection
     bool m_isProcessingDependencies;
     
     // LogosAPI instance for remote method calls
     LogosAPI* m_logosAPI;
-}; 
+};

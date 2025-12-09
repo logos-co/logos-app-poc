@@ -12,6 +12,7 @@
 #include <QCloseEvent>
 #include <QIcon>
 #include <QPixmap>
+#include <IComponent.h>
 
 Window::Window(QWidget *parent)
     : QMainWindow(parent)
@@ -56,17 +57,44 @@ void Window::setupUi()
         pluginExtension = ".so";
     #endif
 
+    QString pluginsDir = QCoreApplication::applicationDirPath() + "/../plugins/";
+    
+    // First, load the package_manager_ui plugin
+    QString packageManagerPluginPath = pluginsDir + "package_manager_ui" + pluginExtension;
+    QPluginLoader packageManagerLoader(packageManagerPluginPath);
+    QWidget* packageManagerWidget = nullptr;
+    
+    if (packageManagerLoader.load()) {
+        QObject* pmPlugin = packageManagerLoader.instance();
+        if (pmPlugin) {
+            IComponent* component = qobject_cast<IComponent*>(pmPlugin);
+            if (component) {
+                packageManagerWidget = component->createWidget(m_logosAPI);
+                if (packageManagerWidget) {
+                    qDebug() << "Loaded package_manager_ui plugin successfully";
+                } else {
+                    qWarning() << "package_manager_ui plugin createWidget returned null";
+                }
+            } else {
+                qWarning() << "package_manager_ui plugin does not implement IComponent";
+            }
+        }
+    } else {
+        qWarning() << "Failed to load package_manager_ui plugin:" << packageManagerLoader.errorString();
+    }
+
     // Load the main_ui plugin with the appropriate extension
-    QString pluginPath = QCoreApplication::applicationDirPath() + "/../plugins/main_ui" + pluginExtension;
-    QPluginLoader loader(pluginPath);
+    QString mainUiPluginPath = pluginsDir + "main_ui" + pluginExtension;
+    QPluginLoader loader(mainUiPluginPath);
 
     QWidget* mainContent = nullptr;
+    QObject* mainUiPlugin = nullptr;
 
     if (loader.load()) {
-        QObject* plugin = loader.instance();
-        if (plugin) {
+        mainUiPlugin = loader.instance();
+        if (mainUiPlugin) {
             // Try to create the main window using the plugin's createWidget method
-            QMetaObject::invokeMethod(plugin, "createWidget",
+            QMetaObject::invokeMethod(mainUiPlugin, "createWidget",
                                     Qt::DirectConnection,
                                     Q_RETURN_ARG(QWidget*, mainContent),
                                     Q_ARG(LogosAPI*, m_logosAPI));
@@ -75,9 +103,16 @@ void Window::setupUi()
 
     if (mainContent) {
         setCentralWidget(mainContent);
+        
+        // Pass the package manager widget to main_ui if it was loaded
+        if (packageManagerWidget && mainUiPlugin) {
+            QMetaObject::invokeMethod(mainUiPlugin, "setPackageManagerWidget",
+                                    Qt::DirectConnection,
+                                    Q_ARG(QWidget*, packageManagerWidget));
+        }
     } else {
         qWarning() << "================================================";
-        qWarning() << "Failed to load main UI plugin from:" << pluginPath;
+        qWarning() << "Failed to load main UI plugin from:" << mainUiPluginPath;
         qWarning() << "Error:" << loader.errorString();
         qWarning() << "================================================";
         // Fallback: show a message when plugin is not found
@@ -93,7 +128,7 @@ void Window::setupUi()
         layout->addWidget(messageLabel);
         setCentralWidget(fallbackWidget);
 
-        qWarning() << "Failed to load main UI plugin from:" << pluginPath;
+        qWarning() << "Failed to load main UI plugin from:" << mainUiPluginPath;
     }
 
     // Set window title and size

@@ -27,6 +27,9 @@ public:
     // Get the LogosAPI instance
     LogosAPI* getLogosAPI() const { return m_logosAPI; }
     
+    void setPackageManagerWidget(QWidget* widget);
+    
+public slots:
     // Refresh the core module view
     void refreshCoreModuleView();
     
@@ -40,6 +43,7 @@ private:
     void setupUi();
     void createSidebar();
     void createContentPages();
+    QWidget* createPackageManagerPlaceholder();
     
     QHBoxLayout *m_mainLayout;
     

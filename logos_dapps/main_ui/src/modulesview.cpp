@@ -588,9 +588,9 @@ QStringList ModulesView::getAvailableApps()
     QStringList allPlugins = findAvailablePlugins();
     QStringList apps;
     
-    // Filter out "main_ui" as it's not an app
+    // Filter out system plugins that aren't launchable apps
     for (const QString& plugin : allPlugins) {
-        if (plugin != "main_ui") {
+        if (plugin != "main_ui" && plugin != "package_manager_ui") {
             apps.append(plugin);
         }
     }
