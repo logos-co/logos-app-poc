@@ -2,5 +2,6 @@
 <RCC>
     <qresource prefix="/">
         <file>icons/counter.png</file>
+        <file>Counter.qml</file>
     </qresource>
 </RCC>
