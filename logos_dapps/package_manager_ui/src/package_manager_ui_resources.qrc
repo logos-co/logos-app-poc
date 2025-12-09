@@ -2,5 +2,6 @@
 <RCC>
     <qresource prefix="/">
         <file>icons/modules.png</file>
+        <file>PackageManager.qml</file>
     </qresource>
 </RCC>

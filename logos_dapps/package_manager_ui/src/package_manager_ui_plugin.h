@@ -3,7 +3,7 @@
 #include <IComponent.h>
 #include <QObject>
 
-class PackageManagerView;
+class PackageManagerBackend;
 class LogosAPI;
 
 class PackageManagerUIPlugin : public QObject, public IComponent {
@@ -18,8 +18,4 @@ public:
     // IComponent implementation
     QWidget* createWidget(LogosAPI* logosAPI = nullptr) override;
     void destroyWidget(QWidget* widget) override;
-
-private:
-    PackageManagerView* m_packageManagerView;
-    LogosAPI* m_logosAPI;
 };

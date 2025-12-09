@@ -8,7 +8,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 # Find Qt packages
-find_package(Qt6 REQUIRED COMPONENTS Core Widgets RemoteObjects)
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets RemoteObjects Quick Qml QuickWidgets QuickControls2)
 
 # Allow override from environment or command line (for nix builds)
 if(NOT DEFINED LOGOS_CPP_SDK_ROOT)
@@ -86,7 +86,7 @@ endif()
 
 set(SOURCES
     src/package_manager_ui_plugin.cpp
-    src/packagemanagerview.cpp
+    src/PackageManagerBackend.cpp
     src/package_manager_ui_resources.qrc
 )
 
@@ -210,6 +210,10 @@ target_link_libraries(package_manager_ui
         Qt6::Core 
         Qt6::Widgets
         Qt6::RemoteObjects
+        Qt6::Quick
+        Qt6::Qml
+        Qt6::QuickWidgets
+        Qt6::QuickControls2
         component-interfaces
 )
 

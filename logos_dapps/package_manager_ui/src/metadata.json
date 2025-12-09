@@ -14,8 +14,9 @@
     "files": [
       "src/package_manager_ui_plugin.cpp",
       "src/package_manager_ui_plugin.h",
-      "src/packagemanagerview.cpp",
-      "src/packagemanagerview.h",
+      "src/PackageManagerBackend.cpp",
+      "src/PackageManagerBackend.h",
+      "src/PackageManager.qml",
       "src/package_manager_ui_resources.qrc"
     ]
   },

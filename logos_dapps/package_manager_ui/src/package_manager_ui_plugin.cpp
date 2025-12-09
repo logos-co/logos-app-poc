@@ -1,31 +1,35 @@
 #include "package_manager_ui_plugin.h"
-#include "packagemanagerview.h"
+#include "PackageManagerBackend.h"
+
+#include <QQuickWidget>
+#include <QQmlContext>
+#include <QQuickStyle>
 
 PackageManagerUIPlugin::PackageManagerUIPlugin(QObject* parent)
     : QObject(parent)
-    , m_packageManagerView(nullptr)
-    , m_logosAPI(nullptr)
 {
 }
 
 PackageManagerUIPlugin::~PackageManagerUIPlugin()
 {
-    delete m_packageManagerView;
 }
 
 QWidget* PackageManagerUIPlugin::createWidget(LogosAPI* logosAPI)
 {
-    m_logosAPI = logosAPI;
-    if (!m_packageManagerView) {
-        m_packageManagerView = new PackageManagerView(m_logosAPI);
-    }
-    return m_packageManagerView;
+    QQuickStyle::setStyle("Basic");
+
+    QQuickWidget* quickWidget = new QQuickWidget();
+    quickWidget->setMinimumSize(800, 600);
+    quickWidget->setResizeMode(QQuickWidget::SizeRootObjectToView);
+
+    PackageManagerBackend* backend = new PackageManagerBackend(logosAPI, quickWidget);
+    quickWidget->rootContext()->setContextProperty("backend", backend);
+    quickWidget->setSource(QUrl("qrc:/PackageManager.qml"));
+
+    return quickWidget;
 }
 
 void PackageManagerUIPlugin::destroyWidget(QWidget* widget)
 {
-    if (widget == m_packageManagerView) {
-        delete m_packageManagerView;
-        m_packageManagerView = nullptr;
-    }
+    delete widget;
 }
