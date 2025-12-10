@@ -21,6 +21,7 @@ find_package(Qt6 COMPONENTS Widgets REQUIRED)
 
 # Add interfaces directory to include path
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/interfaces)
 
 # Allow override from environment or command line (for nix builds)
 if(NOT DEFINED LOGOS_LIBLOGOS_ROOT)

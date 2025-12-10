@@ -7,7 +7,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets Quick Qml QuickWidgets QuickControls2)
 
 # Try to find the component-interfaces package first
 find_package(component-interfaces QUIET)
@@ -24,7 +24,7 @@ endif()
 
 set(SOURCES
     CounterComponent.cpp
-    CounterWidget.cpp
+    CounterBackend.cpp
     counter_resources.qrc
 )
 
@@ -37,6 +37,10 @@ target_link_libraries(counter
     PRIVATE 
         Qt6::Core 
         Qt6::Widgets
+        Qt6::Quick
+        Qt6::Qml
+        Qt6::QuickWidgets
+        Qt6::QuickControls2
         component-interfaces
 )
 

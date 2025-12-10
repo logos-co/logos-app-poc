@@ -1,5 +1,5 @@
 # Builds the logos-app-poc standalone application
-{ pkgs, common, src, logosLiblogos, logosSdk, logosPackageManager, logosCapabilityModule, counterPlugin, mainUIPlugin }:
+{ pkgs, common, src, logosLiblogos, logosSdk, logosPackageManager, logosCapabilityModule, counterPlugin, mainUIPlugin, packageManagerUIPlugin }:
 
 pkgs.stdenv.mkDerivation rec {
   pname = "logos-app-poc-app";
@@ -123,6 +123,7 @@ pkgs.stdenv.mkDerivation rec {
     echo "capability-module: ${logosCapabilityModule}"
     echo "counter-plugin: ${counterPlugin}"
     echo "main-ui-plugin: ${mainUIPlugin}"
+    echo "package-manager-ui-plugin: ${packageManagerUIPlugin}"
     
     # Verify that the built components exist
     test -d "${logosLiblogos}" || (echo "liblogos not found" && exit 1)
@@ -131,6 +132,7 @@ pkgs.stdenv.mkDerivation rec {
     test -d "${logosCapabilityModule}" || (echo "capability-module not found" && exit 1)
     test -d "${counterPlugin}" || (echo "counter-plugin not found" && exit 1)
     test -d "${mainUIPlugin}" || (echo "main-ui-plugin not found" && exit 1)
+    test -d "${packageManagerUIPlugin}" || (echo "package-manager-ui-plugin not found" && exit 1)
     
     cmake -S app -B build \
       -GNinja \
@@ -211,6 +213,10 @@ pkgs.stdenv.mkDerivation rec {
       cp -L "${mainUIPlugin}/lib/main_ui.$OS_EXT" "$out/plugins/"
       echo "Copied main_ui.$OS_EXT to plugins/"
     fi
+    if [ -f "${packageManagerUIPlugin}/lib/package_manager_ui.$OS_EXT" ]; then
+      cp -L "${packageManagerUIPlugin}/lib/package_manager_ui.$OS_EXT" "$out/plugins/"
+      echo "Copied package_manager_ui.$OS_EXT to plugins/"
+    fi
 
     # Create symlink for the expected binary name
     ln -s $out/bin/LogosApp $out/bin/logos-app-poc-app
@@ -225,11 +231,13 @@ package-manager: ${logosPackageManager}
 capability-module: ${logosCapabilityModule}
 counter-plugin: ${counterPlugin}
 main-ui-plugin: ${mainUIPlugin}
+package-manager-ui-plugin: ${packageManagerUIPlugin}
 
 Runtime Layout:
     - Binary: $out/bin/LogosApp
 - Libraries: $out/lib
 - Modules: $out/modules
+- Plugins: $out/plugins
 
 Usage:
   $out/bin/LogosApp

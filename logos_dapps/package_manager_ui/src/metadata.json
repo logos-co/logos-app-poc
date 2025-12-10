@@ -1,0 +1,28 @@
+{
+  "name": "package_manager_ui",
+  "version": "1.0.0",
+  "description": "Package Manager UI plugin for managing plugins and packages",
+  "author": "Logos Core Team",
+  "type": "ui",
+  "main": "package_manager_ui",
+  "dependencies": [
+    "package_manager"
+  ],
+  "category": "ui",
+  "build": {
+    "type": "cmake",
+    "files": [
+      "src/package_manager_ui_plugin.cpp",
+      "src/package_manager_ui_plugin.h",
+      "src/PackageManagerBackend.cpp",
+      "src/PackageManagerBackend.h",
+      "src/PackageManager.qml",
+      "src/package_manager_ui_resources.qrc"
+    ]
+  },
+  "capabilities": [
+    "ui_components",
+    "package_management"
+  ],
+  "icon": ":/icons/modules.png"
+}
