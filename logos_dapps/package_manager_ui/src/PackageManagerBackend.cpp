@@ -122,8 +122,6 @@ void PackageManagerBackend::install()
         if (m_logosAPI && m_logosAPI->getClient("package_manager")->isConnected()) {
             LogosModules logos(m_logosAPI);
             installSuccess = logos.package_manager.installPlugin(filePath);
-        } else {
-            qDebug() << "LogosAPI not connected, cannot install plugin:" << packageName;
         }
 
         if (installSuccess) {
@@ -154,7 +152,6 @@ void PackageManagerBackend::install()
 
     if (!successfulPlugins.isEmpty()) {
         emit packagesInstalled();
-        resultText += "<p><b>Packages changed signal emitted.</b></p>";
     }
 
     m_detailsHtml = resultText;

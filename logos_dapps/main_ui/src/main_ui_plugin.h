@@ -3,8 +3,7 @@
 #include <IComponent.h>
 #include <QObject>
 
-class MainWindow;
-class CoreModuleView;
+class MainContainer;
 class LogosAPI;
 
 class MainUIPlugin : public QObject, public IComponent
@@ -21,12 +20,7 @@ public:
     Q_INVOKABLE QWidget* createWidget(LogosAPI* logosAPI = nullptr) override;
     void destroyWidget(QWidget* widget) override;
 
-    // UI-specific methods
-    Q_INVOKABLE CoreModuleView* createCoreModuleView(QWidget* parent = nullptr);
-    Q_INVOKABLE void setPackageManagerWidget(QWidget* widget);
-
 private:
-    MainWindow* m_mainWindow;
-    CoreModuleView* m_coreModuleView;
+    MainContainer* m_mainContainer;
     LogosAPI* m_logosAPI;
 }; 
