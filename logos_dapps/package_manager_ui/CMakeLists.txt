@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(MainUIPlugin VERSION 1.0.0 LANGUAGES CXX)
+project(PackageManagerUIPlugin VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -85,12 +85,9 @@ if(NOT component-interfaces_FOUND)
 endif()
 
 set(SOURCES
-    src/main_ui_plugin.cpp
-    src/MainContainer.cpp
-    src/MainUIBackend.cpp
-    src/mdichild.cpp
-    src/mdiview.cpp
-    src/main_ui_resources.qrc
+    src/package_manager_ui_plugin.cpp
+    src/PackageManagerBackend.cpp
+    src/package_manager_ui_resources.qrc
 )
 
 # Add SDK sources based on layout type
@@ -152,35 +149,35 @@ if(_cpp_sdk_is_source)
     endif()
 
     # Always run the generator before building this plugin so new wrappers (e.g. package_manager) are produced
-    add_custom_target(run_cpp_generator_main_ui
+    add_custom_target(run_cpp_generator_package_manager_ui
         COMMAND "${CPP_GENERATOR}" --metadata "${METADATA_JSON}" --module-dir "${PLUGINS_OUTPUT_DIR}"
         WORKING_DIRECTORY "${REPO_ROOT}"
         DEPENDS ${METADATA_JSON}
-        COMMENT "Running logos-cpp-generator for main_ui"
+        COMMENT "Running logos-cpp-generator for package_manager_ui"
         VERBATIM
     )
 endif()
 
-add_library(main_ui SHARED ${SOURCES})
+add_library(package_manager_ui SHARED ${SOURCES})
 
 # Ensure generator runs before building the plugin (only for source layout)
 if(_cpp_sdk_is_source)
-    add_dependencies(main_ui run_cpp_generator_main_ui)
+    add_dependencies(package_manager_ui run_cpp_generator_package_manager_ui)
 endif()
 
 # Add include directories before target_link_libraries
-target_include_directories(main_ui PRIVATE 
+target_include_directories(package_manager_ui PRIVATE 
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 # Add SDK include directories based on layout type
 if(_cpp_sdk_is_source)
-    target_include_directories(main_ui PRIVATE 
+    target_include_directories(package_manager_ui PRIVATE 
         ${LOGOS_CPP_SDK_ROOT}/cpp
         ${LOGOS_CPP_SDK_ROOT}/cpp/generated
     )
 else()
-    target_include_directories(main_ui PRIVATE 
+    target_include_directories(package_manager_ui PRIVATE 
         ${LOGOS_CPP_SDK_ROOT}/include
         ${LOGOS_CPP_SDK_ROOT}/include/cpp
         ${LOGOS_CPP_SDK_ROOT}/include/core
@@ -191,24 +188,24 @@ endif()
 # Add logos-liblogos include directories if available
 if(_liblogos_found)
     if(_liblogos_is_source)
-        target_include_directories(main_ui PRIVATE 
+        target_include_directories(package_manager_ui PRIVATE 
             ${LOGOS_LIBLOGOS_ROOT}
             ${LOGOS_LIBLOGOS_ROOT}/host
         )
-        target_link_directories(main_ui PRIVATE ${LOGOS_LIBLOGOS_ROOT}/build/lib)
+        target_link_directories(package_manager_ui PRIVATE ${LOGOS_LIBLOGOS_ROOT}/build/lib)
     else()
-        target_include_directories(main_ui PRIVATE ${LOGOS_LIBLOGOS_ROOT}/include)
-        target_link_directories(main_ui PRIVATE ${LOGOS_LIBLOGOS_ROOT}/lib)
+        target_include_directories(package_manager_ui PRIVATE ${LOGOS_LIBLOGOS_ROOT}/include)
+        target_link_directories(package_manager_ui PRIVATE ${LOGOS_LIBLOGOS_ROOT}/lib)
     endif()
 endif()
 
 # Add Qt definitions
-target_compile_definitions(main_ui PRIVATE
+target_compile_definitions(package_manager_ui PRIVATE
     QT_PLUGIN
     QT_DEPRECATED_WARNINGS
 )
 
-target_link_libraries(main_ui 
+target_link_libraries(package_manager_ui 
     PRIVATE 
         Qt6::Core 
         Qt6::Widgets
@@ -222,26 +219,26 @@ target_link_libraries(main_ui
 
 # Link logos_core library if available (for logos_core_get_module_stats)
 if(_liblogos_found)
-    target_link_libraries(main_ui PRIVATE logos_core)
+    target_link_libraries(package_manager_ui PRIVATE logos_core)
 endif()
 
 # Link SDK library if using installed layout
 if(NOT _cpp_sdk_is_source)
     find_library(LOGOS_SDK_LIB logos_sdk PATHS ${LOGOS_CPP_SDK_ROOT}/lib NO_DEFAULT_PATH REQUIRED)
-    target_link_libraries(main_ui PRIVATE ${LOGOS_SDK_LIB})
+    target_link_libraries(package_manager_ui PRIVATE ${LOGOS_SDK_LIB})
 endif()
 
 # For macOS, we need to set the bundle properties
 if(APPLE)
-    set_target_properties(main_ui PROPERTIES
+    set_target_properties(package_manager_ui PROPERTIES
         BUNDLE FALSE
         FRAMEWORK FALSE
         PREFIX ""
         SUFFIX ".dylib"
     )
 else()
-    set_target_properties(main_ui PROPERTIES
+    set_target_properties(package_manager_ui PROPERTIES
         PREFIX ""
         SUFFIX ".so"
     )
-endif() 
+endif()
