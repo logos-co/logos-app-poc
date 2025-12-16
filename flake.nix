@@ -47,12 +47,17 @@
             inherit pkgs common src logosSdk logosPackageManager logosLiblogos; 
           };
           
+          webviewAppPlugin = import ./nix/webview-app.nix { 
+            inherit pkgs common src; 
+          };
+          
           # App package
           app = import ./nix/app.nix { 
             inherit pkgs common src logosLiblogos logosSdk logosPackageManager logosCapabilityModule;
             counterPlugin = counterPlugin;
             mainUIPlugin = mainUIPlugin;
             packageManagerUIPlugin = packageManagerUIPlugin;
+            webviewAppPlugin = webviewAppPlugin;
           };
           
           # macOS distribution packages (only for Darwin)
@@ -74,6 +79,7 @@
           counter-plugin = counterPlugin;
           main-ui-plugin = mainUIPlugin;
           package-manager-ui-plugin = packageManagerUIPlugin;
+          webview-app-plugin = webviewAppPlugin;
           app = app;
           
           # Default package

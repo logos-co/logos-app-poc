@@ -1,12 +1,23 @@
 # Builds the logos-app-poc standalone application
-{ pkgs, common, src, logosLiblogos, logosSdk, logosPackageManager, logosCapabilityModule, counterPlugin, mainUIPlugin, packageManagerUIPlugin }:
+{ pkgs, common, src, logosLiblogos, logosSdk, logosPackageManager, logosCapabilityModule, counterPlugin, mainUIPlugin, packageManagerUIPlugin, webviewAppPlugin }:
 
 pkgs.stdenv.mkDerivation rec {
   pname = "logos-app-poc-app";
   version = common.version;
   
   inherit src;
-  inherit (common) buildInputs meta;
+  # Platform-specific build inputs for system webviews
+  buildInputs = common.buildInputs ++ [
+    pkgs.qt6.qtwebview
+    pkgs.qt6.qtdeclarative
+  ] ++ (
+    if pkgs.stdenv.isLinux then
+      # Linux: WebKitGTK as backend
+      [ pkgs.webkitgtk ]
+    else
+      []
+  );
+  inherit (common) meta;
   
   # Add logosSdk to nativeBuildInputs for logos-cpp-generator
   nativeBuildInputs = common.nativeBuildInputs ++ [ logosSdk pkgs.patchelf pkgs.removeReferencesTo ];
@@ -16,6 +27,8 @@ pkgs.stdenv.mkDerivation rec {
     [
       pkgs.qt6.qtbase
       pkgs.qt6.qtremoteobjects
+      pkgs.qt6.qtwebview
+      pkgs.qt6.qtdeclarative
       pkgs.zstd
       pkgs.krb5
       pkgs.zlib
@@ -37,7 +50,8 @@ pkgs.stdenv.mkDerivation rec {
       pkgs.xorg.libxcb
     ]
   );
-  qtPluginPath = "${pkgs.qt6.qtbase}/lib/qt-6/plugins";
+  qtPluginPath = "${pkgs.qt6.qtbase}/lib/qt-6/plugins:${pkgs.qt6.qtwebview}/lib/qt-6/plugins";
+  qmlImportPath = "${pkgs.qt6.qtdeclarative}/lib/qt-6/qml:${pkgs.qt6.qtwebview}/lib/qt-6/qml";
   
   preConfigure = ''
     runHook prePreConfigure
@@ -76,6 +90,7 @@ pkgs.stdenv.mkDerivation rec {
   qtWrapperArgs = [
     "--prefix" "LD_LIBRARY_PATH" ":" qtLibPath
     "--prefix" "QT_PLUGIN_PATH" ":" qtPluginPath
+    "--prefix" "QML2_IMPORT_PATH" ":" qmlImportPath
   ];
   
   # Additional environment variables for Qt and RPATH cleanup
@@ -83,8 +98,8 @@ pkgs.stdenv.mkDerivation rec {
     runHook prePreFixup
     
     # Set up Qt environment variables
-    export QT_PLUGIN_PATH="${pkgs.qt6.qtbase}/lib/qt-6/plugins"
-    export QML_IMPORT_PATH="${pkgs.qt6.qtbase}/lib/qt-6/qml"
+    export QT_PLUGIN_PATH="${pkgs.qt6.qtbase}/lib/qt-6/plugins:${pkgs.qt6.qtwebview}/lib/qt-6/plugins"
+    export QML2_IMPORT_PATH="${pkgs.qt6.qtdeclarative}/lib/qt-6/qml:${pkgs.qt6.qtwebview}/lib/qt-6/qml"
     
     # Remove any remaining references to /build/ in binaries and set proper RPATH
     find $out -type f -executable -exec sh -c '
@@ -124,6 +139,7 @@ pkgs.stdenv.mkDerivation rec {
     echo "counter-plugin: ${counterPlugin}"
     echo "main-ui-plugin: ${mainUIPlugin}"
     echo "package-manager-ui-plugin: ${packageManagerUIPlugin}"
+    echo "webview-app-plugin: ${webviewAppPlugin}"
     
     # Verify that the built components exist
     test -d "${logosLiblogos}" || (echo "liblogos not found" && exit 1)
@@ -133,6 +149,7 @@ pkgs.stdenv.mkDerivation rec {
     test -d "${counterPlugin}" || (echo "counter-plugin not found" && exit 1)
     test -d "${mainUIPlugin}" || (echo "main-ui-plugin not found" && exit 1)
     test -d "${packageManagerUIPlugin}" || (echo "package-manager-ui-plugin not found" && exit 1)
+    test -d "${webviewAppPlugin}" || (echo "webview-app-plugin not found" && exit 1)
     
     cmake -S app -B build \
       -GNinja \
@@ -217,6 +234,12 @@ pkgs.stdenv.mkDerivation rec {
       cp -L "${packageManagerUIPlugin}/lib/package_manager_ui.$OS_EXT" "$out/plugins/"
       echo "Copied package_manager_ui.$OS_EXT to plugins/"
     fi
+    if [ -f "${webviewAppPlugin}/lib/webview_app.$OS_EXT" ]; then
+      cp -L "${webviewAppPlugin}/lib/webview_app.$OS_EXT" "$out/plugins/"
+      echo "Copied webview_app.$OS_EXT to plugins/"
+    fi
+    
+    # Note: webview_app QML and HTML files are now embedded in the plugin via qrc
 
     # Create symlink for the expected binary name
     ln -s $out/bin/LogosApp $out/bin/logos-app-poc-app
@@ -232,6 +255,7 @@ capability-module: ${logosCapabilityModule}
 counter-plugin: ${counterPlugin}
 main-ui-plugin: ${mainUIPlugin}
 package-manager-ui-plugin: ${packageManagerUIPlugin}
+webview-app-plugin: ${webviewAppPlugin}
 
 Runtime Layout:
     - Binary: $out/bin/LogosApp
