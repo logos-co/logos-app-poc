@@ -69,6 +69,19 @@
             cursor: not-allowed;
             transform: none;
         }
+        input[type="text"] {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 15px;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+        }
         .section {
             margin: 25px 0;
             padding: 20px;
@@ -113,6 +126,22 @@
             color: #888;
             font-size: 10px;
         }
+        .field-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .field-row button {
+            margin: 0;
+            min-width: 180px;
+        }
+        .response-text {
+            text-align: center;
+            color: #333;
+            margin-top: 10px;
+            font-weight: 500;
+        }
     </style>
 </head>
 <body>
@@ -129,8 +158,40 @@
                 Change Qt Label
             </button>
             <p style="text-align: center; color: #666; font-size: 14px;">
-                Click to update the status label in the Qt host application
+                Updates the status label in the Qt host application via logos.host.changeQtLabel
             </p>
+        </div>
+
+        <div class="section">
+            <h3>WebApp → Chat Module</h3>
+            <button id="joinChatButton" onclick="joinChat()" disabled>
+                Join chat channel "baixa-chiado"
+            </button>
+            <p style="text-align: center; color: #666; font-size: 14px;">
+                Calls logos.chat.joinChannel("baixa-chiado") through the bridge
+            </p>
+        </div>
+
+        <div class="section">
+            <h3>Send Message to baixa-chiado</h3>
+            <div class="field-row">
+                <input id="chatMessageInput" type="text" placeholder="Type a message to send to baixa-chiado" />
+                <button id="sendChatButton" onclick="sendChatMessage()" disabled>
+                    Send message
+                </button>
+            </div>
+            <p id="chatSendStatus" class="response-text">No message sent yet.</p>
+        </div>
+
+        <div class="section">
+            <h3>Package Manager testPluginCall</h3>
+            <div class="field-row">
+                <input id="pluginInput" type="text" placeholder="Enter value to send" />
+                <button id="pluginCallButton" onclick="callTestPlugin()" disabled>
+                    Call testPluginCall
+                </button>
+            </div>
+            <p id="pluginResponse" class="response-text">Waiting for input...</p>
         </div>
         
         <div class="section">
@@ -169,6 +230,9 @@
                 statusEl.className = 'status-bar status-ready';
                 
                 document.getElementById('changeQtLabelButton').disabled = false;
+                document.getElementById('joinChatButton').disabled = false;
+                document.getElementById('pluginCallButton').disabled = false;
+                document.getElementById('sendChatButton').disabled = false;
                 
                 window.logos.on('qtButtonClicked', function(data) {
                     log('📨 Received from Qt: ' + JSON.stringify(data), 'event');
@@ -195,12 +259,9 @@
             btn.textContent = 'Sending...';
             
             try {
-                const result = await window.logos.request({
-                    method: 'changeQtLabel',
-                    params: {
-                        text: 'Hello from WebApp! (' + new Date().toLocaleTimeString() + ')'
-                    }
-                });
+                const result = await window.logos.host.changeQtLabel(
+                    'Hello from WebApp! (' + new Date().toLocaleTimeString() + ')'
+                );
                 
                 log('✅ Label changed: ' + JSON.stringify(result), 'success');
             } catch (error) {
@@ -208,6 +269,95 @@
             } finally {
                 btn.disabled = false;
                 btn.textContent = 'Change Qt Label';
+            }
+        }
+
+        async function joinChat() {
+            if (!logosReady) {
+                log('Bridge not ready', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('joinChatButton');
+            btn.disabled = true;
+            btn.textContent = 'Joining...';
+
+            try {
+                const response = await window.logos.chat.joinChannel('baixa-chiado');
+                log('✅ Joined channel: ' + JSON.stringify(response), 'success');
+            } catch (error) {
+                log('❌ Failed to join channel: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Join chat channel "baixa-chiado"';
+            }
+        }
+
+        async function sendChatMessage() {
+            if (!logosReady) {
+                log('Bridge not ready', 'error');
+                return;
+            }
+
+            const input = document.getElementById('chatMessageInput');
+            const button = document.getElementById('sendChatButton');
+            const status = document.getElementById('chatSendStatus');
+            const message = input.value.trim();
+
+            if (!message) {
+                status.textContent = 'Please enter a message first.';
+                return;
+            }
+
+            button.disabled = true;
+            button.textContent = 'Sending...';
+            status.textContent = 'Sending to baixa-chiado...';
+
+            try {
+                await window.logos.chat.sendMessage('baixa-chiado', 'webview-user', message);
+                status.textContent = 'Message sent to baixa-chiado ✔️';
+                log('✅ Sent chat message: ' + message, 'success');
+                input.value = '';
+            } catch (error) {
+                status.textContent = 'Error: ' + error.message;
+                log('❌ Failed to send message: ' + error.message, 'error');
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Send message';
+            }
+        }
+
+        async function callTestPlugin() {
+            if (!logosReady) {
+                log('Bridge not ready', 'error');
+                return;
+            }
+
+            const input = document.getElementById('pluginInput');
+            const button = document.getElementById('pluginCallButton');
+            const responseEl = document.getElementById('pluginResponse');
+            const value = input.value.trim();
+
+            if (!value) {
+                responseEl.textContent = 'Please enter a value first.';
+                return;
+            }
+
+            button.disabled = true;
+            button.textContent = 'Calling...';
+            responseEl.textContent = 'Calling logos.package_manager.testPluginCall...';
+
+            try {
+                const response = await window.logos.package_manager.testPluginCall(value);
+                const rendered = (typeof response === 'object') ? JSON.stringify(response) : String(response);
+                responseEl.textContent = 'the response was ' + rendered;
+                log('✅ testPluginCall response: ' + rendered, 'success');
+            } catch (error) {
+                responseEl.textContent = 'Error: ' + error.message;
+                log('❌ testPluginCall failed: ' + error.message, 'error');
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Call testPluginCall';
             }
         }
     </script>

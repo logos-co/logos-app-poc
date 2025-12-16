@@ -1,4 +1,6 @@
 #include "WebViewAppWidget.h"
+#include "logos_api.h"
+#include "logos_api_client.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QPushButton>
@@ -10,12 +12,14 @@
 #include <QQmlError>
 #include <QtWebView/QtWebView>
 #include <QFile>
+#include <QIODevice>
 #include <QDebug>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonValue>
 #include <QDateTime>
 
-WebViewAppWidget::WebViewAppWidget(QWidget* parent) 
+WebViewAppWidget::WebViewAppWidget(LogosAPI* logosAPI, QWidget* parent) 
     : QWidget(parent)
     , m_quickView(nullptr)
     , m_rootItem(nullptr)
@@ -24,6 +28,7 @@ WebViewAppWidget::WebViewAppWidget(QWidget* parent)
     , m_sendToWebAppButton(nullptr)
     , m_statusLabel(nullptr)
     , m_qmlReady(false)
+    , m_logosAPI(logosAPI)
 {
     QtWebView::initialize();
     setupUI();
@@ -65,6 +70,15 @@ void WebViewAppWidget::setupUI() {
     m_quickView->setColor(Qt::white);
     
     m_quickView->rootContext()->setContextProperty("hostWidget", this);
+    QString logosScriptContent;
+    QFile logosScriptFile(":/logos-script.js");
+    if (logosScriptFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        logosScriptContent = QString::fromUtf8(logosScriptFile.readAll());
+        logosScriptFile.close();
+    } else {
+        qWarning() << "Could not load qrc:/logos-script.js";
+    }
+    m_quickView->rootContext()->setContextProperty("logosScriptContent", logosScriptContent);
     
     connect(m_quickView, &QQuickView::statusChanged, this, [this](QQuickView::Status status) {
         qDebug() << "QQuickView status:" << status;
@@ -173,38 +187,50 @@ void WebViewAppWidget::runJavaScript(const QString& script) {
     QMetaObject::invokeMethod(m_rootItem, "runScript", Q_ARG(QVariant, script));
 }
 
-void WebViewAppWidget::handleLogosRequest(const QString& method, const QVariantMap& params, int requestId) {
-    qDebug() << "Received logos request:" << method << params;
-    
-    QVariantMap result;
-    
-    if (method == "changeQtLabel") {
-        QString text = params.value("text").toString();
+void WebViewAppWidget::handleLogosRequest(const QString& moduleName, const QString& methodName, const QVariantList& args, int requestId) {
+    qDebug() << "Received logos request:" << moduleName << methodName << args;
+
+    if (moduleName == "host" && methodName == "changeQtLabel") {
+        const QString text = args.value(0).toString();
         if (m_statusLabel) {
             m_statusLabel->setText("Status: " + text);
             m_statusLabel->setStyleSheet("QLabel { background-color: #d4edda; padding: 5px; border: 1px solid #28a745; }");
         }
-        result["success"] = true;
-        result["message"] = "Label updated successfully";
-    } else {
-        result["success"] = false;
-        result["error"] = "Unknown method: " + method;
+        sendResponseToJS(requestId, QVariantMap{{"success", true}, {"message", "Label updated successfully"}});
+        return;
     }
-    
-    sendResponseToJS(requestId, result);
+
+    if (!m_logosAPI) {
+        sendResponseToJS(requestId, QVariant(), "LogosAPI not available");
+        return;
+    }
+
+    LogosAPIClient* client = m_logosAPI->getClient(moduleName);
+    if (!client) {
+        sendResponseToJS(requestId, QVariant(), QString("Unknown module: %1").arg(moduleName));
+        return;
+    }
+
+    QVariant response = client->invokeRemoteMethod(moduleName, methodName, args);
+    if (!response.isValid()) {
+        sendResponseToJS(requestId, QVariant(), QString("Empty response from %1.%2").arg(moduleName, methodName));
+        return;
+    }
+
+    sendResponseToJS(requestId, response, QString());
 }
 
-void WebViewAppWidget::sendResponseToJS(int requestId, const QVariantMap& result) {
+void WebViewAppWidget::sendResponseToJS(int requestId, const QVariant& result, const QString& error) {
     QJsonObject responseObj;
     responseObj["type"] = "logos_response";
     responseObj["requestId"] = requestId;
-    
-    QJsonObject resultObj;
-    for (auto it = result.begin(); it != result.end(); ++it) {
-        resultObj[it.key()] = QJsonValue::fromVariant(it.value());
+
+    if (!error.isEmpty()) {
+        responseObj["error"] = error;
+    } else {
+        responseObj["result"] = QJsonValue::fromVariant(result);
     }
-    responseObj["result"] = resultObj;
-    
+
     QJsonDocument doc(responseObj);
     QString script = QString("window.postMessage(%1, '*');")
         .arg(QString::fromUtf8(doc.toJson(QJsonDocument::Compact)));
