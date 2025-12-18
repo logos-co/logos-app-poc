@@ -1,7 +1,9 @@
 #pragma once
 
 #include <QWidget>
+#include <QVariant>
 #include <QVariantMap>
+#include <QVariantList>
 #include <QUrl>
 
 class QPushButton;
@@ -9,14 +11,17 @@ class QLabel;
 class QQuickView;
 class QQuickItem;
 
+class LogosAPI;
+class LogosAPIClient;
+
 class WebViewAppWidget : public QWidget {
     Q_OBJECT
 
 public:
-    explicit WebViewAppWidget(QWidget* parent = nullptr);
+    explicit WebViewAppWidget(LogosAPI* logosAPI = nullptr, QWidget* parent = nullptr);
     ~WebViewAppWidget();
     
-    Q_INVOKABLE void handleLogosRequest(const QString& method, const QVariantMap& params, int requestId);
+    Q_INVOKABLE void handleLogosRequest(const QString& moduleName, const QString& methodName, const QVariantList& args, int requestId);
     
     Q_INVOKABLE void qmlReady();
 
@@ -34,11 +39,12 @@ private:
     QLabel* m_statusLabel;
     QUrl m_pendingUrl;
     bool m_qmlReady;
+    LogosAPI* m_logosAPI;
     
     void setupUI();
     void loadURL(const QUrl& url);
     void loadLocalHtml();
     void runJavaScript(const QString& script);
-    void sendResponseToJS(int requestId, const QVariantMap& result);
+    void sendResponseToJS(int requestId, const QVariant& result = QVariant(), const QString& error = QString());
     void sendEventToJS(const QString& eventName, const QVariantMap& data);
 };

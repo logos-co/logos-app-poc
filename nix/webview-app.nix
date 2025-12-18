@@ -1,11 +1,14 @@
 # Builds the webview_app plugin
 { pkgs, common, src }:
 
+let
+  cmakeFlags = common.cmakeFlags ++ [ "-DCMAKE_BUILD_TYPE=Release" ];
+in
 pkgs.stdenv.mkDerivation {
   pname = "${common.pname}-webview-app-plugin";
   version = common.version;
   
-  inherit src;
+  inherit src cmakeFlags;
   nativeBuildInputs = common.nativeBuildInputs;
   
   buildInputs = common.buildInputs ++ [
@@ -18,21 +21,15 @@ pkgs.stdenv.mkDerivation {
     else
       []
   );
-  
-  inherit (common) meta;
-  
-  cmakeFlags = [
-    "-GNinja"
-    "-DCMAKE_BUILD_TYPE=Release"
-  ];
-  
+
+  inherit (common) env meta;
+    
   configurePhase = ''
     runHook preConfigure
     
     echo "Configuring webview_app plugin..."
     cmake -S logos_dapps/webview_app -B build \
-      -GNinja \
-      -DCMAKE_BUILD_TYPE=Release
+      ${pkgs.lib.concatStringsSep " " cmakeFlags}
     
     runHook postConfigure
   '';

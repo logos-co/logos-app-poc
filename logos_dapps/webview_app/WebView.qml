@@ -4,6 +4,8 @@ import QtWebView
 Rectangle {
     id: root
     color: "white"
+    property bool requestDrainInFlight: false
+    property bool pageLoaded: false
     
     // Functions callable from C++
     function loadUrl(url) {
@@ -21,116 +23,76 @@ Rectangle {
         webView.runJavaScript(script);
     }
     
-    // JavaScript to inject the logos object
-    readonly property string logosScript: '
-        (function() {
-            if (typeof window.logos !== "undefined") return;
-            
-            let requestIdCounter = 0;
-            const pendingRequests = new Map();
-            const eventListeners = new Map();
-            
-            window.addEventListener("message", function(event) {
-                if (!event.data) return;
-                
-                if (event.data.type === "logos_response") {
-                    const promise = pendingRequests.get(event.data.requestId);
-                    if (promise) {
-                        pendingRequests.delete(event.data.requestId);
-                        if (event.data.error) {
-                            promise.reject(new Error(event.data.error));
-                        } else {
-                            promise.resolve(event.data.result);
-                        }
-                    }
-                } else if (event.data.type === "logos_event") {
-                    const listeners = eventListeners.get(event.data.eventName);
-                    if (listeners) {
-                        listeners.forEach(function(cb) {
-                            try { cb(event.data.data); } catch(e) { console.error(e); }
-                        });
-                    }
-                }
-            });
-            
-            window.logos = {
-                request: function(options) {
-                    return new Promise(function(resolve, reject) {
-                        const requestId = ++requestIdCounter;
-                        const method = options.method || options;
-                        const params = options.params || {};
-                        
-                        pendingRequests.set(requestId, { resolve: resolve, reject: reject });
-                        
-                        // Use title change to communicate with Qt
-                        var msg = "LOGOS_REQUEST:" + requestId + ":" + method + ":" + JSON.stringify(params);
-                        document.title = msg;
-                        
-                        setTimeout(function() {
-                            if (pendingRequests.has(requestId)) {
-                                pendingRequests.delete(requestId);
-                                reject(new Error("Request timeout"));
-                            }
-                        }, 30000);
-                    });
-                },
-                
-                on: function(eventName, callback) {
-                    if (!eventListeners.has(eventName)) {
-                        eventListeners.set(eventName, []);
-                    }
-                    eventListeners.get(eventName).push(callback);
-                },
-                
-                removeListener: function(eventName, callback) {
-                    const listeners = eventListeners.get(eventName);
-                    if (listeners) {
-                        const idx = listeners.indexOf(callback);
-                        if (idx > -1) listeners.splice(idx, 1);
-                    }
-                }
-            };
-            
-            window.dispatchEvent(new Event("logos#initialized"));
-        })();
-    '
-    
     WebView {
         id: webView
         anchors.fill: parent
         
         onLoadingChanged: function(loadRequest) {
             console.log("WebView loading changed:", loadRequest.status);
+            root.pageLoaded = (loadRequest.status === WebView.LoadSucceededStatus);
+            root.requestDrainInFlight = false;
             if (loadRequest.status === WebView.LoadSucceededStatus) {
                 console.log("Page loaded, injecting logos script");
-                webView.runJavaScript(root.logosScript);
-            }
-        }
-        
-        onTitleChanged: {
-            if (title && title.indexOf("LOGOS_REQUEST:") === 0) {
-                console.log("Intercepted logos request via title");
-                var content = title.substring(14);
-                var firstColon = content.indexOf(":");
-                var secondColon = content.indexOf(":", firstColon + 1);
-                
-                if (firstColon > 0 && secondColon > firstColon) {
-                    var requestId = parseInt(content.substring(0, firstColon));
-                    var method = content.substring(firstColon + 1, secondColon);
-                    var paramsJson = content.substring(secondColon + 1);
-                    
-                    try {
-                        var params = JSON.parse(paramsJson);
-                        hostWidget.handleLogosRequest(method, params, requestId);
-                    } catch (e) {
-                        console.log("Failed to parse params:", e);
-                    }
+                webView.runJavaScript(
+                    "if (!document.getElementById('logos-bridge-script')) { " +
+                    "var script = document.createElement('script'); " +
+                    "script.id = 'logos-bridge-script'; " +
+                    "script.src = 'qrc:/logos-script.js'; " +
+                    "script.onload = function() { console.log('logos-script.js loaded'); }; " +
+                    "script.onerror = function(e) { console.error('Failed to load logos-script.js', e); }; " +
+                    "document.head.appendChild(script); " +
+                    "} else { console.log('logos-script.js already injected'); }"
+                );
+                if (typeof logosScriptContent === "string" && logosScriptContent.length > 0) {
+                    webView.runJavaScript(logosScriptContent);
+                } else {
+                    console.warn("logosScriptContent missing, cannot inline inject logos bridge");
                 }
             }
         }
-        
+
         onUrlChanged: {
             console.log("WebView URL changed to:", url);
+        }
+    }
+
+    Timer {
+        id: logosRequestPump
+        interval: 30
+        running: true
+        repeat: true
+        onTriggered: {
+            if (!root.pageLoaded)
+                return;
+            if (root.requestDrainInFlight)
+                return;
+            if (webView.loading)
+                return;
+
+            root.requestDrainInFlight = true;
+            try {
+                webView.runJavaScript("(function(){ var d = (typeof _qtDrain === 'function') ? _qtDrain : (window.__logosBridge && window.__logosBridge.drain); return d ? d() : []; })();",
+                                      function(result) {
+                                          root.requestDrainInFlight = false;
+                                          if (!result || !result.length)
+                                              return;
+                                          try {
+                                              for (var i = 0; i < result.length; ++i) {
+                                                  var payload = result[i];
+                                                  var reqId = payload.requestId || payload.id || 0;
+                                                  var moduleName = payload.module || payload.plugin || "";
+                                                  var methodName = payload.method || "";
+                                                  var args = payload.args || [];
+                                                  hostWidget.handleLogosRequest(moduleName, methodName, args, reqId);
+                                              }
+                                          } catch (e) {
+                                              console.log("Failed to process logos request payload:", e);
+                                          }
+                                      });
+            } catch (err) {
+                root.requestDrainInFlight = false;
+                console.log("logosRequestPump failed to run JS:", err);
+            }
         }
     }
     
