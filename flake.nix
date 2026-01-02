@@ -38,6 +38,10 @@
           counterPlugin = import ./nix/counter.nix { 
             inherit pkgs common src; 
           };
+
+          counterQmlPlugin = import ./nix/counter-qml.nix {
+            inherit pkgs common src;
+          };
           
           mainUIPlugin = import ./nix/main-ui.nix { 
             inherit pkgs common src logosSdk logosPackageManager logosLiblogos; 
@@ -55,6 +59,7 @@
           app = import ./nix/app.nix { 
             inherit pkgs common src logosLiblogos logosSdk logosPackageManager logosCapabilityModule;
             counterPlugin = counterPlugin;
+            counterQmlPlugin = counterQmlPlugin;
             mainUIPlugin = mainUIPlugin;
             packageManagerUIPlugin = packageManagerUIPlugin;
             webviewAppPlugin = webviewAppPlugin;
@@ -77,6 +82,7 @@
         {
           # Individual outputs
           counter-plugin = counterPlugin;
+          counter-qml-plugin = counterQmlPlugin;
           main-ui-plugin = mainUIPlugin;
           package-manager-ui-plugin = packageManagerUIPlugin;
           webview-app-plugin = webviewAppPlugin;

@@ -1,5 +1,5 @@
 # Builds the logos-app-poc standalone application
-{ pkgs, common, src, logosLiblogos, logosSdk, logosPackageManager, logosCapabilityModule, counterPlugin, mainUIPlugin, packageManagerUIPlugin, webviewAppPlugin }:
+{ pkgs, common, src, logosLiblogos, logosSdk, logosPackageManager, logosCapabilityModule, counterPlugin, counterQmlPlugin, mainUIPlugin, packageManagerUIPlugin, webviewAppPlugin }:
 
 pkgs.stdenv.mkDerivation rec {
   pname = "logos-app-poc-app";
@@ -137,6 +137,7 @@ pkgs.stdenv.mkDerivation rec {
     echo "package-manager: ${logosPackageManager}"
     echo "capability-module: ${logosCapabilityModule}"
     echo "counter-plugin: ${counterPlugin}"
+    echo "counter-qml-plugin: ${counterQmlPlugin}"
     echo "main-ui-plugin: ${mainUIPlugin}"
     echo "package-manager-ui-plugin: ${packageManagerUIPlugin}"
     echo "webview-app-plugin: ${webviewAppPlugin}"
@@ -147,6 +148,7 @@ pkgs.stdenv.mkDerivation rec {
     test -d "${logosPackageManager}" || (echo "package-manager not found" && exit 1)
     test -d "${logosCapabilityModule}" || (echo "capability-module not found" && exit 1)
     test -d "${counterPlugin}" || (echo "counter-plugin not found" && exit 1)
+    test -d "${counterQmlPlugin}" || (echo "counter-qml-plugin not found" && exit 1)
     test -d "${mainUIPlugin}" || (echo "main-ui-plugin not found" && exit 1)
     test -d "${packageManagerUIPlugin}" || (echo "package-manager-ui-plugin not found" && exit 1)
     test -d "${webviewAppPlugin}" || (echo "webview-app-plugin not found" && exit 1)
@@ -237,6 +239,11 @@ pkgs.stdenv.mkDerivation rec {
     if [ -f "${webviewAppPlugin}/lib/webview_app.$OS_EXT" ]; then
       cp -L "${webviewAppPlugin}/lib/webview_app.$OS_EXT" "$out/plugins/"
       echo "Copied webview_app.$OS_EXT to plugins/"
+    fi
+
+    if [ -d "${counterQmlPlugin}/qml_plugins/counter_qml" ]; then
+      cp -R "${counterQmlPlugin}/qml_plugins/counter_qml" "$out/plugins/"
+      echo "Copied counter_qml QML plugin to plugins/"
     fi
     
     # Note: webview_app QML and HTML files are now embedded in the plugin via qrc
