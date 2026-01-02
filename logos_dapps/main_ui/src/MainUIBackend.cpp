@@ -9,118 +9,21 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QLibraryInfo>
-#include <QNetworkAccessManager>
-#include <QNetworkReply>
-#include <QNetworkRequest>
 #include <QTimer>
 #include <QQmlContext>
 #include <QQuickWidget>
 #include <QQmlEngine>
 #include <QQmlError>
-#include <QQmlNetworkAccessManagerFactory>
-#include <QQmlAbstractUrlInterceptor>
 #include <QUrl>
 #include "LogosQmlBridge.h"
 #include "logos_sdk.h"
 #include "token_manager.h"
+#include "restricted/DenyAllNAMFactory.h"
+#include "restricted/RestrictedUrlInterceptor.h"
 
 extern "C" {
     char* logos_core_get_module_stats();
 }
-
-namespace {
-
-// Network reply that immediately fails to prevent any QML network usage.
-class DenyAllReply : public QNetworkReply {
-public:
-    DenyAllReply(const QNetworkRequest& request, QObject* parent)
-        : QNetworkReply(parent)
-    {
-        setRequest(request);
-        setUrl(request.url());
-        setOpenMode(QIODevice::ReadOnly);
-        setError(QNetworkReply::ContentOperationNotPermittedError,
-                 QStringLiteral("Network access disabled for this QML engine"));
-        QTimer::singleShot(0, this, [this]() {
-            emit errorOccurred(error());
-            emit finished();
-        });
-    }
-
-    void abort() override {}
-    bool isSequential() const override { return true; }
-    qint64 bytesAvailable() const override { return 0; }
-
-protected:
-    qint64 readData(char*, qint64) override { return -1; }
-    qint64 writeData(const char*, qint64) override { return -1; }
-};
-
-class DenyAllNetworkAccessManager : public QNetworkAccessManager {
-public:
-    using QNetworkAccessManager::QNetworkAccessManager;
-
-protected:
-    QNetworkReply* createRequest(Operation op,
-                                 const QNetworkRequest& request,
-                                 QIODevice* outgoingData = nullptr) override
-    {
-        Q_UNUSED(op);
-        Q_UNUSED(outgoingData);
-        return new DenyAllReply(request, this);
-    }
-};
-
-class DenyAllNAMFactory : public QQmlNetworkAccessManagerFactory {
-public:
-    QNetworkAccessManager* create(QObject* parent) override
-    {
-        return new DenyAllNetworkAccessManager(parent);
-    }
-};
-
-// Intercepts all URL resolution and only allows qrc:/ and files under the plugin root.
-class RestrictedUrlInterceptor : public QQmlAbstractUrlInterceptor {
-public:
-    explicit RestrictedUrlInterceptor(const QStringList& allowedRoots)
-    {
-        for (const QString& root : allowedRoots) {
-            const QString canonical = QDir(root).canonicalPath();
-            if (!canonical.isEmpty()) {
-                m_allowedRoots.append(canonical);
-            }
-        }
-    }
-
-    QUrl intercept(const QUrl& url, DataType) override
-    {
-        if (!url.isValid()) {
-            return QUrl();
-        }
-
-        if (url.scheme() == QLatin1String("qrc")) {
-            return url;
-        }
-
-        if (url.isLocalFile()) {
-            const QString local = QDir(url.toLocalFile()).canonicalPath();
-            for (const QString& root : m_allowedRoots) {
-                if (!root.isEmpty() && (local == root || local.startsWith(root + QLatin1Char('/')))) {
-                    return url;
-                }
-            }
-            return QUrl();  // Block file access outside allowed roots
-        }
-
-        // Block http/https and any other scheme
-        return QUrl();
-    }
-
-private:
-    QStringList m_allowedRoots;
-};
-
-} // namespace
 
 MainUIBackend::MainUIBackend(LogosAPI* logosAPI, QObject* parent)
     : QObject(parent)
