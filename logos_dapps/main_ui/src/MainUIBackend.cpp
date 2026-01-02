@@ -251,33 +251,30 @@ void MainUIBackend::loadUiModule(const QString& moduleName)
         qmlWidget->setResizeMode(QQuickWidget::SizeRootObjectToView);
         QQmlEngine* engine = qmlWidget->engine();
         if (engine) {
-            const QString qtQmlPath = QLibraryInfo::path(QLibraryInfo::QmlImportsPath);
-            QStringList importPaths = engine->importPathList();
-            if (!qtQmlPath.isEmpty() && !importPaths.contains(qtQmlPath)) {
-                importPaths.prepend(qtQmlPath);  // Ensure Qt Quick/Controls path present
-            }
-            if (!importPaths.contains(pluginPath)) {
-                importPaths << pluginPath;       // Plugin-local imports only
-            }
+            QStringList importPaths;
+            importPaths << QStringLiteral("qrc:/qt-project.org/imports");
+            importPaths << QStringLiteral("qrc:/qt/qml");
+            importPaths << pluginPath;     // Plugin-local imports only
+            qDebug() << "=======================> QML import paths:" << importPaths;
             engine->setImportPathList(importPaths);
 
             QStringList pluginPaths;
-            const QString qtPluginPath = QLibraryInfo::path(QLibraryInfo::PluginsPath);
-            if (!qtPluginPath.isEmpty()) {
-                pluginPaths << qtPluginPath;  // Required for QtQuick C++ backends
-            }
+            // note: commented out to keep this list empty to lock the plugin down
+            // could cause issues with other QML components but it's unclear the moment
+            //const QString qtPluginPath = QLibraryInfo::path(QLibraryInfo::PluginsPath);
+            //if (!qtPluginPath.isEmpty()) {
+            //    pluginPaths << qtPluginPath;  // Required for QtQuick C++ backends
+            //}
+            qDebug() << "=======================> QML plugin paths:" << pluginPaths;
             engine->setPluginPathList(pluginPaths);
 
             engine->setNetworkAccessManagerFactory(new DenyAllNAMFactory());
             QStringList allowedRoots;
+            // allowedRoots << QStringLiteral("qrc:/qt/qml");
             allowedRoots << pluginPath;
-            for (const QString& path : std::as_const(importPaths)) {
-                QString canonical = QDir(path).canonicalPath();
-                if (!canonical.isEmpty() && !allowedRoots.contains(canonical)) {
-                    allowedRoots << canonical;
-                }
-            }
+            qDebug() << "=======================> QML allowed roots:" << allowedRoots;
             engine->addUrlInterceptor(new RestrictedUrlInterceptor(allowedRoots));
+            qDebug() << "=======================> QML base url:" << QUrl::fromLocalFile(pluginPath + "/");
             engine->setBaseUrl(QUrl::fromLocalFile(pluginPath + "/"));
         }
         LogosQmlBridge* bridge = new LogosQmlBridge(m_logosAPI, qmlWidget);
