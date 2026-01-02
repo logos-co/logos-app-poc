@@ -62,6 +62,11 @@ pkgs.stdenv.mkDerivation rec {
     
     if [ -d "${app}/plugins" ]; then
       cp -L "${app}/plugins"/*.dylib "$out/LogosApp.app/Contents/plugins/" 2>/dev/null || true
+      for pluginDir in "${app}/plugins"/*; do
+        if [ -d "$pluginDir" ]; then
+          cp -R "$pluginDir" "$out/LogosApp.app/Contents/plugins/"
+        fi
+      done
     fi
     
     cp "${appSrc}/app/macos/logos.icns" "$out/LogosApp.app/Contents/Resources/"

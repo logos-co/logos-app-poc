@@ -1,0 +1,13 @@
+{
+  "name": "counter_qml",
+  "version": "1.0.0",
+  "description": "Simple counter plugin implemented entirely in QML",
+  "author": "Logos Core Team",
+  "type": "ui",
+  "pluginType": "qml",
+  "main": "Main.qml",
+  "dependencies": [],
+  "category": "misc",
+  "capabilities": [],
+  "icon": "icons/counter.png"
+}

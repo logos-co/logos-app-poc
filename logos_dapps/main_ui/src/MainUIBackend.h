@@ -5,12 +5,15 @@
 #include <QVariantMap>
 #include <QStringList>
 #include <QMap>
+#include <QJsonObject>
 #include <QSet>
 #include <QTimer>
 #include <QPluginLoader>
 #include "logos_api.h"
 #include "logos_api_client.h"
 #include "IComponent.h"
+
+class QQuickWidget;
 
 class MainUIBackend : public QObject {
     Q_OBJECT
@@ -86,6 +89,9 @@ private:
     void initializeSidebarItems();
     QStringList findAvailableUiPlugins() const;
     QString getPluginPath(const QString& name) const;
+    QString pluginsDirectory() const;
+    bool isQmlPlugin(const QString& name) const;
+    QJsonObject readQmlPluginMetadata(const QString& pluginName) const;
     void updateModuleStats();
     QString getPluginIconPath(const QString& pluginPath) const;
     
@@ -97,6 +103,7 @@ private:
     // UI Modules state
     QMap<QString, IComponent*> m_loadedUiModules;
     QMap<QString, QWidget*> m_uiModuleWidgets;
+    QMap<QString, QQuickWidget*> m_qmlPluginWidgets;
     
     // Core Modules state
     QTimer* m_statsTimer;
