@@ -8,10 +8,17 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QLibraryInfo>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QTimer>
 #include <QQmlContext>
 #include <QQuickWidget>
 #include <QQmlEngine>
 #include <QQmlError>
+#include <QQmlNetworkAccessManagerFactory>
+#include <QQmlAbstractUrlInterceptor>
 #include <QUrl>
 #include "LogosQmlBridge.h"
 #include "logos_sdk.h"
@@ -20,6 +27,100 @@
 extern "C" {
     char* logos_core_get_module_stats();
 }
+
+namespace {
+
+// Network reply that immediately fails to prevent any QML network usage.
+class DenyAllReply : public QNetworkReply {
+public:
+    DenyAllReply(const QNetworkRequest& request, QObject* parent)
+        : QNetworkReply(parent)
+    {
+        setRequest(request);
+        setUrl(request.url());
+        setOpenMode(QIODevice::ReadOnly);
+        setError(QNetworkReply::ContentOperationNotPermittedError,
+                 QStringLiteral("Network access disabled for this QML engine"));
+        QTimer::singleShot(0, this, [this]() {
+            emit errorOccurred(error());
+            emit finished();
+        });
+    }
+
+    void abort() override {}
+    bool isSequential() const override { return true; }
+    qint64 bytesAvailable() const override { return 0; }
+
+protected:
+    qint64 readData(char*, qint64) override { return -1; }
+    qint64 writeData(const char*, qint64) override { return -1; }
+};
+
+class DenyAllNetworkAccessManager : public QNetworkAccessManager {
+public:
+    using QNetworkAccessManager::QNetworkAccessManager;
+
+protected:
+    QNetworkReply* createRequest(Operation op,
+                                 const QNetworkRequest& request,
+                                 QIODevice* outgoingData = nullptr) override
+    {
+        Q_UNUSED(op);
+        Q_UNUSED(outgoingData);
+        return new DenyAllReply(request, this);
+    }
+};
+
+class DenyAllNAMFactory : public QQmlNetworkAccessManagerFactory {
+public:
+    QNetworkAccessManager* create(QObject* parent) override
+    {
+        return new DenyAllNetworkAccessManager(parent);
+    }
+};
+
+// Intercepts all URL resolution and only allows qrc:/ and files under the plugin root.
+class RestrictedUrlInterceptor : public QQmlAbstractUrlInterceptor {
+public:
+    explicit RestrictedUrlInterceptor(const QStringList& allowedRoots)
+    {
+        for (const QString& root : allowedRoots) {
+            const QString canonical = QDir(root).canonicalPath();
+            if (!canonical.isEmpty()) {
+                m_allowedRoots.append(canonical);
+            }
+        }
+    }
+
+    QUrl intercept(const QUrl& url, DataType) override
+    {
+        if (!url.isValid()) {
+            return QUrl();
+        }
+
+        if (url.scheme() == QLatin1String("qrc")) {
+            return url;
+        }
+
+        if (url.isLocalFile()) {
+            const QString local = QDir(url.toLocalFile()).canonicalPath();
+            for (const QString& root : m_allowedRoots) {
+                if (!root.isEmpty() && (local == root || local.startsWith(root + QLatin1Char('/')))) {
+                    return url;
+                }
+            }
+            return QUrl();  // Block file access outside allowed roots
+        }
+
+        // Block http/https and any other scheme
+        return QUrl();
+    }
+
+private:
+    QStringList m_allowedRoots;
+};
+
+} // namespace
 
 MainUIBackend::MainUIBackend(LogosAPI* logosAPI, QObject* parent)
     : QObject(parent)
@@ -148,7 +249,37 @@ void MainUIBackend::loadUiModule(const QString& moduleName)
 
         QQuickWidget* qmlWidget = new QQuickWidget;
         qmlWidget->setResizeMode(QQuickWidget::SizeRootObjectToView);
-        qmlWidget->engine()->addImportPath(pluginPath);
+        QQmlEngine* engine = qmlWidget->engine();
+        if (engine) {
+            const QString qtQmlPath = QLibraryInfo::path(QLibraryInfo::QmlImportsPath);
+            QStringList importPaths = engine->importPathList();
+            if (!qtQmlPath.isEmpty() && !importPaths.contains(qtQmlPath)) {
+                importPaths.prepend(qtQmlPath);  // Ensure Qt Quick/Controls path present
+            }
+            if (!importPaths.contains(pluginPath)) {
+                importPaths << pluginPath;       // Plugin-local imports only
+            }
+            engine->setImportPathList(importPaths);
+
+            QStringList pluginPaths;
+            const QString qtPluginPath = QLibraryInfo::path(QLibraryInfo::PluginsPath);
+            if (!qtPluginPath.isEmpty()) {
+                pluginPaths << qtPluginPath;  // Required for QtQuick C++ backends
+            }
+            engine->setPluginPathList(pluginPaths);
+
+            engine->setNetworkAccessManagerFactory(new DenyAllNAMFactory());
+            QStringList allowedRoots;
+            allowedRoots << pluginPath;
+            for (const QString& path : std::as_const(importPaths)) {
+                QString canonical = QDir(path).canonicalPath();
+                if (!canonical.isEmpty() && !allowedRoots.contains(canonical)) {
+                    allowedRoots << canonical;
+                }
+            }
+            engine->addUrlInterceptor(new RestrictedUrlInterceptor(allowedRoots));
+            engine->setBaseUrl(QUrl::fromLocalFile(pluginPath + "/"));
+        }
         LogosQmlBridge* bridge = new LogosQmlBridge(m_logosAPI, qmlWidget);
         qmlWidget->rootContext()->setContextProperty("logos", bridge);
         qmlWidget->setSource(QUrl::fromLocalFile(qmlFilePath));
