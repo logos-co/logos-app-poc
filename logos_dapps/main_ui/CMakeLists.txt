@@ -88,6 +88,11 @@ set(SOURCES
     src/main_ui_plugin.cpp
     src/MainContainer.cpp
     src/MainUIBackend.cpp
+    src/LogosQmlBridge.cpp
+    src/restricted/DenyAllReply.cpp
+    src/restricted/DenyAllNetworkAccessManager.cpp
+    src/restricted/DenyAllNAMFactory.cpp
+    src/restricted/RestrictedUrlInterceptor.cpp
     src/mdichild.cpp
     src/mdiview.cpp
     src/main_ui_resources.qrc
