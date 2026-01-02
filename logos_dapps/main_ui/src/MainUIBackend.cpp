@@ -8,10 +8,12 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QQmlContext>
 #include <QQuickWidget>
 #include <QQmlEngine>
 #include <QQmlError>
 #include <QUrl>
+#include "LogosQmlBridge.h"
 #include "logos_sdk.h"
 #include "token_manager.h"
 
@@ -147,6 +149,8 @@ void MainUIBackend::loadUiModule(const QString& moduleName)
         QQuickWidget* qmlWidget = new QQuickWidget;
         qmlWidget->setResizeMode(QQuickWidget::SizeRootObjectToView);
         qmlWidget->engine()->addImportPath(pluginPath);
+        LogosQmlBridge* bridge = new LogosQmlBridge(m_logosAPI, qmlWidget);
+        qmlWidget->rootContext()->setContextProperty("logos", bridge);
         qmlWidget->setSource(QUrl::fromLocalFile(qmlFilePath));
 
         if (qmlWidget->status() == QQuickWidget::Error) {

@@ -88,6 +88,7 @@ set(SOURCES
     src/main_ui_plugin.cpp
     src/MainContainer.cpp
     src/MainUIBackend.cpp
+    src/LogosQmlBridge.cpp
     src/mdichild.cpp
     src/mdiview.cpp
     src/main_ui_resources.qrc
