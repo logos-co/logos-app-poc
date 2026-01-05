@@ -69,6 +69,16 @@ The outputs will be at:
 - `result/LogosApp.app/` - Application bundle
 - `result/LogosApp.dmg` - DMG installer
 
+#### Linux AppImage (Experimental)
+
+Build a self-contained AppImage on Linux hosts:
+
+```bash
+nix build '.#appimage'
+```
+
+The output will be at `result/LogosApp-<version>.AppImage`.
+
 #### Nix Organization
 
 The nix build system is organized into modular files in the `/nix` directory:
