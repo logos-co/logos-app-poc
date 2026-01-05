@@ -1,6 +1,11 @@
 # Builds the logos-app-poc standalone application
 { pkgs, common, src, logosLiblogos, logosSdk, logosPackageManager, logosCapabilityModule, counterPlugin, counterQmlPlugin, mainUIPlugin, packageManagerUIPlugin, webviewAppPlugin }:
 
+let
+  # webkitgtk became ABI-versioned; pick the newest available while staying
+  # compatible with older nixpkgs where the unversioned attribute still exists.
+  webkitgtk = pkgs.webkitgtk_4_1 or pkgs.webkitgtk_4_0 or pkgs.webkitgtk;
+in
 pkgs.stdenv.mkDerivation rec {
   pname = "logos-app-poc-app";
   version = common.version;
@@ -13,7 +18,7 @@ pkgs.stdenv.mkDerivation rec {
   ] ++ (
     if pkgs.stdenv.isLinux then
       # Linux: WebKitGTK as backend
-      [ pkgs.webkitgtk ]
+      [ webkitgtk ]
     else
       []
   );
