@@ -4,6 +4,12 @@
 assert pkgs.stdenv.isLinux;
 
 let
+  # Fetch the AppImage runtime from the official source
+  appimageRuntime = pkgs.fetchurl {
+    url = "https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64";
+    sha256 = "sha256-J93T945IP8X3hW5BPXwXCSkX+MNb/jMYoNN4qpQ1rRc=";
+  };
+
   runtimeLibs = [
     pkgs.qt6.qtbase
     pkgs.qt6.qtremoteobjects
@@ -16,7 +22,7 @@ let
     pkgs.freetype
     pkgs.fontconfig
     pkgs.libglvnd
-    pkgs.mesa.drivers
+    pkgs.mesa
     pkgs.xorg.libX11
     pkgs.xorg.libXext
     pkgs.xorg.libXrender
@@ -33,7 +39,8 @@ pkgs.stdenv.mkDerivation rec {
   inherit version;
 
   dontUnpack = true;
-  nativeBuildInputs = [ pkgs.appimagekit ];
+  dontWrapQtApps = true;  # We handle Qt paths manually in AppRun
+  nativeBuildInputs = [ pkgs.squashfsTools ];
   buildInputs = runtimeLibs;
 
   installPhase = ''
@@ -41,29 +48,28 @@ pkgs.stdenv.mkDerivation rec {
     appDir=$out/LogosApp.AppDir
     mkdir -p "$appDir/usr"
 
-    # Application payload
-    cp -a ${app}/bin "$appDir/usr/"
-    if [ -d ${app}/lib ]; then cp -a ${app}/lib "$appDir/usr/"; fi
-    if [ -d ${app}/modules ]; then cp -a ${app}/modules "$appDir/usr/"; fi
-    if [ -d ${app}/plugins ]; then cp -a ${app}/plugins "$appDir/usr/"; fi
+    # Application payload (use -rL to dereference symlinks and not preserve read-only perms)
+    cp -rL --no-preserve=mode ${app}/bin "$appDir/usr/"
+    if [ -d ${app}/lib ]; then cp -rL --no-preserve=mode ${app}/lib "$appDir/usr/"; fi
+    if [ -d ${app}/modules ]; then cp -rL --no-preserve=mode ${app}/modules "$appDir/usr/"; fi
+    if [ -d ${app}/plugins ]; then cp -rL --no-preserve=mode ${app}/plugins "$appDir/usr/"; fi
 
     mkdir -p "$appDir/usr/lib"
     for dep in ${runtimeLibsStr}; do
       if [ -d "$dep/lib" ]; then
-        cp -aL "$dep"/lib/*.so* "$appDir/usr/lib/" 2>/dev/null || true
+        cp -L --no-preserve=mode "$dep"/lib/*.so* "$appDir/usr/lib/" 2>/dev/null || true
         if [ -d "$dep/lib/qt-6" ]; then
-          mkdir -p "$appDir/usr/lib/qt-6"
-          cp -a "$dep/lib/qt-6/"* "$appDir/usr/lib/qt-6/" 2>/dev/null || true
+          cp -rL --no-preserve=mode "$dep/lib/qt-6" "$appDir/usr/lib/" 2>/dev/null || true
         fi
       fi
     done
 
     # Qt plugins and QML modules
     mkdir -p "$appDir/usr/lib/qt-6/plugins" "$appDir/usr/lib/qt-6/qml"
-    cp -a ${pkgs.qt6.qtbase}/lib/qt-6/plugins/* "$appDir/usr/lib/qt-6/plugins/" 2>/dev/null || true
-    cp -a ${pkgs.qt6.qtwebview}/lib/qt-6/plugins/* "$appDir/usr/lib/qt-6/plugins/" 2>/dev/null || true
-    cp -a ${pkgs.qt6.qtdeclarative}/lib/qt-6/qml/* "$appDir/usr/lib/qt-6/qml/" 2>/dev/null || true
-    cp -a ${pkgs.qt6.qtwebview}/lib/qt-6/qml/* "$appDir/usr/lib/qt-6/qml/" 2>/dev/null || true
+    cp -rL --no-preserve=mode ${pkgs.qt6.qtbase}/lib/qt-6/plugins/* "$appDir/usr/lib/qt-6/plugins/" 2>/dev/null || true
+    cp -rL --no-preserve=mode ${pkgs.qt6.qtwebview}/lib/qt-6/plugins/* "$appDir/usr/lib/qt-6/plugins/" 2>/dev/null || true
+    cp -rL --no-preserve=mode ${pkgs.qt6.qtdeclarative}/lib/qt-6/qml/* "$appDir/usr/lib/qt-6/qml/" 2>/dev/null || true
+    cp -rL --no-preserve=mode ${pkgs.qt6.qtwebview}/lib/qt-6/qml/* "$appDir/usr/lib/qt-6/qml/" 2>/dev/null || true
 
     # Desktop entry and icon
     mkdir -p "$appDir/usr/share/applications" "$appDir/usr/share/icons/hicolor/256x256/apps"
@@ -83,16 +89,27 @@ EOF
 #!/bin/sh
 APPDIR="$(dirname "$(readlink -f "$0")")"
 export PATH="$APPDIR/usr/bin:$PATH"
-export LD_LIBRARY_PATH="$APPDIR/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-export QT_PLUGIN_PATH="$APPDIR/usr/lib/qt-6/plugins${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}"
-export QML2_IMPORT_PATH="$APPDIR/usr/lib/qt-6/qml${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}"
+export LD_LIBRARY_PATH="$APPDIR/usr/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export QT_PLUGIN_PATH="$APPDIR/usr/lib/qt-6/plugins''${QT_PLUGIN_PATH:+:$QT_PLUGIN_PATH}"
+export QML2_IMPORT_PATH="$APPDIR/usr/lib/qt-6/qml''${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}"
 export NIXPKGS_QT6_QML_IMPORT_PATH="$QML2_IMPORT_PATH"
 exec "$APPDIR/usr/bin/LogosApp" "$@"
 EOF
     chmod +x "$appDir/AppRun"
 
-    # Build the AppImage payload
-    ${pkgs.appimagekit}/bin/appimagetool "$appDir" "$out/LogosApp-${version}.AppImage"
+    # Create desktop file symlink at root (required by AppImage spec)
+    ln -sf usr/share/applications/logos-app.desktop "$appDir/logos-app.desktop"
+
+    # Build the AppImage using squashfs and the runtime
+    mksquashfs "$appDir" "$out/squashfs.img" -root-owned -noappend -comp zstd -Xcompression-level 22
+    
+    # Combine runtime + squashfs into final AppImage
+    mkdir -p "$out"
+    cat ${appimageRuntime} "$out/squashfs.img" > "$out/LogosApp-${version}.AppImage"
+    chmod +x "$out/LogosApp-${version}.AppImage"
+    
+    # Clean up intermediate file
+    rm "$out/squashfs.img"
   '';
 
   meta = with pkgs.lib; {
