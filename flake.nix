@@ -78,6 +78,14 @@
               appBundle = appBundle;
             }
           else null;
+
+          # Linux AppImage (only for Linux)
+          appImage = if pkgs.stdenv.isLinux then
+            import ./nix/appimage.nix {
+              inherit pkgs app src;
+              version = common.version;
+            }
+          else null;
         in
         {
           # Individual outputs
@@ -94,6 +102,9 @@
           # macOS distribution outputs
           app-bundle = appBundle;
           inherit dmg;
+        } else {}) // (if pkgs.stdenv.isLinux then {
+          # Linux distribution output
+          appimage = appImage;
         } else {})
       );
 

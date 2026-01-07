@@ -3,6 +3,7 @@
 
 let
   cmakeFlags = common.cmakeFlags ++ [ "-DCMAKE_BUILD_TYPE=Release" ];
+  webkitgtk = pkgs.webkitgtk_4_1 or pkgs.webkitgtk_4_0 or pkgs.webkitgtk;
 in
 pkgs.stdenv.mkDerivation {
   pname = "${common.pname}-webview-app-plugin";
@@ -17,7 +18,7 @@ pkgs.stdenv.mkDerivation {
   ] ++ (
     if pkgs.stdenv.isLinux then
       # Linux also needs WebKitGTK as the backend for QtWebView
-      [ pkgs.webkitgtk ]
+      [ webkitgtk ]
     else
       []
   );
