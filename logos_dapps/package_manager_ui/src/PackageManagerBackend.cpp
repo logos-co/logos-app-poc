@@ -88,40 +88,16 @@ void PackageManagerBackend::install()
             continue;
         }
 
-        const PackageInfo& info = m_allPackages[packageName];
-        QString filePath = info.path;
-
-        if (info.type.compare("UI", Qt::CaseInsensitive) == 0) {
-            QString appDir = QCoreApplication::applicationDirPath();
-            QString pluginsDir = appDir + "/../plugins";
-
-            QDir dir;
-            if (!dir.exists(pluginsDir)) {
-                dir.mkpath(pluginsDir);
-            }
-
-            QFileInfo fileInfo(filePath);
-            QString destFilePath = pluginsDir + "/" + fileInfo.fileName();
-
-            bool copySuccess = QFile::copy(filePath, destFilePath);
-            if (copySuccess) {
-                QFile::setPermissions(destFilePath, 
-                    QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner | 
-                    QFile::ReadGroup | QFile::WriteGroup | QFile::ExeGroup | 
-                    QFile::ReadOther | QFile::WriteOther | QFile::ExeOther);
-
-                successfulPlugins << packageName + " (UI plugin copied to plugins directory)";
-                emit packageInstalled(packageName);
-            } else {
-                failedPlugins << packageName + " (failed to copy UI plugin)";
-            }
-            continue;
-        }
-
         bool installSuccess = false;
         if (m_logosAPI && m_logosAPI->getClient("package_manager")->isConnected()) {
             LogosModules logos(m_logosAPI);
-            installSuccess = logos.package_manager.installPlugin(filePath);
+            QDir appDir(QCoreApplication::applicationDirPath());
+            appDir.cdUp();
+            QString pluginsDir = QDir::cleanPath(appDir.absolutePath() + "/modules");
+            installSuccess = logos.package_manager.installPackage(packageName, pluginsDir);
+        } else {
+            failedPlugins << packageName + " (package_manager not connected)";
+            continue;
         }
 
         if (installSuccess) {
@@ -158,7 +134,6 @@ void PackageManagerBackend::install()
     emit detailsHtmlChanged();
 
     scanPackagesFolder();
-    QTimer::singleShot(5000, this, &PackageManagerBackend::scanPackagesFolder);
 }
 
 void PackageManagerBackend::testPluginCall()
@@ -189,27 +164,26 @@ void PackageManagerBackend::selectPackage(int index)
     if (m_allPackages.contains(packageName)) {
         const PackageInfo& info = m_allPackages[packageName];
 
-        QPluginLoader loader(info.path);
-        QJsonObject metadata = loader.metaData();
-        QJsonObject metaDataObj = metadata.value("MetaData").toObject();
-
         QString detailText = QString("<h2>%1</h2>").arg(packageName);
-        detailText += QString("<p><b>Description:</b> %1</p>").arg(description);
-        detailText += QString("<p><b>Installed Version:</b> %1</p>").arg(installedVer);
-        detailText += QString("<p><b>Latest Version:</b> %1</p>").arg(latestVer);
-
-        if (!info.path.isEmpty()) {
-            detailText += QString("<p><b>Path:</b> %1</p>").arg(info.path);
+        detailText += QString("<p><b>Description:</b> %1</p>").arg(description.isEmpty() ? "No description available" : description);
+        
+        if (!installedVer.isEmpty()) {
+            detailText += QString("<p><b>Installed Version:</b> %1</p>").arg(installedVer);
+        }
+        if (!latestVer.isEmpty()) {
+            detailText += QString("<p><b>Latest Version:</b> %1</p>").arg(latestVer);
         }
 
-        QString author = metaDataObj.value("author").toString();
-        if (!author.isEmpty()) {
-            detailText += QString("<p><b>Author:</b> %1</p>").arg(author);
+        if (!info.files.isEmpty()) {
+            detailText += "<p><b>Files:</b></p><ul>";
+            for (const QString& file : info.files) {
+                detailText += QString("<li>%1</li>").arg(file);
+            }
+            detailText += "</ul>";
         }
 
-        QString type = metaDataObj.value("type").toString();
-        if (!type.isEmpty()) {
-            detailText += QString("<p><b>Type:</b> %1</p>").arg(type);
+        if (!info.type.isEmpty()) {
+            detailText += QString("<p><b>Type:</b> %1</p>").arg(info.type);
         }
 
         if (!info.dependencies.isEmpty()) {
@@ -220,15 +194,6 @@ void PackageManagerBackend::selectPackage(int index)
             detailText += "</ul>";
         } else {
             detailText += "<p><b>Dependencies:</b> None</p>";
-        }
-
-        QJsonArray capabilities = metaDataObj.value("capabilities").toArray();
-        if (!capabilities.isEmpty()) {
-            detailText += "<p><b>Capabilities:</b></p><ul>";
-            for (const QJsonValue& capability : capabilities) {
-                detailText += QString("<li>%1</li>").arg(capability.toString());
-            }
-            detailText += "</ul>";
         }
 
         m_detailsHtml = detailText;
@@ -280,6 +245,10 @@ void PackageManagerBackend::scanPackagesFolder()
     QJsonArray packagesArray;
     if (m_logosAPI && m_logosAPI->getClient("package_manager")->isConnected()) {
         LogosModules logos(m_logosAPI);
+        QDir appDir(QCoreApplication::applicationDirPath());
+        appDir.cdUp();
+        QString modulesDir = QDir::cleanPath(appDir.absolutePath() + "/modules");
+        logos.package_manager.setPluginsDirectory(modulesDir);
         packagesArray = logos.package_manager.getPackages();
         qDebug() << "LogosAPI: Retrieved" << packagesArray.size() << "packages from package_manager";
     } else {
@@ -300,11 +269,21 @@ void PackageManagerBackend::scanPackagesFolder()
     for (const QJsonValue& value : packagesArray) {
         QJsonObject obj = value.toObject();
         QString name = obj.value("name").toString();
-        QString installedVersion = obj.value("installedVersion").toString();
-        QString latestVersion = obj.value("latestVersion").toString();
         QString description = obj.value("description").toString();
-        QString type = obj.value("type").toString();
-        QString category = obj.value("category").toString();
+        
+        QStringList files;
+        QJsonArray filesArray = obj.value("files").toArray();
+        for (const QJsonValue& fileVal : filesArray) {
+            files.append(fileVal.toString());
+        }
+
+        bool isInstalled = obj.value("installed").toBool(false);
+
+        QString category = "Module";
+        QString type = "Plugin";
+        QString installedVersion = "";
+        QString latestVersion = "";
+        
         categorySet.insert(category);
 
         PackageInfo info;
@@ -312,18 +291,12 @@ void PackageManagerBackend::scanPackagesFolder()
         info.installedVersion = installedVersion;
         info.latestVersion = latestVersion;
         info.description = description;
-        info.path = obj.value("path").toString();
-        info.isLoaded = false;
+        info.files = files;
+        info.isLoaded = isInstalled;
         info.isSelected = false;
         info.category = category;
         info.type = type;
-
-        QStringList dependencies;
-        QJsonArray depsArray = obj.value("dependencies").toArray();
-        for (const QJsonValue& dep : depsArray) {
-            dependencies.append(dep.toString());
-        }
-        info.dependencies = dependencies;
+        info.dependencies = QStringList();
         m_allPackages[name] = info;
     }
 

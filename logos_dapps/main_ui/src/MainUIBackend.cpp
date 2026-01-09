@@ -23,6 +23,7 @@
 
 extern "C" {
     char* logos_core_get_module_stats();
+    char* logos_core_process_plugin(const char* plugin_path);
 }
 
 MainUIBackend::MainUIBackend(LogosAPI* logosAPI, QObject* parent)
@@ -424,6 +425,23 @@ void MainUIBackend::unloadCoreModule(const QString& moduleName)
 
 void MainUIBackend::refreshCoreModules()
 {
+    QDir modulesDir(modulesDirectory());
+    if (modulesDir.exists()) {
+        QString libExtension;
+#if defined(Q_OS_MAC)
+        libExtension = "*.dylib";
+#elif defined(Q_OS_WIN)
+        libExtension = "*.dll";
+#else
+        libExtension = "*.so";
+#endif
+        QStringList entries = modulesDir.entryList(QStringList() << libExtension, QDir::Files);
+        for (const QString& entry : entries) {
+            QString fullPath = modulesDir.absoluteFilePath(entry);
+            logos_core_process_plugin(fullPath.toUtf8().constData());
+        }
+    }
+    
     emit coreModulesChanged();
 }
 
@@ -528,6 +546,11 @@ void MainUIBackend::refreshLauncherApps()
 QString MainUIBackend::pluginsDirectory() const
 {
     return QCoreApplication::applicationDirPath() + "/../plugins";
+}
+
+QString MainUIBackend::modulesDirectory() const
+{
+    return QCoreApplication::applicationDirPath() + "/../modules";
 }
 
 QJsonObject MainUIBackend::readQmlPluginMetadata(const QString& pluginName) const

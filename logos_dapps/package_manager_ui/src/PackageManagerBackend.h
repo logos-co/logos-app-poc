@@ -50,7 +50,7 @@ private:
         QString installedVersion;
         QString latestVersion;
         QString description;
-        QString path;
+        QStringList files;
         QString category;
         QString type;
         QStringList dependencies;

@@ -85,6 +85,12 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             currentIndex: tabBar.currentIndex
+            
+            onCurrentIndexChanged: {
+                if (currentIndex === 1) {
+                    backend.refreshCoreModules();
+                }
+            }
 
             // UI Modules tab
             UiModulesTab {
