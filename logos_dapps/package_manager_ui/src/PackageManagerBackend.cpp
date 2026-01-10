@@ -160,12 +160,28 @@ void PackageManagerBackend::selectPackage(int index)
     QString installedVer = pkg["installedVersion"].toString();
     QString latestVer = pkg["latestVersion"].toString();
     QString description = pkg["description"].toString();
+    QString type = pkg["type"].toString();
+    QString moduleName = pkg["moduleName"].toString();
+    QString category = pkg["category"].toString();
 
     if (m_allPackages.contains(packageName)) {
         const PackageInfo& info = m_allPackages[packageName];
 
         QString detailText = QString("<h2>%1</h2>").arg(packageName);
+        
+        if (!moduleName.isEmpty() && moduleName != packageName) {
+            detailText += QString("<p><b>Module Name:</b> %1</p>").arg(moduleName);
+        }
+        
         detailText += QString("<p><b>Description:</b> %1</p>").arg(description.isEmpty() ? "No description available" : description);
+        
+        if (!type.isEmpty()) {
+            detailText += QString("<p><b>Type:</b> %1</p>").arg(type);
+        }
+        
+        if (!category.isEmpty()) {
+            detailText += QString("<p><b>Category:</b> %1</p>").arg(category);
+        }
         
         if (!installedVer.isEmpty()) {
             detailText += QString("<p><b>Installed Version:</b> %1</p>").arg(installedVer);
@@ -180,10 +196,6 @@ void PackageManagerBackend::selectPackage(int index)
                 detailText += QString("<li>%1</li>").arg(file);
             }
             detailText += "</ul>";
-        }
-
-        if (!info.type.isEmpty()) {
-            detailText += QString("<p><b>Type:</b> %1</p>").arg(info.type);
         }
 
         if (!info.dependencies.isEmpty()) {
@@ -270,6 +282,9 @@ void PackageManagerBackend::scanPackagesFolder()
         QJsonObject obj = value.toObject();
         QString name = obj.value("name").toString();
         QString description = obj.value("description").toString();
+        QString type = obj.value("type").toString();
+        QString moduleName = obj.value("moduleName").toString();
+        QString category = obj.value("category").toString();
         
         QStringList files;
         QJsonArray filesArray = obj.value("files").toArray();
@@ -277,17 +292,31 @@ void PackageManagerBackend::scanPackagesFolder()
             files.append(fileVal.toString());
         }
 
+        QStringList dependencies;
+        QJsonArray dependenciesArray = obj.value("dependencies").toArray();
+        for (const QJsonValue& depVal : dependenciesArray) {
+            dependencies.append(depVal.toString());
+        }
+
         bool isInstalled = obj.value("installed").toBool(false);
 
-        QString category = "Module";
-        QString type = "Plugin";
         QString installedVersion = "";
         QString latestVersion = "";
         
+        // Use category from API, fallback to "Module" if empty
+        if (category.isEmpty()) {
+            category = "Module";
+        }
         categorySet.insert(category);
+
+        // Use type from API, fallback to "Plugin" if empty
+        if (type.isEmpty()) {
+            type = "Plugin";
+        }
 
         PackageInfo info;
         info.name = name;
+        info.moduleName = moduleName.isEmpty() ? name : moduleName;
         info.installedVersion = installedVersion;
         info.latestVersion = latestVersion;
         info.description = description;
@@ -296,7 +325,7 @@ void PackageManagerBackend::scanPackagesFolder()
         info.isSelected = false;
         info.category = category;
         info.type = type;
-        info.dependencies = QStringList();
+        info.dependencies = dependencies;
         m_allPackages[name] = info;
     }
 
@@ -341,6 +370,7 @@ void PackageManagerBackend::addFallbackPackages()
                          const QString& desc, bool selected = false) {
         PackageInfo info;
         info.name = name;
+        info.moduleName = name; // Use name as moduleName for fallback packages
         info.installedVersion = installedVer;
         info.latestVersion = latestVer;
         info.type = type;
@@ -348,6 +378,7 @@ void PackageManagerBackend::addFallbackPackages()
         info.isLoaded = selected;
         info.isSelected = selected;
         info.category = type;
+        info.dependencies = QStringList();
         m_allPackages[name] = info;
     };
 
@@ -391,10 +422,12 @@ void PackageManagerBackend::updateFilteredPackages()
         if (showAll || info.category.compare(selectedCategory, Qt::CaseInsensitive) == 0) {
             QVariantMap pkg;
             pkg["name"] = info.name;
+            pkg["moduleName"] = info.moduleName;
             pkg["installedVersion"] = info.installedVersion;
             pkg["latestVersion"] = info.latestVersion;
             pkg["type"] = info.type;
             pkg["description"] = info.description;
+            pkg["category"] = info.category;
             pkg["isSelected"] = info.isSelected;
             m_filteredPackages.append(pkg);
         }

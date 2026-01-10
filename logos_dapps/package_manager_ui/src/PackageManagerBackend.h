@@ -47,6 +47,7 @@ signals:
 private:
     struct PackageInfo {
         QString name;
+        QString moduleName;
         QString installedVersion;
         QString latestVersion;
         QString description;
