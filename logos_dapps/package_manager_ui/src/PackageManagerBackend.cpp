@@ -9,6 +9,7 @@
 #include <QFileInfo>
 #include <QPluginLoader>
 #include <QTimer>
+#include <QStandardPaths>
 #include <algorithm>
 #include "logos_sdk.h"
 
@@ -179,9 +180,8 @@ void PackageManagerBackend::installNextPackage()
     emit detailsHtmlChanged();
     
     LogosModules logos(m_logosAPI);
-    QDir appDir(QCoreApplication::applicationDirPath());
-    appDir.cdUp();
-    QString pluginsDir = QDir::cleanPath(appDir.absolutePath() + "/modules");
+    // Use writable location for plugin installation (especially important for DMG builds)
+    QString pluginsDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/modules";
     
     qDebug() << "PackageManagerBackend: Starting async installation of" << packageName;
     logos.package_manager.installPackageAsync(packageName, pluginsDir);
@@ -342,6 +342,7 @@ void PackageManagerBackend::scanPackagesFolder()
     QJsonArray packagesArray;
     if (m_logosAPI && m_logosAPI->getClient("package_manager")->isConnected()) {
         LogosModules logos(m_logosAPI);
+        // For scanning, use the bundled modules directory first
         QDir appDir(QCoreApplication::applicationDirPath());
         appDir.cdUp();
         QString modulesDir = QDir::cleanPath(appDir.absolutePath() + "/modules");

@@ -9,7 +9,7 @@ pkgs.stdenv.mkDerivation rec {
   dontWrapQtApps = true;
   
   nativeBuildInputs = [ pkgs.makeWrapper ];
-  buildInputs = [ pkgs.qt6.qtbase ];
+  buildInputs = [ pkgs.qt6.qtbase pkgs.qt6.qtdeclarative ];
   
   appSrc = src;
   
@@ -23,7 +23,14 @@ pkgs.stdenv.mkDerivation rec {
     mkdir -p "$out/LogosApp.app/Contents/modules"
     mkdir -p "$out/LogosApp.app/Contents/plugins"
     
-    cp -L "${app}/bin/LogosApp" "$out/LogosApp.app/Contents/MacOS/"
+    # Copy the unwrapped binary if it exists (to avoid Nix store paths), otherwise use the wrapper
+    if [ -f "${app}/bin/.LogosApp-wrapped" ]; then
+      echo "Copying unwrapped binary to avoid Nix store path issues"
+      cp -L "${app}/bin/.LogosApp-wrapped" "$out/LogosApp.app/Contents/MacOS/LogosApp"
+    else
+      echo "Unwrapped binary not found, using regular binary"
+      cp -L "${app}/bin/LogosApp" "$out/LogosApp.app/Contents/MacOS/"
+    fi
     chmod +x "$out/LogosApp.app/Contents/MacOS/LogosApp"
     
     if [ -f "${app}/bin/logos_host" ]; then
@@ -50,10 +57,31 @@ pkgs.stdenv.mkDerivation rec {
       fi
     done
     
+    # Copy QtQml frameworks from qtdeclarative
+    qtdeclarative="${pkgs.qt6.qtdeclarative}"
+    for framework in QtQml QtQuick QtQmlModels; do
+      if [ -d "$qtdeclarative/lib/$framework.framework" ]; then
+        cp -RL "$qtdeclarative/lib/$framework.framework" "$out/LogosApp.app/Contents/Frameworks/"
+      fi
+    done
+    
+    # Copy Qt plugins (platforms, styles, imageformats)
     if [ -d "$qtbase/lib/qt-6/plugins" ]; then
       cp -RL "$qtbase/lib/qt-6/plugins/platforms" "$out/LogosApp.app/Contents/PlugIns/" || true
       cp -RL "$qtbase/lib/qt-6/plugins/styles" "$out/LogosApp.app/Contents/PlugIns/" || true
       cp -RL "$qtbase/lib/qt-6/plugins/imageformats" "$out/LogosApp.app/Contents/PlugIns/" || true
+    fi
+    
+    # Copy QML modules from qtdeclarative for QtQuick and QtQuick.Controls support
+    mkdir -p "$out/LogosApp.app/Contents/Resources/qml"
+    if [ -d "$qtdeclarative/lib/qt-6/qml" ]; then
+      echo "Copying QML modules from qtdeclarative..."
+      cp -RL "$qtdeclarative/lib/qt-6/qml"/* "$out/LogosApp.app/Contents/Resources/qml/" || true
+    fi
+    
+    # Also copy QML-related plugins
+    if [ -d "$qtdeclarative/lib/qt-6/plugins" ]; then
+      cp -RL "$qtdeclarative/lib/qt-6/plugins"/* "$out/LogosApp.app/Contents/PlugIns/" || true
     fi
     
     if [ -d "${app}/modules" ]; then
@@ -71,6 +99,13 @@ pkgs.stdenv.mkDerivation rec {
     
     cp "${appSrc}/app/macos/logos.icns" "$out/LogosApp.app/Contents/Resources/"
     
+    # Create qt.conf to tell Qt where to find plugins and QML modules relative to the bundle
+    cat > "$out/LogosApp.app/Contents/Resources/qt.conf" <<EOF
+[Paths]
+Plugins = PlugIns
+Qml2Imports = Resources/qml
+EOF
+    
     sed -e "s/@VERSION@/${version}/g" \
         -e "s/@BUILD_NUMBER@/1/g" \
         "${appSrc}/app/macos/Info.plist.in" > "$out/LogosApp.app/Contents/Info.plist"
@@ -87,6 +122,13 @@ pkgs.stdenv.mkDerivation rec {
     
     for framework in QtCore QtGui QtWidgets QtDBus; do
       install_name_tool -change "$qtbase/lib/$framework.framework/Versions/A/$framework" \
+        "@executable_path/../Frameworks/$framework.framework/Versions/A/$framework" \
+        "$out/LogosApp.app/Contents/MacOS/LogosApp" 2>/dev/null || true
+    done
+    
+    # Fix QtQml and QtQuick framework paths from qtdeclarative
+    for framework in QtQml QtQuick QtQmlModels; do
+      install_name_tool -change "$qtdeclarative/lib/$framework.framework/Versions/A/$framework" \
         "@executable_path/../Frameworks/$framework.framework/Versions/A/$framework" \
         "$out/LogosApp.app/Contents/MacOS/LogosApp" 2>/dev/null || true
     done
