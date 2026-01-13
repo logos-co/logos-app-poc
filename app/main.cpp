@@ -6,6 +6,7 @@
 #include <QIcon>
 #include <QDir>
 #include <QTimer>
+#include <QStandardPaths>
 #include <iostream>
 #include <memory>
 #include <QStringList>
@@ -15,6 +16,7 @@
 // Replace CoreManager with direct C API functions
 extern "C" {
     void logos_core_set_plugins_dir(const char* plugins_dir);
+    void logos_core_add_plugins_dir(const char* plugins_dir);
     void logos_core_start();
     void logos_core_cleanup();
     char** logos_core_get_loaded_plugins();
@@ -42,10 +44,14 @@ int main(int argc, char *argv[])
     // Create QApplication first
     QApplication app(argc, argv);
 
-    // Set the modules directory (for liblogos modules)
     QString modulesDir = QDir::cleanPath(QCoreApplication::applicationDirPath() + "/../modules");
-    std::cout << "Setting modules directory to: " << modulesDir.toStdString() << std::endl;
     logos_core_set_plugins_dir(modulesDir.toUtf8().constData());
+
+    QFileInfo bundledDirInfo(modulesDir);
+    if (!bundledDirInfo.isWritable()) {
+        QString userModulesDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/modules";
+        logos_core_add_plugins_dir(userModulesDir.toUtf8().constData());
+    }
 
     // Start the core
     logos_core_start();

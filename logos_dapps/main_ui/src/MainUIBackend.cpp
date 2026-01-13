@@ -15,6 +15,7 @@
 #include <QQmlEngine>
 #include <QQmlError>
 #include <QUrl>
+#include <QStandardPaths>
 #include "LogosQmlBridge.h"
 #include "logos_sdk.h"
 #include "token_manager.h"
@@ -48,6 +49,8 @@ MainUIBackend::MainUIBackend(LogosAPI* logosAPI, QObject* parent)
     refreshCoreModules();
     refreshLauncherApps();
     
+    subscribeToPackageInstallationEvents();
+    
     qDebug() << "MainUIBackend created";
 }
 
@@ -63,6 +66,34 @@ MainUIBackend::~MainUIBackend()
     for (const QString& name : moduleNames) {
         unloadUiModule(name);
     }
+}
+
+void MainUIBackend::subscribeToPackageInstallationEvents()
+{
+    if (!m_logosAPI) {
+        return;
+    }
+    
+    LogosAPIClient* client = m_logosAPI->getClient("package_manager");
+    if (!client || !client->isConnected()) {
+        return;
+    }
+    
+    LogosModules logos(m_logosAPI);
+    logos.package_manager.on("packageInstallationFinished", [this](const QVariantList& data) {
+        if (data.size() < 3) {
+            return;
+        }
+        bool success = data[1].toBool();
+        
+        if (success) {
+            QTimer::singleShot(100, this, [this]() {
+                refreshUiModules();
+                refreshCoreModules();
+                refreshLauncherApps();
+            });
+        }
+    });
 }
 
 void MainUIBackend::initializeSidebarItems()
@@ -425,20 +456,34 @@ void MainUIBackend::unloadCoreModule(const QString& moduleName)
 
 void MainUIBackend::refreshCoreModules()
 {
+    QString libExtension;
+#if defined(Q_OS_MAC)
+    libExtension = "*.dylib";
+#elif defined(Q_OS_WIN)
+    libExtension = "*.dll";
+#else
+    libExtension = "*.so";
+#endif
+    
     QDir modulesDir(modulesDirectory());
     if (modulesDir.exists()) {
-        QString libExtension;
-#if defined(Q_OS_MAC)
-        libExtension = "*.dylib";
-#elif defined(Q_OS_WIN)
-        libExtension = "*.dll";
-#else
-        libExtension = "*.so";
-#endif
         QStringList entries = modulesDir.entryList(QStringList() << libExtension, QDir::Files);
         for (const QString& entry : entries) {
             QString fullPath = modulesDir.absoluteFilePath(entry);
             logos_core_process_plugin(fullPath.toUtf8().constData());
+        }
+    }
+    
+    QFileInfo bundledDirInfo(modulesDirectory());
+    if (!bundledDirInfo.isWritable()) {
+        QString userModulesDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/modules";
+        QDir userModulesDirObj(userModulesDir);
+        if (userModulesDirObj.exists()) {
+            QStringList entries = userModulesDirObj.entryList(QStringList() << libExtension, QDir::Files);
+            for (const QString& entry : entries) {
+                QString fullPath = userModulesDirObj.absoluteFilePath(entry);
+                logos_core_process_plugin(fullPath.toUtf8().constData());
+            }
         }
     }
     
@@ -548,6 +593,11 @@ QString MainUIBackend::pluginsDirectory() const
     return QCoreApplication::applicationDirPath() + "/../plugins";
 }
 
+QString MainUIBackend::userPluginsDirectory() const
+{
+    return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/plugins";
+}
+
 QString MainUIBackend::modulesDirectory() const
 {
     return QCoreApplication::applicationDirPath() + "/../modules";
@@ -555,6 +605,19 @@ QString MainUIBackend::modulesDirectory() const
 
 QJsonObject MainUIBackend::readQmlPluginMetadata(const QString& pluginName) const
 {
+    QFileInfo bundledPluginsDirInfo(pluginsDirectory());
+    if (!bundledPluginsDirInfo.isWritable()) {
+        QString userMetadataPath = userPluginsDirectory() + "/" + pluginName + "/metadata.json";
+        QFile userMetadataFile(userMetadataPath);
+        if (userMetadataFile.exists() && userMetadataFile.open(QIODevice::ReadOnly)) {
+            QJsonParseError parseError;
+            QJsonDocument doc = QJsonDocument::fromJson(userMetadataFile.readAll(), &parseError);
+            if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
+                return doc.object();
+            }
+        }
+    }
+    
     QString metadataPath = pluginsDirectory() + "/" + pluginName + "/metadata.json";
     QFile metadataFile(metadataPath);
     if (!metadataFile.exists()) {
@@ -589,53 +652,61 @@ QStringList MainUIBackend::findAvailableUiPlugins() const
 {
     QStringList plugins;
 
-    QDir pluginsDir(pluginsDirectory());
-    
-    if (!pluginsDir.exists()) {
-        qWarning() << "Plugins directory does not exist:" << pluginsDirectory();
-        return plugins;
-    }
+    auto scanDirectory = [&](const QString& dirPath) {
+        QDir pluginsDir(dirPath);
+        
+        if (!pluginsDir.exists()) {
+            return;
+        }
 
-    auto addPlugin = [&](const QString& name) {
-        if (!plugins.contains(name)) {
-            plugins.append(name);
+        auto addPlugin = [&](const QString& name) {
+            if (!plugins.contains(name)) {
+                plugins.append(name);
+            }
+        };
+
+        QStringList dirEntries = pluginsDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+        for (const QString& entry : dirEntries) {
+            QJsonObject metadata = readQmlPluginMetadata(entry);
+            QString pluginType = metadata.value("pluginType").toString();
+            if (pluginType.compare("qml", Qt::CaseInsensitive) == 0) {
+                addPlugin(entry);
+            }
+        }
+        
+        QStringList entries = pluginsDir.entryList(QDir::Files);
+        
+        QString libExtension;
+        int extLength;
+#if defined(Q_OS_MAC)
+        libExtension = ".dylib";
+        extLength = 6;
+#elif defined(Q_OS_WIN)
+        libExtension = ".dll";
+        extLength = 4;
+#else
+        libExtension = ".so";
+        extLength = 3;
+#endif
+        
+        for (const QString& entry : entries) {
+            if (entry.endsWith(libExtension)) {
+                if (entry.startsWith("lib")) {
+                    continue;
+                }
+                
+                QString pluginName = entry;
+                pluginName.chop(extLength);
+                addPlugin(pluginName);
+            }
         }
     };
-
-    QStringList dirEntries = pluginsDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-    for (const QString& entry : dirEntries) {
-        QJsonObject metadata = readQmlPluginMetadata(entry);
-        QString pluginType = metadata.value("pluginType").toString();
-        if (pluginType.compare("qml", Qt::CaseInsensitive) == 0) {
-            addPlugin(entry);
-        }
-    }
     
-    QStringList entries = pluginsDir.entryList(QDir::Files);
+    scanDirectory(pluginsDirectory());
     
-    QString libExtension;
-    int extLength;
-#if defined(Q_OS_MAC)
-    libExtension = ".dylib";
-    extLength = 6;
-#elif defined(Q_OS_WIN)
-    libExtension = ".dll";
-    extLength = 4;
-#else
-    libExtension = ".so";
-    extLength = 3;
-#endif
-    
-    for (const QString& entry : entries) {
-        if (entry.endsWith(libExtension)) {
-            if (entry.startsWith("lib")) {
-                continue;
-            }
-            
-            QString pluginName = entry;
-            pluginName.chop(extLength);
-            addPlugin(pluginName);
-        }
+    QFileInfo bundledPluginsDirInfo(pluginsDirectory());
+    if (!bundledPluginsDirInfo.isWritable()) {
+        scanDirectory(userPluginsDirectory());
     }
     
     return plugins;
@@ -643,10 +714,6 @@ QStringList MainUIBackend::findAvailableUiPlugins() const
 
 QString MainUIBackend::getPluginPath(const QString& name) const
 {
-    if (isQmlPlugin(name)) {
-        return pluginsDirectory() + "/" + name;
-    }
-
     QString libExtension;
 #if defined(Q_OS_MAC)
     libExtension = ".dylib";
@@ -655,6 +722,27 @@ QString MainUIBackend::getPluginPath(const QString& name) const
 #else
     libExtension = ".so";
 #endif
+    
+    QFileInfo bundledPluginsDirInfo(pluginsDirectory());
+    bool shouldCheckUserDir = !bundledPluginsDirInfo.isWritable();
+    
+    if (isQmlPlugin(name)) {
+        if (shouldCheckUserDir) {
+            QString userPath = userPluginsDirectory() + "/" + name;
+            if (QFileInfo::exists(userPath)) {
+                return userPath;
+            }
+        }
+        
+        return pluginsDirectory() + "/" + name;
+    }
+
+    if (shouldCheckUserDir) {
+        QString userPluginPath = userPluginsDirectory() + "/" + name + libExtension;
+        if (QFile::exists(userPluginPath)) {
+            return userPluginPath;
+        }
+    }
     
     return pluginsDirectory() + "/" + name + libExtension;
 }
