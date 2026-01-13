@@ -214,14 +214,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1768007882,
-        "narHash": "sha256-tDYMuJl+N8yn9TuHIScSYR3tc1QOfVEIjMlnwEpboRE=",
-        "path": "/Users/iurimatias/Projects/Logos/LogosCore/logos-package-manager",
-        "type": "path"
+        "lastModified": 1768331095,
+        "narHash": "sha256-oNPBVKnWi47NRIFAA9/DATz4sUN8lxQB0l1nDQd2lVo=",
+        "owner": "logos-co",
+        "repo": "logos-package-manager",
+        "rev": "754db0ac021db9c1e5a4a6d8d2fcf8e92dac6857",
+        "type": "github"
       },
       "original": {
-        "path": "/Users/iurimatias/Projects/Logos/LogosCore/logos-package-manager",
-        "type": "path"
+        "owner": "logos-co",
+        "repo": "logos-package-manager",
+        "type": "github"
       }
     },
     "nixpkgs": {

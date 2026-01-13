@@ -33,52 +33,8 @@ Item {
 
             Button {
                 text: "Reload"
+                enabled: !backend.isInstalling
                 onClicked: backend.reload()
-
-                contentItem: Text {
-                    text: parent.text
-                    font.pixelSize: 13
-                    color: "#ffffff"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                background: Rectangle {
-                    implicitWidth: 100
-                    implicitHeight: 32
-                    color: parent.pressed ? "#3d3d3d" : "#4d4d4d"
-                    radius: 4
-                    border.color: "#5d5d5d"
-                    border.width: 1
-                }
-            }
-
-            Button {
-                text: "Test Call"
-                onClicked: backend.testPluginCall()
-
-                contentItem: Text {
-                    text: parent.text
-                    font.pixelSize: 13
-                    color: "#ffffff"
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                background: Rectangle {
-                    implicitWidth: 100
-                    implicitHeight: 32
-                    color: parent.pressed ? "#3d3d3d" : "#4d4d4d"
-                    radius: 4
-                    border.color: "#5d5d5d"
-                    border.width: 1
-                }
-            }
-
-            Button {
-                text: "Install"
-                enabled: backend.hasSelectedPackages
-                onClicked: backend.install()
 
                 contentItem: Text {
                     text: parent.text
@@ -91,10 +47,93 @@ Item {
                 background: Rectangle {
                     implicitWidth: 100
                     implicitHeight: 32
+                    color: parent.enabled ? (parent.pressed ? "#3d3d3d" : "#4d4d4d") : "#2d2d2d"
+                    radius: 4
+                    border.color: parent.enabled ? "#5d5d5d" : "#3d3d3d"
+                    border.width: 1
+                }
+            }
+
+            Button {
+                text: "Test Call"
+                enabled: !backend.isInstalling
+                onClicked: backend.testPluginCall()
+
+                contentItem: Text {
+                    text: parent.text
+                    font.pixelSize: 13
+                    color: parent.enabled ? "#ffffff" : "#808080"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                background: Rectangle {
+                    implicitWidth: 100
+                    implicitHeight: 32
+                    color: parent.enabled ? (parent.pressed ? "#3d3d3d" : "#4d4d4d") : "#2d2d2d"
+                    radius: 4
+                    border.color: parent.enabled ? "#5d5d5d" : "#3d3d3d"
+                    border.width: 1
+                }
+            }
+
+            Button {
+                text: backend.isInstalling ? "Installing..." : "Install"
+                enabled: backend.hasSelectedPackages && !backend.isInstalling
+                onClicked: backend.install()
+
+                contentItem: Row {
+                    spacing: 6
+                    anchors.centerIn: parent
+                    
+                    Rectangle {
+                        id: spinner
+                        width: 14
+                        height: 14
+                        radius: 7
+                        color: "transparent"
+                        border.color: "#ffffff"
+                        border.width: 2
+                        visible: backend.isInstalling
+                        
+                        Rectangle {
+                            width: 4
+                            height: 4
+                            radius: 2
+                            color: "#ffffff"
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.top: parent.top
+                            anchors.topMargin: 1
+                        }
+                        
+                        RotationAnimation on rotation {
+                            from: 0
+                            to: 360
+                            duration: 1000
+                            loops: Animation.Infinite
+                            running: backend.isInstalling
+                        }
+                    }
+                    
+                    Text {
+                        text: backend.isInstalling ? "Installing..." : "Install"
+                        font.pixelSize: 13
+                        color: parent.parent.enabled ? "#ffffff" : "#808080"
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+
+                background: Rectangle {
+                    implicitWidth: backend.isInstalling ? 130 : 100
+                    implicitHeight: 32
                     color: parent.enabled ? (parent.pressed ? "#1a7f37" : "#238636") : "#2d2d2d"
                     radius: 4
                     border.color: parent.enabled ? "#2ea043" : "#3d3d3d"
                     border.width: 1
+                    
+                    Behavior on implicitWidth {
+                        NumberAnimation { duration: 150 }
+                    }
                 }
             }
 

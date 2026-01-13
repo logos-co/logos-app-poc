@@ -16,6 +16,7 @@ class PackageManagerBackend : public QObject {
     Q_PROPERTY(int selectedCategoryIndex READ selectedCategoryIndex WRITE setSelectedCategoryIndex NOTIFY selectedCategoryIndexChanged)
     Q_PROPERTY(QString detailsHtml READ detailsHtml NOTIFY detailsHtmlChanged)
     Q_PROPERTY(bool hasSelectedPackages READ hasSelectedPackages NOTIFY hasSelectedPackagesChanged)
+    Q_PROPERTY(bool isInstalling READ isInstalling NOTIFY isInstallingChanged)
 
 public:
     explicit PackageManagerBackend(LogosAPI* logosAPI = nullptr, QObject* parent = nullptr);
@@ -27,6 +28,7 @@ public:
     void setSelectedCategoryIndex(int index);
     QString detailsHtml() const;
     bool hasSelectedPackages() const;
+    bool isInstalling() const;
 
 public slots:
     void reload();
@@ -41,6 +43,7 @@ signals:
     void selectedCategoryIndexChanged();
     void detailsHtmlChanged();
     void hasSelectedPackagesChanged();
+    void isInstallingChanged();
     void packagesInstalled();
     void packageInstalled(const QString& packageName);
 
@@ -65,6 +68,9 @@ private:
     void updateFilteredPackages();
     void selectDependencies(const QString& packageName, QSet<QString>& processedPackages);
     void updateHasSelectedPackages();
+    void subscribeToInstallationEvents();
+    void onPackageInstallationFinished(const QString& packageName, bool success, const QString& error);
+    void installNextPackage();
 
     QMap<QString, PackageInfo> m_allPackages;
     QVariantList m_filteredPackages;
@@ -74,4 +80,9 @@ private:
     bool m_hasSelectedPackages;
     bool m_isProcessingDependencies;
     LogosAPI* m_logosAPI;
+    
+    bool m_isInstalling;
+    QStringList m_pendingPackages;
+    QStringList m_successfulPackages;
+    QStringList m_failedPackages;
 };

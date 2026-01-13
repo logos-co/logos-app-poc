@@ -19,8 +19,10 @@ PackageManagerBackend::PackageManagerBackend(LogosAPI* logosAPI, QObject* parent
     , m_hasSelectedPackages(false)
     , m_isProcessingDependencies(false)
     , m_logosAPI(logosAPI)
+    , m_isInstalling(false)
 {
     m_categories << "All";
+    subscribeToInstallationEvents();
     scanPackagesFolder();
 }
 
@@ -58,82 +60,165 @@ bool PackageManagerBackend::hasSelectedPackages() const
     return m_hasSelectedPackages;
 }
 
+bool PackageManagerBackend::isInstalling() const
+{
+    return m_isInstalling;
+}
+
 void PackageManagerBackend::reload()
 {
     scanPackagesFolder();
 }
 
+void PackageManagerBackend::subscribeToInstallationEvents()
+{
+    if (!m_logosAPI) {
+        qDebug() << "PackageManagerBackend: LogosAPI not available for event subscription";
+        return;
+    }
+    
+    LogosAPIClient* client = m_logosAPI->getClient("package_manager");
+    if (!client || !client->isConnected()) {
+        qDebug() << "PackageManagerBackend: package_manager client not connected for event subscription";
+        return;
+    }
+    
+    LogosModules logos(m_logosAPI);
+    bool subscribed = logos.package_manager.on("packageInstallationFinished", [this](const QVariantList& data) {
+        if (data.size() < 3) {
+            qWarning() << "PackageManagerBackend: packageInstallationFinished event missing fields";
+            return;
+        }
+        QString packageName = data[0].toString();
+        bool success = data[1].toBool();
+        QString error = data[2].toString();
+        
+        qDebug() << "PackageManagerBackend: Received packageInstallationFinished event:"
+                 << packageName << success << error;
+        
+        QTimer::singleShot(0, this, [this, packageName, success, error]() {
+            onPackageInstallationFinished(packageName, success, error);
+        });
+    });
+    
+    if (subscribed) {
+        qDebug() << "PackageManagerBackend: Successfully subscribed to packageInstallationFinished events";
+    } else {
+        qWarning() << "PackageManagerBackend: Failed to subscribe to packageInstallationFinished events";
+    }
+}
+
+void PackageManagerBackend::onPackageInstallationFinished(const QString& packageName, bool success, const QString& error)
+{
+    qDebug() << "PackageManagerBackend: Processing installation result for" << packageName
+             << "success:" << success << "error:" << error;
+    
+    if (success) {
+        m_successfulPackages << packageName;
+        emit packageInstalled(packageName);
+    } else {
+        QString failureReason = error.isEmpty() ? "installation failed" : error;
+        m_failedPackages << packageName + " (" + failureReason + ")";
+    }
+    
+    installNextPackage();
+}
+
+void PackageManagerBackend::installNextPackage()
+{
+    if (m_pendingPackages.isEmpty()) {
+        m_isInstalling = false;
+        emit isInstallingChanged();
+        
+        QString resultText = "<h3>Installation Results</h3>";
+
+        if (!m_successfulPackages.isEmpty()) {
+            resultText += "<p><b>Successfully installed:</b></p><ul>";
+            for (const QString& plugin : m_successfulPackages) {
+                resultText += "<li>" + plugin + "</li>";
+            }
+            resultText += "</ul>";
+        }
+
+        if (!m_failedPackages.isEmpty()) {
+            resultText += "<p><b>Failed to install:</b></p><ul>";
+            for (const QString& plugin : m_failedPackages) {
+                resultText += "<li>" + plugin + "</li>";
+            }
+            resultText += "</ul>";
+        }
+
+        if (!m_successfulPackages.isEmpty()) {
+            emit packagesInstalled();
+        }
+
+        m_detailsHtml = resultText;
+        emit detailsHtmlChanged();
+
+        scanPackagesFolder();
+        return;
+    }
+    
+    QString packageName = m_pendingPackages.takeFirst();
+    
+    if (!m_allPackages.contains(packageName)) {
+        m_failedPackages << packageName + " (package not found)";
+        installNextPackage();
+        return;
+    }
+    
+    if (!m_logosAPI || !m_logosAPI->getClient("package_manager")->isConnected()) {
+        m_failedPackages << packageName + " (package_manager not connected)";
+        installNextPackage();
+        return;
+    }
+    
+    m_detailsHtml = QString("<h3>Installing...</h3><p>Installing package: <b>%1</b></p><p>%2 package(s) remaining in queue.</p>")
+        .arg(packageName)
+        .arg(m_pendingPackages.size());
+    emit detailsHtmlChanged();
+    
+    LogosModules logos(m_logosAPI);
+    QDir appDir(QCoreApplication::applicationDirPath());
+    appDir.cdUp();
+    QString pluginsDir = QDir::cleanPath(appDir.absolutePath() + "/modules");
+    
+    qDebug() << "PackageManagerBackend: Starting async installation of" << packageName;
+    logos.package_manager.installPackageAsync(packageName, pluginsDir);
+}
+
 void PackageManagerBackend::install()
 {
-    QList<QString> selectedPackages;
+    if (m_isInstalling) {
+        m_detailsHtml = "<p><b>Installation already in progress.</b> Please wait for it to complete.</p>";
+        emit detailsHtmlChanged();
+        return;
+    }
+    
+    m_pendingPackages.clear();
+    m_successfulPackages.clear();
+    m_failedPackages.clear();
     
     for (auto it = m_allPackages.begin(); it != m_allPackages.end(); ++it) {
         if (it.value().isSelected) {
-            selectedPackages << it.key();
+            m_pendingPackages << it.key();
         }
     }
 
-    if (selectedPackages.isEmpty()) {
+    if (m_pendingPackages.isEmpty()) {
         m_detailsHtml = "No packages selected. Select at least one package to install.";
         emit detailsHtmlChanged();
         return;
     }
 
-    QStringList successfulPlugins;
-    QStringList failedPlugins;
-
-    for (const QString& packageName : selectedPackages) {
-        if (!m_allPackages.contains(packageName)) {
-            failedPlugins << packageName + " (package not found)";
-            continue;
-        }
-
-        bool installSuccess = false;
-        if (m_logosAPI && m_logosAPI->getClient("package_manager")->isConnected()) {
-            LogosModules logos(m_logosAPI);
-            QDir appDir(QCoreApplication::applicationDirPath());
-            appDir.cdUp();
-            QString pluginsDir = QDir::cleanPath(appDir.absolutePath() + "/modules");
-            installSuccess = logos.package_manager.installPackage(packageName, pluginsDir);
-        } else {
-            failedPlugins << packageName + " (package_manager not connected)";
-            continue;
-        }
-
-        if (installSuccess) {
-            successfulPlugins << packageName;
-            emit packageInstalled(packageName);
-        } else {
-            failedPlugins << packageName + " (installation failed)";
-        }
-    }
-
-    QString resultText = "<h3>Installation Results</h3>";
-
-    if (!successfulPlugins.isEmpty()) {
-        resultText += "<p><b>Successfully installed:</b></p><ul>";
-        for (const QString& plugin : successfulPlugins) {
-            resultText += "<li>" + plugin + "</li>";
-        }
-        resultText += "</ul>";
-    }
-
-    if (!failedPlugins.isEmpty()) {
-        resultText += "<p><b>Failed to install:</b></p><ul>";
-        for (const QString& plugin : failedPlugins) {
-            resultText += "<li>" + plugin + "</li>";
-        }
-        resultText += "</ul>";
-    }
-
-    if (!successfulPlugins.isEmpty()) {
-        emit packagesInstalled();
-    }
-
-    m_detailsHtml = resultText;
+    m_isInstalling = true;
+    emit isInstallingChanged();
+    
+    m_detailsHtml = QString("<h3>Starting Installation...</h3><p>%1 package(s) to install.</p>")
+        .arg(m_pendingPackages.size());
     emit detailsHtmlChanged();
-
-    scanPackagesFolder();
+    
+    installNextPackage();
 }
 
 void PackageManagerBackend::testPluginCall()
@@ -303,13 +388,11 @@ void PackageManagerBackend::scanPackagesFolder()
         QString installedVersion = "";
         QString latestVersion = "";
         
-        // Use category from API, fallback to "Module" if empty
         if (category.isEmpty()) {
             category = "Module";
         }
         categorySet.insert(category);
 
-        // Use type from API, fallback to "Plugin" if empty
         if (type.isEmpty()) {
             type = "Plugin";
         }
@@ -370,7 +453,7 @@ void PackageManagerBackend::addFallbackPackages()
                          const QString& desc, bool selected = false) {
         PackageInfo info;
         info.name = name;
-        info.moduleName = name; // Use name as moduleName for fallback packages
+        info.moduleName = name;
         info.installedVersion = installedVer;
         info.latestVersion = latestVer;
         info.type = type;
