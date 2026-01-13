@@ -87,6 +87,7 @@ signals:
 
 private:
     void initializeSidebarItems();
+    void subscribeToPackageInstallationEvents();
     QStringList findAvailableUiPlugins() const;
     QString getPluginPath(const QString& name) const;
     QString pluginsDirectory() const;

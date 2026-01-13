@@ -49,6 +49,8 @@ MainUIBackend::MainUIBackend(LogosAPI* logosAPI, QObject* parent)
     refreshCoreModules();
     refreshLauncherApps();
     
+    subscribeToPackageInstallationEvents();
+    
     qDebug() << "MainUIBackend created";
 }
 
@@ -63,6 +65,50 @@ MainUIBackend::~MainUIBackend()
 
     for (const QString& name : moduleNames) {
         unloadUiModule(name);
+    }
+}
+
+void MainUIBackend::subscribeToPackageInstallationEvents()
+{
+    if (!m_logosAPI) {
+        qDebug() << "MainUIBackend: LogosAPI not available for event subscription";
+        return;
+    }
+    
+    LogosAPIClient* client = m_logosAPI->getClient("package_manager");
+    if (!client || !client->isConnected()) {
+        qDebug() << "MainUIBackend: package_manager client not connected for event subscription";
+        return;
+    }
+    
+    LogosModules logos(m_logosAPI);
+    bool subscribed = logos.package_manager.on("packageInstallationFinished", [this](const QVariantList& data) {
+        if (data.size() < 3) {
+            qWarning() << "MainUIBackend: packageInstallationFinished event missing fields";
+            return;
+        }
+        QString packageName = data[0].toString();
+        bool success = data[1].toBool();
+        QString error = data[2].toString();
+        
+        qDebug() << "MainUIBackend: Received packageInstallationFinished event:"
+                 << packageName << success << error;
+        
+        if (success) {
+            // Refresh module lists when a package is successfully installed
+            QTimer::singleShot(100, this, [this]() {
+                qDebug() << "MainUIBackend: Refreshing module lists after package installation";
+                refreshUiModules();
+                refreshCoreModules();
+                refreshLauncherApps();
+            });
+        }
+    });
+    
+    if (subscribed) {
+        qDebug() << "MainUIBackend: Successfully subscribed to packageInstallationFinished events";
+    } else {
+        qWarning() << "MainUIBackend: Failed to subscribe to packageInstallationFinished events";
     }
 }
 
@@ -426,19 +472,32 @@ void MainUIBackend::unloadCoreModule(const QString& moduleName)
 
 void MainUIBackend::refreshCoreModules()
 {
+    QString libExtension;
+#if defined(Q_OS_MAC)
+    libExtension = "*.dylib";
+#elif defined(Q_OS_WIN)
+    libExtension = "*.dll";
+#else
+    libExtension = "*.so";
+#endif
+    
+    // Scan bundled modules directory
     QDir modulesDir(modulesDirectory());
     if (modulesDir.exists()) {
-        QString libExtension;
-#if defined(Q_OS_MAC)
-        libExtension = "*.dylib";
-#elif defined(Q_OS_WIN)
-        libExtension = "*.dll";
-#else
-        libExtension = "*.so";
-#endif
         QStringList entries = modulesDir.entryList(QStringList() << libExtension, QDir::Files);
         for (const QString& entry : entries) {
             QString fullPath = modulesDir.absoluteFilePath(entry);
+            logos_core_process_plugin(fullPath.toUtf8().constData());
+        }
+    }
+    
+    // Scan user modules directory
+    QString userModulesDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/modules";
+    QDir userModulesDirObj(userModulesDir);
+    if (userModulesDirObj.exists()) {
+        QStringList entries = userModulesDirObj.entryList(QStringList() << libExtension, QDir::Files);
+        for (const QString& entry : entries) {
+            QString fullPath = userModulesDirObj.absoluteFilePath(entry);
             logos_core_process_plugin(fullPath.toUtf8().constData());
         }
     }
