@@ -62,7 +62,7 @@ public slots:
     // Core Module operations
     void loadCoreModule(const QString& moduleName);
     void unloadCoreModule(const QString& moduleName);
-    void refreshCoreModules();
+    Q_INVOKABLE void refreshCoreModules();
     Q_INVOKABLE QString getCoreModuleMethods(const QString& moduleName);
     Q_INVOKABLE QString callCoreModuleMethod(const QString& moduleName, const QString& methodName, const QString& argsJson);
     
@@ -90,6 +90,7 @@ private:
     QStringList findAvailableUiPlugins() const;
     QString getPluginPath(const QString& name) const;
     QString pluginsDirectory() const;
+    QString modulesDirectory() const;
     bool isQmlPlugin(const QString& name) const;
     QJsonObject readQmlPluginMetadata(const QString& pluginName) const;
     void updateModuleStats();

@@ -8,6 +8,16 @@ Item {
     property string selectedPlugin: ""
     property bool showingMethods: false
 
+    onVisibleChanged: {
+        if (visible) {
+            backend.refreshCoreModules();
+        }
+    }
+
+    Component.onCompleted: {
+        backend.refreshCoreModules();
+    }
+
     StackLayout {
         anchors.fill: parent
         currentIndex: root.showingMethods ? 1 : 0
@@ -16,17 +26,49 @@ Item {
         ColumnLayout {
             spacing: 20
 
-            Text {
-                text: "Core Modules"
-                font.pixelSize: 20
-                font.bold: true
-                color: "#ffffff"
-            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 10
 
-            Text {
-                text: "All available plugins in the system"
-                font.pixelSize: 14
-                color: "#a0a0a0"
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 4
+
+                    Text {
+                        text: "Core Modules"
+                        font.pixelSize: 20
+                        font.bold: true
+                        color: "#ffffff"
+                    }
+
+                    Text {
+                        text: "All available plugins in the system"
+                        font.pixelSize: 14
+                        color: "#a0a0a0"
+                    }
+                }
+
+                Button {
+                    text: "Reload"
+                    onClicked: backend.refreshCoreModules()
+
+                    contentItem: Text {
+                        text: parent.text
+                        font.pixelSize: 13
+                        color: "#ffffff"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    background: Rectangle {
+                        implicitWidth: 100
+                        implicitHeight: 32
+                        color: parent.pressed ? "#3d3d3d" : "#4d4d4d"
+                        radius: 4
+                        border.color: "#5d5d5d"
+                        border.width: 1
+                    }
+                }
             }
 
             Rectangle {
