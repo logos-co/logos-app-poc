@@ -166,17 +166,14 @@
         ]
       },
       "locked": {
-        "lastModified": 1767722338,
-        "narHash": "sha256-89RYfnramvJRufy47Kdx662TMHaFVSpS88ouWff3Csw=",
-        "owner": "logos-co",
-        "repo": "logos-liblogos",
-        "rev": "ca1fda7cabd70027e51d86392f5e29b3fff385f9",
-        "type": "github"
+        "lastModified": 1768339322,
+        "narHash": "sha256-k2GI/rskeNdw7lj0zlQcaFkdFBDyJowZKPofYe7t5Fc=",
+        "path": "/Users/iurimatias/Projects/Logos/LogosCore/logos-liblogos",
+        "type": "path"
       },
       "original": {
-        "owner": "logos-co",
-        "repo": "logos-liblogos",
-        "type": "github"
+        "path": "/Users/iurimatias/Projects/Logos/LogosCore/logos-liblogos",
+        "type": "path"
       }
     },
     "logos-liblogos_3": {
@@ -214,7 +211,7 @@
         ]
       },
       "locked": {
-        "lastModified": 1768334943,
+        "lastModified": 1768335418,
         "narHash": "sha256-uJyXAUhWVPXwdidps2HZGHUxcw6Kr7gru0WMh4atONQ=",
         "path": "/Users/iurimatias/Projects/Logos/LogosCore/logos-package-manager",
         "type": "path"
