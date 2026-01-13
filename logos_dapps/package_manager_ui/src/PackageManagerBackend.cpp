@@ -74,46 +74,31 @@ void PackageManagerBackend::reload()
 void PackageManagerBackend::subscribeToInstallationEvents()
 {
     if (!m_logosAPI) {
-        qDebug() << "PackageManagerBackend: LogosAPI not available for event subscription";
         return;
     }
     
     LogosAPIClient* client = m_logosAPI->getClient("package_manager");
     if (!client || !client->isConnected()) {
-        qDebug() << "PackageManagerBackend: package_manager client not connected for event subscription";
         return;
     }
     
     LogosModules logos(m_logosAPI);
-    bool subscribed = logos.package_manager.on("packageInstallationFinished", [this](const QVariantList& data) {
+    logos.package_manager.on("packageInstallationFinished", [this](const QVariantList& data) {
         if (data.size() < 3) {
-            qWarning() << "PackageManagerBackend: packageInstallationFinished event missing fields";
             return;
         }
         QString packageName = data[0].toString();
         bool success = data[1].toBool();
         QString error = data[2].toString();
         
-        qDebug() << "PackageManagerBackend: Received packageInstallationFinished event:"
-                 << packageName << success << error;
-        
         QTimer::singleShot(0, this, [this, packageName, success, error]() {
             onPackageInstallationFinished(packageName, success, error);
         });
     });
-    
-    if (subscribed) {
-        qDebug() << "PackageManagerBackend: Successfully subscribed to packageInstallationFinished events";
-    } else {
-        qWarning() << "PackageManagerBackend: Failed to subscribe to packageInstallationFinished events";
-    }
 }
 
 void PackageManagerBackend::onPackageInstallationFinished(const QString& packageName, bool success, const QString& error)
 {
-    qDebug() << "PackageManagerBackend: Processing installation result for" << packageName
-             << "success:" << success << "error:" << error;
-    
     if (success) {
         m_successfulPackages << packageName;
         emit packageInstalled(packageName);
@@ -180,10 +165,19 @@ void PackageManagerBackend::installNextPackage()
     emit detailsHtmlChanged();
     
     LogosModules logos(m_logosAPI);
-    // Use writable location for plugin installation (especially important for DMG builds)
-    QString pluginsDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/modules";
     
-    qDebug() << "PackageManagerBackend: Starting async installation of" << packageName;
+    QDir appDir(QCoreApplication::applicationDirPath());
+    appDir.cdUp();
+    QString bundledModulesDir = QDir::cleanPath(appDir.absolutePath() + "/modules");
+    
+    QString pluginsDir;
+    QFileInfo bundledDirInfo(bundledModulesDir);
+    if (bundledDirInfo.exists() && bundledDirInfo.isWritable()) {
+        pluginsDir = bundledModulesDir;
+    } else {
+        pluginsDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/modules";
+    }
+    
     logos.package_manager.installPackageAsync(packageName, pluginsDir);
 }
 
@@ -342,7 +336,6 @@ void PackageManagerBackend::scanPackagesFolder()
     QJsonArray packagesArray;
     if (m_logosAPI && m_logosAPI->getClient("package_manager")->isConnected()) {
         LogosModules logos(m_logosAPI);
-        // For scanning, use the bundled modules directory first
         QDir appDir(QCoreApplication::applicationDirPath());
         appDir.cdUp();
         QString modulesDir = QDir::cleanPath(appDir.absolutePath() + "/modules");

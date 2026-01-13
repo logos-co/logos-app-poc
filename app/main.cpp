@@ -44,15 +44,14 @@ int main(int argc, char *argv[])
     // Create QApplication first
     QApplication app(argc, argv);
 
-    // Set the bundled modules directory (for pre-installed modules)
     QString modulesDir = QDir::cleanPath(QCoreApplication::applicationDirPath() + "/../modules");
-    std::cout << "Setting bundled modules directory to: " << modulesDir.toStdString() << std::endl;
     logos_core_set_plugins_dir(modulesDir.toUtf8().constData());
 
-    // Add user data modules directory (for user-installed modules)
-    QString userModulesDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/modules";
-    std::cout << "Adding user modules directory to: " << userModulesDir.toStdString() << std::endl;
-    logos_core_add_plugins_dir(userModulesDir.toUtf8().constData());
+    QFileInfo bundledDirInfo(modulesDir);
+    if (!bundledDirInfo.isWritable()) {
+        QString userModulesDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/modules";
+        logos_core_add_plugins_dir(userModulesDir.toUtf8().constData());
+    }
 
     // Start the core
     logos_core_start();

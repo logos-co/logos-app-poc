@@ -71,45 +71,29 @@ MainUIBackend::~MainUIBackend()
 void MainUIBackend::subscribeToPackageInstallationEvents()
 {
     if (!m_logosAPI) {
-        qDebug() << "MainUIBackend: LogosAPI not available for event subscription";
         return;
     }
     
     LogosAPIClient* client = m_logosAPI->getClient("package_manager");
     if (!client || !client->isConnected()) {
-        qDebug() << "MainUIBackend: package_manager client not connected for event subscription";
         return;
     }
     
     LogosModules logos(m_logosAPI);
-    bool subscribed = logos.package_manager.on("packageInstallationFinished", [this](const QVariantList& data) {
+    logos.package_manager.on("packageInstallationFinished", [this](const QVariantList& data) {
         if (data.size() < 3) {
-            qWarning() << "MainUIBackend: packageInstallationFinished event missing fields";
             return;
         }
-        QString packageName = data[0].toString();
         bool success = data[1].toBool();
-        QString error = data[2].toString();
-        
-        qDebug() << "MainUIBackend: Received packageInstallationFinished event:"
-                 << packageName << success << error;
         
         if (success) {
-            // Refresh module lists when a package is successfully installed
             QTimer::singleShot(100, this, [this]() {
-                qDebug() << "MainUIBackend: Refreshing module lists after package installation";
                 refreshUiModules();
                 refreshCoreModules();
                 refreshLauncherApps();
             });
         }
     });
-    
-    if (subscribed) {
-        qDebug() << "MainUIBackend: Successfully subscribed to packageInstallationFinished events";
-    } else {
-        qWarning() << "MainUIBackend: Failed to subscribe to packageInstallationFinished events";
-    }
 }
 
 void MainUIBackend::initializeSidebarItems()
@@ -481,7 +465,6 @@ void MainUIBackend::refreshCoreModules()
     libExtension = "*.so";
 #endif
     
-    // Scan bundled modules directory
     QDir modulesDir(modulesDirectory());
     if (modulesDir.exists()) {
         QStringList entries = modulesDir.entryList(QStringList() << libExtension, QDir::Files);
@@ -491,14 +474,16 @@ void MainUIBackend::refreshCoreModules()
         }
     }
     
-    // Scan user modules directory
-    QString userModulesDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/modules";
-    QDir userModulesDirObj(userModulesDir);
-    if (userModulesDirObj.exists()) {
-        QStringList entries = userModulesDirObj.entryList(QStringList() << libExtension, QDir::Files);
-        for (const QString& entry : entries) {
-            QString fullPath = userModulesDirObj.absoluteFilePath(entry);
-            logos_core_process_plugin(fullPath.toUtf8().constData());
+    QFileInfo bundledDirInfo(modulesDirectory());
+    if (!bundledDirInfo.isWritable()) {
+        QString userModulesDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/modules";
+        QDir userModulesDirObj(userModulesDir);
+        if (userModulesDirObj.exists()) {
+            QStringList entries = userModulesDirObj.entryList(QStringList() << libExtension, QDir::Files);
+            for (const QString& entry : entries) {
+                QString fullPath = userModulesDirObj.absoluteFilePath(entry);
+                logos_core_process_plugin(fullPath.toUtf8().constData());
+            }
         }
     }
     
@@ -620,11 +605,11 @@ QString MainUIBackend::modulesDirectory() const
 
 QJsonObject MainUIBackend::readQmlPluginMetadata(const QString& pluginName) const
 {
-    // Check user directory first (takes precedence)
-    QString userMetadataPath = userPluginsDirectory() + "/" + pluginName + "/metadata.json";
-    QFile userMetadataFile(userMetadataPath);
-    if (userMetadataFile.exists()) {
-        if (userMetadataFile.open(QIODevice::ReadOnly)) {
+    QFileInfo bundledPluginsDirInfo(pluginsDirectory());
+    if (!bundledPluginsDirInfo.isWritable()) {
+        QString userMetadataPath = userPluginsDirectory() + "/" + pluginName + "/metadata.json";
+        QFile userMetadataFile(userMetadataPath);
+        if (userMetadataFile.exists() && userMetadataFile.open(QIODevice::ReadOnly)) {
             QJsonParseError parseError;
             QJsonDocument doc = QJsonDocument::fromJson(userMetadataFile.readAll(), &parseError);
             if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
@@ -633,7 +618,6 @@ QJsonObject MainUIBackend::readQmlPluginMetadata(const QString& pluginName) cons
         }
     }
     
-    // Fall back to bundled directory
     QString metadataPath = pluginsDirectory() + "/" + pluginName + "/metadata.json";
     QFile metadataFile(metadataPath);
     if (!metadataFile.exists()) {
@@ -668,16 +652,12 @@ QStringList MainUIBackend::findAvailableUiPlugins() const
 {
     QStringList plugins;
 
-    // Helper lambda to scan a directory and add plugins
     auto scanDirectory = [&](const QString& dirPath) {
         QDir pluginsDir(dirPath);
         
         if (!pluginsDir.exists()) {
-            qDebug() << "Plugins directory does not exist:" << dirPath;
             return;
         }
-        
-        qDebug() << "Scanning plugins directory:" << dirPath;
 
         auto addPlugin = [&](const QString& name) {
             if (!plugins.contains(name)) {
@@ -685,7 +665,6 @@ QStringList MainUIBackend::findAvailableUiPlugins() const
             }
         };
 
-        // Scan for QML plugins (directories with metadata.json)
         QStringList dirEntries = pluginsDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
         for (const QString& entry : dirEntries) {
             QJsonObject metadata = readQmlPluginMetadata(entry);
@@ -695,7 +674,6 @@ QStringList MainUIBackend::findAvailableUiPlugins() const
             }
         }
         
-        // Scan for native plugins (.dylib, .so, .dll files)
         QStringList entries = pluginsDir.entryList(QDir::Files);
         
         QString libExtension;
@@ -724,13 +702,13 @@ QStringList MainUIBackend::findAvailableUiPlugins() const
         }
     };
     
-    // Scan bundled plugins directory
     scanDirectory(pluginsDirectory());
     
-    // Scan user plugins directory
-    scanDirectory(userPluginsDirectory());
+    QFileInfo bundledPluginsDirInfo(pluginsDirectory());
+    if (!bundledPluginsDirInfo.isWritable()) {
+        scanDirectory(userPluginsDirectory());
+    }
     
-    qDebug() << "Found total UI plugins:" << plugins.size() << plugins;
     return plugins;
 }
 
@@ -745,41 +723,28 @@ QString MainUIBackend::getPluginPath(const QString& name) const
     libExtension = ".so";
 #endif
     
+    QFileInfo bundledPluginsDirInfo(pluginsDirectory());
+    bool shouldCheckUserDir = !bundledPluginsDirInfo.isWritable();
+    
     if (isQmlPlugin(name)) {
-        // Check user directory first (takes precedence)
-        QString userPath = userPluginsDirectory() + "/" + name;
-        if (QFileInfo::exists(userPath)) {
-            qDebug() << "Using user plugin:" << userPath;
-            return userPath;
+        if (shouldCheckUserDir) {
+            QString userPath = userPluginsDirectory() + "/" + name;
+            if (QFileInfo::exists(userPath)) {
+                return userPath;
+            }
         }
         
-        // Fall back to bundled directory
-        QString bundledPath = pluginsDirectory() + "/" + name;
-        if (QFileInfo::exists(bundledPath)) {
-            qDebug() << "Using bundled plugin:" << bundledPath;
-            return bundledPath;
-        }
-        
-        // Return bundled path as default
-        return bundledPath;
+        return pluginsDirectory() + "/" + name;
     }
 
-    // For native plugins, check user directory first
-    QString userPluginPath = userPluginsDirectory() + "/" + name + libExtension;
-    if (QFile::exists(userPluginPath)) {
-        qDebug() << "Using user plugin:" << userPluginPath;
-        return userPluginPath;
+    if (shouldCheckUserDir) {
+        QString userPluginPath = userPluginsDirectory() + "/" + name + libExtension;
+        if (QFile::exists(userPluginPath)) {
+            return userPluginPath;
+        }
     }
     
-    // Fall back to bundled directory
-    QString bundledPluginPath = pluginsDirectory() + "/" + name + libExtension;
-    if (QFile::exists(bundledPluginPath)) {
-        qDebug() << "Using bundled plugin:" << bundledPluginPath;
-        return bundledPluginPath;
-    }
-    
-    // Return bundled path as default
-    return bundledPluginPath;
+    return pluginsDirectory() + "/" + name + libExtension;
 }
 
 QString MainUIBackend::getPluginIconPath(const QString& pluginPath) const
