@@ -58,6 +58,7 @@ public slots:
     void unloadUiModule(const QString& moduleName);
     void refreshUiModules();
     void activateApp(const QString& appName);
+    Q_INVOKABLE void installPluginFromPath(const QString& filePath);
     
     // Core Module operations
     void loadCoreModule(const QString& moduleName);

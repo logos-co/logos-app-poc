@@ -1,25 +1,81 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 
 Item {
     id: root
+
+    FileDialog {
+        id: pluginFileDialog
+        title: "Select Plugin to Install"
+        fileMode: FileDialog.OpenFile
+        nameFilters: {
+            if (Qt.platform.os === "osx" || Qt.platform.os === "macos") {
+                return ["Dynamic Library (*.dylib)"];
+            } else if (Qt.platform.os === "windows") {
+                return ["Dynamic Link Library (*.dll)"];
+            } else {
+                return ["Shared Object (*.so)"];
+            }
+        }
+        onAccepted: {
+            var filePath = selectedFile.toString();
+            // Remove file:// prefix if present
+            if (filePath.startsWith("file://")) {
+                filePath = filePath.substring(7);
+            }
+            backend.installPluginFromPath(filePath);
+        }
+    }
 
     ColumnLayout {
         anchors.fill: parent
         spacing: 20
 
-        Text {
-            text: "UI Modules"
-            font.pixelSize: 20
-            font.bold: true
-            color: "#ffffff"
-        }
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 10
 
-        Text {
-            text: "Available UI plugins in the system"
-            font.pixelSize: 14
-            color: "#a0a0a0"
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 4
+
+                Text {
+                    text: "UI Modules222"
+                    font.pixelSize: 20
+                    font.bold: true
+                    color: "#ffffff"
+                }
+
+                Text {
+                    text: "Available UI plugins in the system"
+                    font.pixelSize: 14
+                    color: "#a0a0a0"
+                }
+            }
+
+            Button {
+                text: "Install from Filesystem"
+                onClicked: pluginFileDialog.open()
+
+                contentItem: Text {
+                    text: parent.text
+                    font.pixelSize: 13
+                    color: "#ffffff"
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                background: Rectangle {
+                    implicitWidth: 180
+                    implicitHeight: 32
+                    color: parent.pressed ? "#1a7f37" : "#238636"
+                    radius: 4
+                    border.color: "#2ea043"
+                    border.width: 1
+                }
+            }
         }
 
         ScrollView {

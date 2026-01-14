@@ -588,6 +588,77 @@ void MainUIBackend::refreshLauncherApps()
     emit launcherAppsChanged();
 }
 
+void MainUIBackend::installPluginFromPath(const QString& filePath)
+{
+    qDebug() << "Installing plugin from path:" << filePath;
+    
+    if (filePath.isEmpty()) {
+        qWarning() << "Empty file path provided";
+        return;
+    }
+    
+    QFileInfo fileInfo(filePath);
+    if (!fileInfo.exists()) {
+        qWarning() << "Plugin file does not exist:" << filePath;
+        return;
+    }
+    
+    if (!fileInfo.isFile()) {
+        qWarning() << "Path is not a file:" << filePath;
+        return;
+    }
+    
+    // Validate file extension
+    QString libExtension;
+#if defined(Q_OS_MAC)
+    libExtension = ".dylib";
+#elif defined(Q_OS_WIN)
+    libExtension = ".dll";
+#else
+    libExtension = ".so";
+#endif
+    
+    if (!fileInfo.fileName().endsWith(libExtension)) {
+        qWarning() << "Invalid plugin file extension. Expected" << libExtension << "got:" << fileInfo.fileName();
+        return;
+    }
+    
+    // Create user plugins directory if it doesn't exist
+    QString userPluginsDir = userPluginsDirectory();
+    QDir dir;
+    if (!dir.exists(userPluginsDir)) {
+        if (!dir.mkpath(userPluginsDir)) {
+            qWarning() << "Failed to create user plugins directory:" << userPluginsDir;
+            return;
+        }
+        qDebug() << "Created user plugins directory:" << userPluginsDir;
+    }
+    
+    // Copy plugin to user plugins directory
+    QString targetPath = userPluginsDir + "/" + fileInfo.fileName();
+    
+    // Remove existing file if it exists
+    if (QFile::exists(targetPath)) {
+        qDebug() << "Removing existing plugin:" << targetPath;
+        if (!QFile::remove(targetPath)) {
+            qWarning() << "Failed to remove existing plugin:" << targetPath;
+            return;
+        }
+    }
+    
+    // Copy the file
+    if (!QFile::copy(filePath, targetPath)) {
+        qWarning() << "Failed to copy plugin from" << filePath << "to" << targetPath;
+        return;
+    }
+    
+    qDebug() << "Successfully installed plugin:" << targetPath;
+    
+    // Refresh the UI modules list
+    emit uiModulesChanged();
+    emit launcherAppsChanged();
+}
+
 QString MainUIBackend::pluginsDirectory() const
 {
     return QCoreApplication::applicationDirPath() + "/../plugins";
