@@ -1,17 +1,18 @@
 #!/usr/bin/env groovy
 
-library 'status-jenkins-lib@logos-app'
+library 'status-jenkins-lib@v1.9.41'
 
 def isPRBuild = utils.isPRBuild()
 
 pipeline {
-  agent {
-    docker {
-      label 'linuxcontainer'
-      image 'harbor.status.im/infra/ci-build-containers:linux-base-1.0.0'
-      args '--volume=/nix:/nix ' +
-           '--volume=/etc/nix:/etc/nix '
-    }
+  agent { label "macos && ${getArch()} && nix-2.24" }
+
+  parameters {
+    booleanParam(
+      name: 'RELEASE',
+      description: 'Decides whether release credentials are used.',
+      defaultValue: params.RELEASE ?: false
+    )
   }
 
   options {
@@ -26,31 +27,33 @@ pipeline {
     disableConcurrentBuilds(
       abortPrevious: isPRBuild
     )
+    /* Allows combined build to copy */
+    copyArtifactPermission('/logos-app/*')
   }
 
   environment {
-    PLATFORM = "linux/${getArch()}"
-    ARTIFACT = "pkg/${utils.pkgFilename(name: 'LogosApp', ext: 'AppImage', arch: getArch())}"
+    PLATFORM = "macos/${getArch()}"
+    ARTIFACT = "pkg/${utils.pkgFilename(name: 'LogosApp', ext: 'dmg', arch: getArch())}"
   }
 
   stages {
-    stage('Build AppImage') {
+    stage('Build DMG') {
       steps { script {
-        nix.flake("appimage")
+        nix.flake("dmg")
       } }
     }
 
     stage('Package') {
       steps {
         sh 'mkdir -p pkg'
-        sh "cp result/LogosApp-*.AppImage '${env.ARTIFACT}'"
+        sh "cp result/LogosApp-*.dmg '${env.ARTIFACT}'"
       }
     }
 
     stage('Upload') {
       steps { script {
         env.PKG_URL = s5cmd.upload(env.ARTIFACT)
-        jenkins.setBuildDesc(AppImage: env.PKG_URL)
+        jenkins.setBuildDesc(DMG: env.PKG_URL)
       } }
     }
 
