@@ -67,6 +67,8 @@ public slots:
     Q_INVOKABLE void refreshCoreModules();
     Q_INVOKABLE QString getCoreModuleMethods(const QString& moduleName);
     Q_INVOKABLE QString callCoreModuleMethod(const QString& moduleName, const QString& methodName, const QString& argsJson);
+    Q_INVOKABLE void installCoreModuleFromPath(const QString& filePath);
+    Q_INVOKABLE void openInstallCoreModuleDialog();
     
     // App Launcher operations
     void onAppLauncherClicked(const QString& appName);
