@@ -1,33 +1,9 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Dialogs
 
 Item {
     id: root
-
-    FileDialog {
-        id: pluginFileDialog
-        title: "Select Plugin to Install"
-        fileMode: FileDialog.OpenFile
-        nameFilters: {
-            if (Qt.platform.os === "osx" || Qt.platform.os === "macos") {
-                return ["Dynamic Library (*.dylib)"];
-            } else if (Qt.platform.os === "windows") {
-                return ["Dynamic Link Library (*.dll)"];
-            } else {
-                return ["Shared Object (*.so)"];
-            }
-        }
-        onAccepted: {
-            var filePath = selectedFile.toString();
-            // Remove file:// prefix if present
-            if (filePath.startsWith("file://")) {
-                filePath = filePath.substring(7);
-            }
-            backend.installPluginFromPath(filePath);
-        }
-    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -42,7 +18,7 @@ Item {
                 spacing: 4
 
                 Text {
-                    text: "UI Modules222"
+                    text: "UI Modules"
                     font.pixelSize: 20
                     font.bold: true
                     color: "#ffffff"
@@ -57,7 +33,7 @@ Item {
 
             Button {
                 text: "Install from Filesystem"
-                onClicked: pluginFileDialog.open()
+                onClicked: backend.openInstallPluginDialog()
 
                 contentItem: Text {
                     text: parent.text

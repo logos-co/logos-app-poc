@@ -16,6 +16,7 @@
 #include <QQmlError>
 #include <QUrl>
 #include <QStandardPaths>
+#include <QFileDialog>
 #include "LogosQmlBridge.h"
 #include "logos_sdk.h"
 #include "token_manager.h"
@@ -586,6 +587,24 @@ void MainUIBackend::onAppLauncherClicked(const QString& appName)
 void MainUIBackend::refreshLauncherApps()
 {
     emit launcherAppsChanged();
+}
+
+void MainUIBackend::openInstallPluginDialog()
+{
+    QString filter;
+#if defined(Q_OS_MAC)
+    filter = "Dynamic Library (*.dylib)";
+#elif defined(Q_OS_WIN)
+    filter = "Dynamic Link Library (*.dll)";
+#else
+    filter = "Shared Object (*.so)";
+#endif
+    
+    QString filePath = QFileDialog::getOpenFileName(nullptr, tr("Select Plugin to Install"), QString(), filter);
+    
+    if (!filePath.isEmpty()) {
+        installPluginFromPath(filePath);
+    }
 }
 
 void MainUIBackend::installPluginFromPath(const QString& filePath)
