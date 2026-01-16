@@ -199,11 +199,20 @@ if(_liblogos_found)
     endif()
 endif()
 
+# Option for distributed builds (DMG/AppImage)
+option(LOGOS_DISTRIBUTED_BUILD "Build for distribution (DMG/AppImage)" OFF)
+
 # Add Qt definitions
 target_compile_definitions(package_manager_ui PRIVATE
     QT_PLUGIN
     QT_DEPRECATED_WARNINGS
 )
+
+# Add distributed build flag if enabled
+if(LOGOS_DISTRIBUTED_BUILD)
+    target_compile_definitions(package_manager_ui PRIVATE LOGOS_DISTRIBUTED_BUILD)
+    message(STATUS "Building package_manager_ui for distribution (LOGOS_DISTRIBUTED_BUILD enabled)")
+endif()
 
 target_link_libraries(package_manager_ui 
     PRIVATE 

@@ -97,6 +97,7 @@ private:
     QString pluginsDirectory() const;
     QString userPluginsDirectory() const;
     QString modulesDirectory() const;
+    QString userModulesDirectory() const;
     bool isQmlPlugin(const QString& name) const;
     QJsonObject readQmlPluginMetadata(const QString& pluginName) const;
     void updateModuleStats();

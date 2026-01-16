@@ -610,14 +610,22 @@ void MainUIBackend::openInstallPluginDialog()
 void MainUIBackend::installPluginFromPath(const QString& filePath)
 {
     QFileInfo fileInfo(filePath);
-    QString userPluginsDir = userPluginsDirectory();
+    
+#ifdef LOGOS_DISTRIBUTED_BUILD
+    // For distributed builds (DMG/AppImage), always use Application Support
+    QString targetDir = userPluginsDirectory();
+#else
+    // For development builds (nix), use bundled plugins directory
+    QString targetDir = pluginsDirectory();
+#endif
+    
     QDir dir;
     
-    if (!dir.exists(userPluginsDir)) {
-        dir.mkpath(userPluginsDir);
+    if (!dir.exists(targetDir)) {
+        dir.mkpath(targetDir);
     }
     
-    QString targetPath = userPluginsDir + "/" + fileInfo.fileName();
+    QString targetPath = targetDir + "/" + fileInfo.fileName();
     
     if (QFile::exists(targetPath)) {
         QFile::remove(targetPath);
@@ -650,14 +658,22 @@ void MainUIBackend::openInstallCoreModuleDialog()
 void MainUIBackend::installCoreModuleFromPath(const QString& filePath)
 {
     QFileInfo fileInfo(filePath);
-    QString modulesDir = modulesDirectory();
+    
+#ifdef LOGOS_DISTRIBUTED_BUILD
+    // For distributed builds (DMG/AppImage), use Application Support
+    QString targetDir = userModulesDirectory();
+#else
+    // For development builds (nix), use bundled modules directory
+    QString targetDir = modulesDirectory();
+#endif
+    
     QDir dir;
     
-    if (!dir.exists(modulesDir)) {
-        dir.mkpath(modulesDir);
+    if (!dir.exists(targetDir)) {
+        dir.mkpath(targetDir);
     }
     
-    QString targetPath = modulesDir + "/" + fileInfo.fileName();
+    QString targetPath = targetDir + "/" + fileInfo.fileName();
     
     if (QFile::exists(targetPath)) {
         QFile::remove(targetPath);
@@ -681,6 +697,11 @@ QString MainUIBackend::userPluginsDirectory() const
 QString MainUIBackend::modulesDirectory() const
 {
     return QCoreApplication::applicationDirPath() + "/../modules";
+}
+
+QString MainUIBackend::userModulesDirectory() const
+{
+    return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/modules";
 }
 
 QJsonObject MainUIBackend::readQmlPluginMetadata(const QString& pluginName) const

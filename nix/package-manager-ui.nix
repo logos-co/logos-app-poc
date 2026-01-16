@@ -1,5 +1,5 @@
 # Builds the package manager UI plugin
-{ pkgs, common, src, logosSdk, logosPackageManager, logosLiblogos }:
+{ pkgs, common, src, logosSdk, logosPackageManager, logosLiblogos, distributed ? false }:
 
 pkgs.stdenv.mkDerivation {
   pname = "${common.pname}-package-manager-ui-plugin";
@@ -96,6 +96,7 @@ pkgs.stdenv.mkDerivation {
       -GNinja \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+      -DLOGOS_DISTRIBUTED_BUILD=${if distributed then "ON" else "OFF"} \
       -DLOGOS_CPP_SDK_ROOT=$(pwd)/logos-cpp-sdk \
       -DLOGOS_LIBLOGOS_ROOT=${logosLiblogos}
     
