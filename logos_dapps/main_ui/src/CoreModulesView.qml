@@ -49,7 +49,7 @@ Item {
                 }
 
                 Button {
-                    text: "Install from Filesystem"
+                    text: "Install core module from file system"
                     onClicked: backend.openInstallCoreModuleDialog()
 
                     contentItem: Text {

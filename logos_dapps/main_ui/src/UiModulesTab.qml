@@ -32,7 +32,7 @@ Item {
             }
 
             Button {
-                text: "Install from Filesystem"
+                text: "Install app from file system"
                 onClicked: backend.openInstallPluginDialog()
 
                 contentItem: Text {
