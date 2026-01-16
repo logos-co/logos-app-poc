@@ -34,7 +34,7 @@
           };
           src = ./.;
           
-          # Plugin packages
+          # Plugin packages (development builds)
           counterPlugin = import ./nix/counter.nix { 
             inherit pkgs common src; 
           };
@@ -55,7 +55,18 @@
             inherit pkgs common src; 
           };
           
-          # App package
+          # Plugin packages (distributed builds for DMG/AppImage)
+          mainUIPluginDistributed = import ./nix/main-ui.nix { 
+            inherit pkgs common src logosSdk logosPackageManager logosLiblogos;
+            distributed = true;
+          };
+          
+          packageManagerUIPluginDistributed = import ./nix/package-manager-ui.nix { 
+            inherit pkgs common src logosSdk logosPackageManager logosLiblogos;
+            distributed = true;
+          };
+          
+          # App package (development build)
           app = import ./nix/app.nix { 
             inherit pkgs common src logosLiblogos logosSdk logosPackageManager logosCapabilityModule;
             counterPlugin = counterPlugin;
@@ -65,10 +76,21 @@
             webviewAppPlugin = webviewAppPlugin;
           };
           
+          # App package (distributed build for DMG/AppImage)
+          appDistributed = import ./nix/app.nix { 
+            inherit pkgs common src logosLiblogos logosSdk logosPackageManager logosCapabilityModule;
+            counterPlugin = counterPlugin;
+            counterQmlPlugin = counterQmlPlugin;
+            mainUIPlugin = mainUIPluginDistributed;
+            packageManagerUIPlugin = packageManagerUIPluginDistributed;
+            webviewAppPlugin = webviewAppPlugin;
+          };
+          
           # macOS distribution packages (only for Darwin)
           appBundle = if pkgs.stdenv.isDarwin then
             import ./nix/macos-bundle.nix {
-              inherit pkgs app src;
+              inherit pkgs src;
+              app = appDistributed;
             }
           else null;
           
@@ -82,7 +104,8 @@
           # Linux AppImage (only for Linux)
           appImage = if pkgs.stdenv.isLinux then
             import ./nix/appimage.nix {
-              inherit pkgs app src;
+              inherit pkgs src;
+              app = appDistributed;
               version = common.version;
             }
           else null;

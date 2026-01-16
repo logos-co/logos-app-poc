@@ -166,19 +166,35 @@ void PackageManagerBackend::installNextPackage()
     
     LogosModules logos(m_logosAPI);
     
+    // Determine package type to route to correct directory
+    QString packageType = m_allPackages[packageName].type;
+    bool isUiPlugin = (packageType.compare("ui", Qt::CaseInsensitive) == 0);
+    
     QDir appDir(QCoreApplication::applicationDirPath());
     appDir.cdUp();
-    QString bundledModulesDir = QDir::cleanPath(appDir.absolutePath() + "/modules");
     
-    QString pluginsDir;
-    QFileInfo bundledDirInfo(bundledModulesDir);
-    if (bundledDirInfo.exists() && bundledDirInfo.isWritable()) {
-        pluginsDir = bundledModulesDir;
+    QString installDir;
+    if (isUiPlugin) {
+        // UI plugins go to /plugins directory
+#ifdef LOGOS_DISTRIBUTED_BUILD
+        // For distributed builds (DMG/AppImage), use Application Support
+        installDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/plugins";
+#else
+        // For development builds (nix), use bundled plugins directory
+        installDir = QDir::cleanPath(appDir.absolutePath() + "/plugins");
+#endif
     } else {
-        pluginsDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/modules";
+        // Core modules go to /modules directory
+#ifdef LOGOS_DISTRIBUTED_BUILD
+        // For distributed builds (DMG/AppImage), use Application Support
+        installDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/modules";
+#else
+        // For development builds (nix), use bundled modules directory
+        installDir = QDir::cleanPath(appDir.absolutePath() + "/modules");
+#endif
     }
     
-    logos.package_manager.installPackageAsync(packageName, pluginsDir);
+    logos.package_manager.installPackageAsync(packageName, installDir);
 }
 
 void PackageManagerBackend::install()
