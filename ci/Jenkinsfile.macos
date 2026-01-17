@@ -1,11 +1,19 @@
 #!/usr/bin/env groovy
 
-library 'status-jenkins-lib@logos-app'
+library 'status-jenkins-lib@v1.9.38'
 
 def isPRBuild = utils.isPRBuild()
 
 pipeline {
   agent { label "macos && ${getArch()} && nix-2.24" }
+
+  parameters {
+    booleanParam(
+      name: 'RELEASE',
+      description: 'Decides whether release credentials are used.',
+      defaultValue: params.RELEASE ?: false
+    )
+  }
 
   options {
     timestamps()
@@ -19,6 +27,8 @@ pipeline {
     disableConcurrentBuilds(
       abortPrevious: isPRBuild
     )
+    /* Allows combined build to copy */
+    copyArtifactPermission('/logos-app/*')
   }
 
   environment {
