@@ -61,6 +61,10 @@ public slots:
     Q_INVOKABLE void installPluginFromPath(const QString& filePath);
     Q_INVOKABLE void openInstallPluginDialog();
     
+    // LGX package operations
+    QString currentPlatformVariant() const;
+    bool extractLgxPackage(const QString& lgxPath, const QString& outputDir, QString& errorMsg);
+    
     // Core Module operations
     void loadCoreModule(const QString& moduleName);
     void unloadCoreModule(const QString& moduleName);
@@ -69,6 +73,9 @@ public slots:
     Q_INVOKABLE QString callCoreModuleMethod(const QString& moduleName, const QString& methodName, const QString& argsJson);
     Q_INVOKABLE void installCoreModuleFromPath(const QString& filePath);
     Q_INVOKABLE void openInstallCoreModuleDialog();
+    
+    // Helper to copy library files from extracted directory
+    bool copyLibraryFromExtracted(const QString& extractedDir, const QString& targetDir, QString& errorMsg);
     
     // App Launcher operations
     void onAppLauncherClicked(const QString& appName);
