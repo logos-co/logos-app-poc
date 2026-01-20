@@ -8,9 +8,10 @@
     logos-liblogos.url = "github:logos-co/logos-liblogos";
     logos-package-manager.url = "github:logos-co/logos-package-manager";
     logos-capability-module.url = "github:logos-co/logos-capability-module";
+    logos-package.url = "github:logos-co/logos-package";
   };
 
-  outputs = { self, nixpkgs, logos-cpp-sdk, logos-liblogos, logos-package-manager, logos-capability-module }:
+  outputs = { self, nixpkgs, logos-cpp-sdk, logos-liblogos, logos-package-manager, logos-capability-module, logos-package }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f {
@@ -19,6 +20,7 @@
         logosLiblogos = logos-liblogos.packages.${system}.default;
         logosPackageManager = logos-package-manager.packages.${system}.default;
         logosCapabilityModule = logos-capability-module.packages.${system}.default;
+        logosPackageLib = logos-package.packages.${system}.lib;
         logosCppSdkSrc = logos-cpp-sdk.outPath;
         logosLiblogosSrc = logos-liblogos.outPath;
         logosPackageManagerSrc = logos-package-manager.outPath;
@@ -26,7 +28,7 @@
       });
     in
     {
-      packages = forAllSystems ({ pkgs, logosSdk, logosLiblogos, logosPackageManager, logosCapabilityModule, ... }: 
+      packages = forAllSystems ({ pkgs, logosSdk, logosLiblogos, logosPackageManager, logosCapabilityModule, logosPackageLib, ... }: 
         let
           # Common configuration
           common = import ./nix/default.nix { 
@@ -44,7 +46,7 @@
           };
           
           mainUIPlugin = import ./nix/main-ui.nix { 
-            inherit pkgs common src logosSdk logosPackageManager logosLiblogos; 
+            inherit pkgs common src logosSdk logosPackageManager logosLiblogos logosPackageLib; 
           };
           
           packageManagerUIPlugin = import ./nix/package-manager-ui.nix { 
@@ -57,7 +59,7 @@
           
           # Plugin packages (distributed builds for DMG/AppImage)
           mainUIPluginDistributed = import ./nix/main-ui.nix { 
-            inherit pkgs common src logosSdk logosPackageManager logosLiblogos;
+            inherit pkgs common src logosSdk logosPackageManager logosLiblogos logosPackageLib;
             distributed = true;
           };
           
@@ -131,7 +133,7 @@
         } else {})
       );
 
-      devShells = forAllSystems ({ pkgs, logosSdk, logosLiblogos, logosPackageManager, logosCapabilityModule, logosCppSdkSrc, logosLiblogosSrc, logosPackageManagerSrc, logosCapabilityModuleSrc }: {
+      devShells = forAllSystems ({ pkgs, logosSdk, logosLiblogos, logosPackageManager, logosCapabilityModule, logosPackageLib, logosCppSdkSrc, logosLiblogosSrc, logosPackageManagerSrc, logosCapabilityModuleSrc }: {
         default = pkgs.mkShell {
           nativeBuildInputs = [
             pkgs.cmake
@@ -152,6 +154,7 @@
             export LOGOS_LIBLOGOS_ROOT="${logosLiblogos}"
             export LOGOS_PACKAGE_MANAGER_ROOT="${logosPackageManager}"
             export LOGOS_CAPABILITY_MODULE_ROOT="${logosCapabilityModule}"
+            export LGX_ROOT="${logosPackageLib}"
             
             # Source paths for iOS builds (from flake inputs)
             export LOGOS_CPP_SDK_SRC="${logosCppSdkSrc}"
@@ -166,6 +169,7 @@
             echo "  LOGOS_LIBLOGOS_ROOT: $LOGOS_LIBLOGOS_ROOT"
             echo "  LOGOS_PACKAGE_MANAGER_ROOT: $LOGOS_PACKAGE_MANAGER_ROOT"
             echo "  LOGOS_CAPABILITY_MODULE_ROOT: $LOGOS_CAPABILITY_MODULE_ROOT"
+            echo "  LGX_ROOT: $LGX_ROOT"
             echo ""
             echo "Source paths (for iOS builds):"
             echo "  LOGOS_CPP_SDK_SRC: $LOGOS_CPP_SDK_SRC"

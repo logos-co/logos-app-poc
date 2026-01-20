@@ -21,6 +21,8 @@
     pkgs.zstd
     pkgs.krb5
     pkgs.abseil-cpp
+    pkgs.zlib
+    pkgs.icu
   ];
   
   # Common CMake flags

@@ -1,5 +1,5 @@
 # Builds the main UI plugin
-{ pkgs, common, src, logosSdk, logosPackageManager, logosLiblogos, distributed ? false }:
+{ pkgs, common, src, logosSdk, logosPackageManager, logosLiblogos, logosPackageLib, distributed ? false }:
 
 pkgs.stdenv.mkDerivation {
   pname = "${common.pname}-main-ui-plugin";
@@ -98,7 +98,8 @@ pkgs.stdenv.mkDerivation {
       -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
       -DLOGOS_DISTRIBUTED_BUILD=${if distributed then "ON" else "OFF"} \
       -DLOGOS_CPP_SDK_ROOT=$(pwd)/logos-cpp-sdk \
-      -DLOGOS_LIBLOGOS_ROOT=${logosLiblogos}
+      -DLOGOS_LIBLOGOS_ROOT=${logosLiblogos} \
+      -DLGX_ROOT=${logosPackageLib}
     
     runHook postConfigure
   '';
