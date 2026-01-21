@@ -5,14 +5,18 @@
     # Follow the same nixpkgs as logos-liblogos to ensure compatibility
     nixpkgs.follows = "logos-liblogos/nixpkgs";
     logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
-    logos-liblogos.url = "github:logos-co/logos-liblogos";
+    #logos-liblogos.url = "github:logos-co/logos-liblogos";
+    logos-liblogos.url = "path:/Users/iurimatias/Projects/Logos/LogosCore/logos-liblogos/";
     logos-package-manager.url = "github:logos-co/logos-package-manager";
     logos-capability-module.url = "github:logos-co/logos-capability-module";
     logos-package.url = "github:logos-co/logos-package";
-    logos-package-manager-ui.url = "github:logos-co/logos-package-manager-ui";
+    #logos-package-manager-ui.url = "github:logos-co/logos-package-manager-ui";
+    logos-package-manager-ui.url = "path:/Users/iurimatias/Projects/Logos/logos-package-manager-ui/";
+    #logos-webview-app.url = "github:logos-co/logos-webview-app";
+    logos-webview-app.url = "path:/Users/iurimatias/Projects/Logos/logos-webview-app/";
   };
 
-  outputs = { self, nixpkgs, logos-cpp-sdk, logos-liblogos, logos-package-manager, logos-capability-module, logos-package, logos-package-manager-ui }:
+  outputs = { self, nixpkgs, logos-cpp-sdk, logos-liblogos, logos-package-manager, logos-capability-module, logos-package, logos-package-manager-ui, logos-webview-app }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f {
@@ -23,6 +27,7 @@
         logosCapabilityModule = logos-capability-module.packages.${system}.default;
         logosPackageLib = logos-package.packages.${system}.lib;
         logosPackageManagerUI = logos-package-manager-ui.packages.${system}.default;
+        logosWebviewApp = logos-webview-app.packages.${system}.default;
         logosCppSdkSrc = logos-cpp-sdk.outPath;
         logosLiblogosSrc = logos-liblogos.outPath;
         logosPackageManagerSrc = logos-package-manager.outPath;
@@ -30,7 +35,7 @@
       });
     in
     {
-      packages = forAllSystems ({ pkgs, logosSdk, logosLiblogos, logosPackageManager, logosCapabilityModule, logosPackageLib, logosPackageManagerUI, ... }: 
+      packages = forAllSystems ({ pkgs, logosSdk, logosLiblogos, logosPackageManager, logosCapabilityModule, logosPackageLib, logosPackageManagerUI, logosWebviewApp, ... }: 
         let
           # Common configuration
           common = import ./nix/default.nix { 
@@ -54,9 +59,8 @@
           # Use external package-manager-ui package
           packageManagerUIPlugin = logosPackageManagerUI;
           
-          webviewAppPlugin = import ./nix/webview-app.nix { 
-            inherit pkgs common src; 
-          };
+          # Use external logos-webview-app package
+          webviewAppPlugin = logosWebviewApp;
           
           # Plugin packages (distributed builds for DMG/AppImage)
           mainUIPluginDistributed = import ./nix/main-ui.nix { 
