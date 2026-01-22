@@ -5,15 +5,12 @@
     # Follow the same nixpkgs as logos-liblogos to ensure compatibility
     nixpkgs.follows = "logos-liblogos/nixpkgs";
     logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
-    #logos-liblogos.url = "github:logos-co/logos-liblogos";
-    logos-liblogos.url = "path:/Users/iurimatias/Projects/Logos/LogosCore/logos-liblogos/";
+    logos-liblogos.url = "github:logos-co/logos-liblogos";
     logos-package-manager.url = "github:logos-co/logos-package-manager";
     logos-capability-module.url = "github:logos-co/logos-capability-module";
     logos-package.url = "github:logos-co/logos-package";
-    #logos-package-manager-ui.url = "github:logos-co/logos-package-manager-ui";
-    logos-package-manager-ui.url = "path:/Users/iurimatias/Projects/Logos/logos-package-manager-ui/";
-    #logos-webview-app.url = "github:logos-co/logos-webview-app";
-    logos-webview-app.url = "path:/Users/iurimatias/Projects/Logos/logos-webview-app/";
+    logos-package-manager-ui.url = "github:logos-co/logos-package-manager-ui";
+    logos-webview-app.url = "github:logos-co/logos-webview-app";
   };
 
   outputs = { self, nixpkgs, logos-cpp-sdk, logos-liblogos, logos-package-manager, logos-capability-module, logos-package, logos-package-manager-ui, logos-webview-app }:
