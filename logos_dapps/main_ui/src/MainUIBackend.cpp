@@ -641,7 +641,7 @@ void MainUIBackend::installPluginFromPath(const QString& filePath)
             return;
         }
         
-        if (!copyLibraryFromExtracted(tempDir.path(), targetDir, errorMsg)) {
+        if (!copyLibraryFromExtracted(tempDir.path(), targetDir, false, errorMsg)) {
             qWarning() << "Failed to copy library from extracted LGX package:" << errorMsg;
             return;
         }
@@ -715,7 +715,7 @@ void MainUIBackend::installCoreModuleFromPath(const QString& filePath)
             return;
         }
         
-        if (!copyLibraryFromExtracted(tempDir.path(), targetDir, errorMsg)) {
+        if (!copyLibraryFromExtracted(tempDir.path(), targetDir, true, errorMsg)) {
             qWarning() << "Failed to copy library from extracted LGX package:" << errorMsg;
             return;
         }
@@ -1047,7 +1047,7 @@ bool MainUIBackend::extractLgxPackage(const QString& lgxPath, const QString& out
     return true;
 }
 
-bool MainUIBackend::copyLibraryFromExtracted(const QString& extractedDir, const QString& targetDir, QString& errorMsg)
+bool MainUIBackend::copyLibraryFromExtracted(const QString& extractedDir, const QString& targetDir, bool isCoreModule, QString& errorMsg)
 {
     QString variant = currentPlatformVariant();
     QString variantDir = extractedDir + "/" + variant;
@@ -1076,11 +1076,18 @@ bool MainUIBackend::copyLibraryFromExtracted(const QString& extractedDir, const 
     
     for (const QFileInfo& fileInfo : libraryFiles) {
         QString sourceFile = fileInfo.absoluteFilePath();
-        // UI plugins: subdirectory structure
-        QString pluginName = fileInfo.completeBaseName();
-        QString pluginSubDir = targetDir + "/" + pluginName;
-        QDir().mkpath(pluginSubDir);
-        QString targetPath = pluginSubDir + "/" + fileInfo.fileName();
+        QString targetPath;
+        
+        if (isCoreModule) {
+            // Core modules: flat structure
+            targetPath = targetDir + "/" + fileInfo.fileName();
+        } else {
+            // UI plugins: subdirectory structure
+            QString pluginName = fileInfo.completeBaseName();
+            QString pluginSubDir = targetDir + "/" + pluginName;
+            QDir().mkpath(pluginSubDir);
+            targetPath = pluginSubDir + "/" + fileInfo.fileName();
+        }
         
         if (QFile::exists(targetPath)) {
             if (!QFile::remove(targetPath)) {

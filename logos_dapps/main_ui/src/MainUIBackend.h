@@ -75,7 +75,7 @@ public slots:
     Q_INVOKABLE void openInstallCoreModuleDialog();
     
     // Helper to copy library files from extracted directory
-    bool copyLibraryFromExtracted(const QString& extractedDir, const QString& targetDir, QString& errorMsg);
+    bool copyLibraryFromExtracted(const QString& extractedDir, const QString& targetDir, bool isCoreModule, QString& errorMsg);
     
     // App Launcher operations
     void onAppLauncherClicked(const QString& appName);
