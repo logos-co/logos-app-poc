@@ -228,22 +228,26 @@ pkgs.stdenv.mkDerivation rec {
       cp -L "${logosPackageManager}/lib/package_manager_plugin.$OS_EXT" "$out/modules/"
     fi
     
-    # Copy UI plugins to plugins directory (separate from liblogos modules)
+    # Copy UI plugins to plugins directory (each in its own subdirectory)
     if [ -f "${counterPlugin}/lib/counter.$OS_EXT" ]; then
-      cp -L "${counterPlugin}/lib/counter.$OS_EXT" "$out/plugins/"
-      echo "Copied counter.$OS_EXT to plugins/"
+      mkdir -p "$out/plugins/counter"
+      cp -L "${counterPlugin}/lib/counter.$OS_EXT" "$out/plugins/counter/"
+      echo "Copied counter.$OS_EXT to plugins/counter/"
     fi
     if [ -f "${mainUIPlugin}/lib/main_ui.$OS_EXT" ]; then
-      cp -L "${mainUIPlugin}/lib/main_ui.$OS_EXT" "$out/plugins/"
-      echo "Copied main_ui.$OS_EXT to plugins/"
+      mkdir -p "$out/plugins/main_ui"
+      cp -L "${mainUIPlugin}/lib/main_ui.$OS_EXT" "$out/plugins/main_ui/"
+      echo "Copied main_ui.$OS_EXT to plugins/main_ui/"
     fi
     if [ -f "${packageManagerUIPlugin}/lib/package_manager_ui.$OS_EXT" ]; then
-      cp -L "${packageManagerUIPlugin}/lib/package_manager_ui.$OS_EXT" "$out/plugins/"
-      echo "Copied package_manager_ui.$OS_EXT to plugins/"
+      mkdir -p "$out/plugins/package_manager_ui"
+      cp -L "${packageManagerUIPlugin}/lib/package_manager_ui.$OS_EXT" "$out/plugins/package_manager_ui/"
+      echo "Copied package_manager_ui.$OS_EXT to plugins/package_manager_ui/"
     fi
     if [ -f "${webviewAppPlugin}/lib/webview_app.$OS_EXT" ]; then
-      cp -L "${webviewAppPlugin}/lib/webview_app.$OS_EXT" "$out/plugins/"
-      echo "Copied webview_app.$OS_EXT to plugins/"
+      mkdir -p "$out/plugins/webview_app"
+      cp -L "${webviewAppPlugin}/lib/webview_app.$OS_EXT" "$out/plugins/webview_app/"
+      echo "Copied webview_app.$OS_EXT to plugins/webview_app/"
     fi
 
     if [ -d "${counterQmlPlugin}/qml_plugins/counter_qml" ]; then

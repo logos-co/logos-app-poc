@@ -80,8 +80,8 @@ pkgs.stdenv.mkDerivation rec {
       cp -L "${app}/modules"/*.dylib "$out/LogosApp.app/Contents/modules/" 2>/dev/null || true
     fi
     
+    # Copy all plugin directories (each plugin is now in its own subdirectory)
     if [ -d "${app}/plugins" ]; then
-      cp -L "${app}/plugins"/*.dylib "$out/LogosApp.app/Contents/plugins/" 2>/dev/null || true
       for pluginDir in "${app}/plugins"/*; do
         if [ -d "$pluginDir" ]; then
           cp -R "$pluginDir" "$out/LogosApp.app/Contents/plugins/"
