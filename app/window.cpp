@@ -59,8 +59,8 @@ void Window::setupUi()
 
     QString pluginsDir = QCoreApplication::applicationDirPath() + "/../plugins/";
     
-    // First, load the package_manager_ui plugin
-    QString packageManagerPluginPath = pluginsDir + "package_manager_ui" + pluginExtension;
+    // First, load the package_manager_ui plugin (now in subdirectory)
+    QString packageManagerPluginPath = pluginsDir + "package_manager_ui/package_manager_ui" + pluginExtension;
     QPluginLoader packageManagerLoader(packageManagerPluginPath);
     QWidget* packageManagerWidget = nullptr;
     
@@ -83,8 +83,8 @@ void Window::setupUi()
         qWarning() << "Failed to load package_manager_ui plugin:" << packageManagerLoader.errorString();
     }
 
-    // Load the main_ui plugin with the appropriate extension
-    QString mainUiPluginPath = pluginsDir + "main_ui" + pluginExtension;
+    // Load the main_ui plugin with the appropriate extension (now in subdirectory)
+    QString mainUiPluginPath = pluginsDir + "main_ui/main_ui" + pluginExtension;
     QPluginLoader loader(mainUiPluginPath);
 
     QWidget* mainContent = nullptr;

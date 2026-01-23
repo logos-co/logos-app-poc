@@ -648,7 +648,11 @@ void MainUIBackend::installPluginFromPath(const QString& filePath)
         
         qDebug() << "Successfully installed plugin from LGX package to:" << targetDir;
     } else {
-        QString targetPath = targetDir + "/" + fileInfo.fileName();
+        // UI plugins: subdirectory structure
+        QString pluginName = fileInfo.completeBaseName();
+        QString pluginSubDir = targetDir + "/" + pluginName;
+        QDir().mkpath(pluginSubDir);
+        QString targetPath = pluginSubDir + "/" + fileInfo.fileName();
         
         if (QFile::exists(targetPath)) {
             QFile::remove(targetPath);
@@ -812,39 +816,29 @@ QStringList MainUIBackend::findAvailableUiPlugins() const
             }
         };
 
+        QString libExtension;
+#if defined(Q_OS_MAC)
+        libExtension = ".dylib";
+#elif defined(Q_OS_WIN)
+        libExtension = ".dll";
+#else
+        libExtension = ".so";
+#endif
+
+        // Scan subdirectories for plugins (both QML and C++ plugins are in subdirectories)
         QStringList dirEntries = pluginsDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
         for (const QString& entry : dirEntries) {
+            // Check if it's a QML plugin (has metadata.json with pluginType: "qml")
             QJsonObject metadata = readQmlPluginMetadata(entry);
             QString pluginType = metadata.value("pluginType").toString();
             if (pluginType.compare("qml", Qt::CaseInsensitive) == 0) {
                 addPlugin(entry);
-            }
-        }
-        
-        QStringList entries = pluginsDir.entryList(QDir::Files);
-        
-        QString libExtension;
-        int extLength;
-#if defined(Q_OS_MAC)
-        libExtension = ".dylib";
-        extLength = 6;
-#elif defined(Q_OS_WIN)
-        libExtension = ".dll";
-        extLength = 4;
-#else
-        libExtension = ".so";
-        extLength = 3;
-#endif
-        
-        for (const QString& entry : entries) {
-            if (entry.endsWith(libExtension)) {
-                if (entry.startsWith("lib")) {
-                    continue;
+            } else {
+                // Check if it's a C++ plugin (has <dirname>.<ext> inside the subdirectory)
+                QString pluginLibPath = dirPath + "/" + entry + "/" + entry + libExtension;
+                if (QFile::exists(pluginLibPath)) {
+                    addPlugin(entry);
                 }
-                
-                QString pluginName = entry;
-                pluginName.chop(extLength);
-                addPlugin(pluginName);
             }
         }
     };
@@ -874,6 +868,7 @@ QString MainUIBackend::getPluginPath(const QString& name) const
     bool shouldCheckUserDir = !bundledPluginsDirInfo.isWritable();
     
     if (isQmlPlugin(name)) {
+        // QML plugins: return directory path (unchanged)
         if (shouldCheckUserDir) {
             QString userPath = userPluginsDirectory() + "/" + name;
             if (QFileInfo::exists(userPath)) {
@@ -884,14 +879,15 @@ QString MainUIBackend::getPluginPath(const QString& name) const
         return pluginsDirectory() + "/" + name;
     }
 
+    // C++ plugins: return path to dylib inside subdirectory
     if (shouldCheckUserDir) {
-        QString userPluginPath = userPluginsDirectory() + "/" + name + libExtension;
+        QString userPluginPath = userPluginsDirectory() + "/" + name + "/" + name + libExtension;
         if (QFile::exists(userPluginPath)) {
             return userPluginPath;
         }
     }
     
-    return pluginsDirectory() + "/" + name + libExtension;
+    return pluginsDirectory() + "/" + name + "/" + name + libExtension;
 }
 
 QString MainUIBackend::getPluginIconPath(const QString& pluginPath) const
@@ -1080,7 +1076,11 @@ bool MainUIBackend::copyLibraryFromExtracted(const QString& extractedDir, const 
     
     for (const QFileInfo& fileInfo : libraryFiles) {
         QString sourceFile = fileInfo.absoluteFilePath();
-        QString targetPath = targetDir + "/" + fileInfo.fileName();
+        // UI plugins: subdirectory structure
+        QString pluginName = fileInfo.completeBaseName();
+        QString pluginSubDir = targetDir + "/" + pluginName;
+        QDir().mkpath(pluginSubDir);
+        QString targetPath = pluginSubDir + "/" + fileInfo.fileName();
         
         if (QFile::exists(targetPath)) {
             if (!QFile::remove(targetPath)) {
