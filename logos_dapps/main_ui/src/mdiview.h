@@ -30,6 +30,9 @@ public:
     // Get widget for a plugin window (reverse lookup)
     QWidget* getWidgetForSubWindow(QMdiSubWindow* subWindow);
 
+signals:
+    void pluginWindowClosed(const QString& pluginName);
+
 private slots:
     void addMdiWindow();
     void toggleViewMode();

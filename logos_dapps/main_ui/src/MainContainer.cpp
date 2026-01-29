@@ -39,7 +39,11 @@ MainContainer::MainContainer(LogosAPI* logosAPI, QWidget* parent)
             this, &MainContainer::onPluginWindowRemoveRequested);
     connect(m_backend, &MainUIBackend::pluginWindowActivateRequested,
             this, &MainContainer::onPluginWindowActivateRequested);
-    
+
+    // When user closes a plugin window (tab/window X), notify backend to unload
+    connect(m_mdiView, &MdiView::pluginWindowClosed,
+            m_backend, &MainUIBackend::onPluginWindowClosed);
+
     qDebug() << "MainContainer created";
 }
 
