@@ -125,6 +125,9 @@ QMdiSubWindow* MdiView::addPluginWindow(QWidget* pluginWidget, const QString& ti
     m_subWindowToWidget[subWindow] = pluginWidget;
     
     connect(subWindow, &QMdiSubWindow::destroyed, this, [this, pluginWidget, subWindow]() {
+        if (!subWindow->windowTitle().isEmpty()) {
+            emit pluginWindowClosed(subWindow->windowTitle());
+        }
         if (pluginWidget && m_pluginWindows.contains(pluginWidget)) {
             m_pluginWindows.remove(pluginWidget);
         }

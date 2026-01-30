@@ -337,31 +337,21 @@ void MainUIBackend::activateApp(const QString& appName)
 void MainUIBackend::onPluginWindowClosed(const QString& pluginName)
 {
     qDebug() << "Plugin window closed:" << pluginName;
-    
+
+    // Called when user closes the plugin window (tab X or subwindow close). The MDI
+    // subwindow and plugin widget are already destroyed
     if (m_loadedUiModules.contains(pluginName)) {
-        IComponent* component = m_loadedUiModules.value(pluginName);
-        QWidget* widget = m_uiModuleWidgets.value(pluginName);
-        
-        if (component && widget) {
-            component->destroyWidget(widget);
-        }
-        
         m_loadedUiModules.remove(pluginName);
         m_uiModuleWidgets.remove(pluginName);
         m_loadedApps.remove(pluginName);
-        
+
         emit uiModulesChanged();
         emit launcherAppsChanged();
     } else if (m_qmlPluginWidgets.contains(pluginName)) {
-        QWidget* widget = m_qmlPluginWidgets.value(pluginName);
-        if (widget) {
-            widget->deleteLater();
-        }
-        
         m_qmlPluginWidgets.remove(pluginName);
         m_uiModuleWidgets.remove(pluginName);
         m_loadedApps.remove(pluginName);
-        
+
         emit uiModulesChanged();
         emit launcherAppsChanged();
     }
