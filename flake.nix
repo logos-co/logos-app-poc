@@ -11,9 +11,10 @@
     logos-package.url = "github:logos-co/logos-package";
     logos-package-manager-ui.url = "github:logos-co/logos-package-manager-ui";
     logos-webview-app.url = "github:logos-co/logos-webview-app";
+    logos-design-system.url = "github:logos-co/logos-design-system";
   };
 
-  outputs = { self, nixpkgs, logos-cpp-sdk, logos-liblogos, logos-package-manager, logos-capability-module, logos-package, logos-package-manager-ui, logos-webview-app }:
+  outputs = { self, nixpkgs, logos-cpp-sdk, logos-liblogos, logos-package-manager, logos-capability-module, logos-package, logos-package-manager-ui, logos-webview-app, logos-design-system }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f {
@@ -25,6 +26,7 @@
         logosPackageLib = logos-package.packages.${system}.lib;
         logosPackageManagerUI = logos-package-manager-ui.packages.${system}.default;
         logosWebviewApp = logos-webview-app.packages.${system}.default;
+        logosDesignSystem = logos-design-system.packages.${system}.default;
         logosCppSdkSrc = logos-cpp-sdk.outPath;
         logosLiblogosSrc = logos-liblogos.outPath;
         logosPackageManagerSrc = logos-package-manager.outPath;
@@ -32,7 +34,7 @@
       });
     in
     {
-      packages = forAllSystems ({ pkgs, logosSdk, logosLiblogos, logosPackageManager, logosCapabilityModule, logosPackageLib, logosPackageManagerUI, logosWebviewApp, ... }: 
+      packages = forAllSystems ({ pkgs, logosSdk, logosLiblogos, logosPackageManager, logosCapabilityModule, logosPackageLib, logosPackageManagerUI, logosWebviewApp, logosDesignSystem, ... }: 
         let
           # Common configuration
           common = import ./nix/default.nix { 
@@ -70,7 +72,7 @@
           
           # App package (development build)
           app = import ./nix/app.nix { 
-            inherit pkgs common src logosLiblogos logosSdk logosPackageManager logosCapabilityModule;
+            inherit pkgs common src logosLiblogos logosSdk logosPackageManager logosCapabilityModule logosDesignSystem;
             counterPlugin = counterPlugin;
             counterQmlPlugin = counterQmlPlugin;
             mainUIPlugin = mainUIPlugin;
@@ -80,7 +82,7 @@
           
           # App package (distributed build for DMG/AppImage)
           appDistributed = import ./nix/app.nix { 
-            inherit pkgs common src logosLiblogos logosSdk logosPackageManager logosCapabilityModule;
+            inherit pkgs common src logosLiblogos logosSdk logosPackageManager logosCapabilityModule logosDesignSystem;
             counterPlugin = counterPlugin;
             counterQmlPlugin = counterQmlPlugin;
             mainUIPlugin = mainUIPluginDistributed;
@@ -133,7 +135,7 @@
         } else {})
       );
 
-      devShells = forAllSystems ({ pkgs, logosSdk, logosLiblogos, logosPackageManager, logosCapabilityModule, logosPackageLib, logosCppSdkSrc, logosLiblogosSrc, logosPackageManagerSrc, logosCapabilityModuleSrc }: {
+      devShells = forAllSystems ({ pkgs, logosSdk, logosLiblogos, logosPackageManager, logosCapabilityModule, logosPackageLib, logosDesignSystem, logosCppSdkSrc, logosLiblogosSrc, logosPackageManagerSrc, logosCapabilityModuleSrc }: {
         default = pkgs.mkShell {
           nativeBuildInputs = [
             pkgs.cmake
@@ -155,6 +157,7 @@
             export LOGOS_PACKAGE_MANAGER_ROOT="${logosPackageManager}"
             export LOGOS_CAPABILITY_MODULE_ROOT="${logosCapabilityModule}"
             export LGX_ROOT="${logosPackageLib}"
+            export LOGOS_DESIGN_SYSTEM_ROOT="${logosDesignSystem}"
             
             # Source paths for iOS builds (from flake inputs)
             export LOGOS_CPP_SDK_SRC="${logosCppSdkSrc}"
@@ -170,6 +173,7 @@
             echo "  LOGOS_PACKAGE_MANAGER_ROOT: $LOGOS_PACKAGE_MANAGER_ROOT"
             echo "  LOGOS_CAPABILITY_MODULE_ROOT: $LOGOS_CAPABILITY_MODULE_ROOT"
             echo "  LGX_ROOT: $LGX_ROOT"
+            echo "  LOGOS_DESIGN_SYSTEM_ROOT: $LOGOS_DESIGN_SYSTEM_ROOT"
             echo ""
             echo "Source paths (for iOS builds):"
             echo "  LOGOS_CPP_SDK_SRC: $LOGOS_CPP_SDK_SRC"

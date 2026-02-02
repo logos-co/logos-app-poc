@@ -19,9 +19,8 @@ class MainUIBackend : public QObject {
     Q_OBJECT
     
     // Navigation
-    Q_PROPERTY(int currentViewIndex READ currentViewIndex WRITE setCurrentViewIndex NOTIFY currentViewIndexChanged)
-    Q_PROPERTY(QStringList sidebarItems READ sidebarItems CONSTANT)
-    Q_PROPERTY(QStringList sidebarIcons READ sidebarIcons CONSTANT)
+    Q_PROPERTY(int currentActiveSectionIndex READ currentActiveSectionIndex WRITE setCurrentActiveSectionIndex NOTIFY currentActiveSectionIndexChanged)
+    Q_PROPERTY(QVariantList sections READ sections CONSTANT)
     
     // UI Modules (Apps)
     Q_PROPERTY(QVariantList uiModules READ uiModules NOTIFY uiModulesChanged)
@@ -37,11 +36,8 @@ public:
     ~MainUIBackend();
     
     // Navigation
-    int currentViewIndex() const;
-    void setCurrentViewIndex(int index);
-    QStringList sidebarItems() const;
-    QStringList sidebarIcons() const;
-    Q_INVOKABLE QString sidebarIconAt(int index) const;
+    int currentActiveSectionIndex() const;
+    QVariantList sections() const;
     
     // UI Modules
     QVariantList uiModules() const;
@@ -53,6 +49,8 @@ public:
     QVariantList launcherApps() const;
 
 public slots:
+    // Navigation
+    void setCurrentActiveSectionIndex(int index);
     // UI Module operations
     void loadUiModule(const QString& moduleName);
     void unloadUiModule(const QString& moduleName);
@@ -85,7 +83,7 @@ public slots:
     void onPluginWindowClosed(const QString& pluginName);
 
 signals:
-    void currentViewIndexChanged();
+    void currentActiveSectionIndexChanged();
     void uiModulesChanged();
     void coreModulesChanged();
     void launcherAppsChanged();
@@ -97,7 +95,7 @@ signals:
     void pluginWindowActivateRequested(QWidget* widget);
 
 private:
-    void initializeSidebarItems();
+    void initializeSections();
     void subscribeToPackageInstallationEvents();
     QStringList findAvailableUiPlugins() const;
     QString getPluginPath(const QString& name) const;
@@ -111,9 +109,8 @@ private:
     QString getPluginIconPath(const QString& pluginPath) const;
     
     // Navigation state
-    int m_currentViewIndex;
-    QStringList m_sidebarItems;
-    QStringList m_sidebarIcons;
+    int m_currentActiveSectionIndex;
+    QVariantList m_sections;
     
     // UI Modules state
     QMap<QString, IComponent*> m_loadedUiModules;

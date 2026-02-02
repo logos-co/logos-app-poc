@@ -35,6 +35,7 @@ private slots:
 
 private:
     void setupUi();
+    QUrl resolveQmlUrl(const QString& qmlFile);
     
     // Main layout
     QHBoxLayout* m_mainLayout;
@@ -50,9 +51,6 @@ private:
     
     // Content views (QML for Dashboard, Modules, PackageManager, Settings)
     QQuickWidget* m_contentWidget;
-    
-    // App launcher (QML dock at bottom)
-    QQuickWidget* m_appLauncherWidget;
     
     // Backend
     MainUIBackend* m_backend;

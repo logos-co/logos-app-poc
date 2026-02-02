@@ -1,5 +1,5 @@
 # Builds the logos-app-poc standalone application
-{ pkgs, common, src, logosLiblogos, logosSdk, logosPackageManager, logosCapabilityModule, counterPlugin, counterQmlPlugin, mainUIPlugin, packageManagerUIPlugin, webviewAppPlugin }:
+{ pkgs, common, src, logosLiblogos, logosSdk, logosPackageManager, logosCapabilityModule, logosDesignSystem, counterPlugin, counterQmlPlugin, mainUIPlugin, packageManagerUIPlugin, webviewAppPlugin }:
 
 let
   # webkitgtk became ABI-versioned; pick the newest available while staying
@@ -56,7 +56,7 @@ pkgs.stdenv.mkDerivation rec {
     ]
   );
   qtPluginPath = "${pkgs.qt6.qtbase}/lib/qt-6/plugins:${pkgs.qt6.qtwebview}/lib/qt-6/plugins";
-  qmlImportPath = "${pkgs.qt6.qtdeclarative}/lib/qt-6/qml:${pkgs.qt6.qtwebview}/lib/qt-6/qml";
+  qmlImportPath = "${placeholder "out"}/lib:${pkgs.qt6.qtdeclarative}/lib/qt-6/qml:${pkgs.qt6.qtwebview}/lib/qt-6/qml";
   
   preConfigure = ''
     runHook prePreConfigure
@@ -146,6 +146,7 @@ pkgs.stdenv.mkDerivation rec {
     echo "main-ui-plugin: ${mainUIPlugin}"
     echo "package-manager-ui-plugin: ${packageManagerUIPlugin}"
     echo "webview-app-plugin: ${webviewAppPlugin}"
+    echo "logos-design-system: ${logosDesignSystem}"
     
     # Verify that the built components exist
     test -d "${logosLiblogos}" || (echo "liblogos not found" && exit 1)
@@ -157,6 +158,7 @@ pkgs.stdenv.mkDerivation rec {
     test -d "${mainUIPlugin}" || (echo "main-ui-plugin not found" && exit 1)
     test -d "${packageManagerUIPlugin}" || (echo "package-manager-ui-plugin not found" && exit 1)
     test -d "${webviewAppPlugin}" || (echo "webview-app-plugin not found" && exit 1)
+    test -d "${logosDesignSystem}" || (echo "logos-design-system not found" && exit 1)
     
     cmake -S app -B build \
       -GNinja \
@@ -254,6 +256,13 @@ pkgs.stdenv.mkDerivation rec {
       cp -R "${counterQmlPlugin}/qml_plugins/counter_qml" "$out/plugins/"
       echo "Copied counter_qml QML plugin to plugins/"
     fi
+
+    # Copy design system QML module (Logos/DesignSystem) for runtime
+    if [ -d "${logosDesignSystem}/lib/Logos/DesignSystem" ]; then
+      mkdir -p "$out/lib/Logos"
+      cp -R "${logosDesignSystem}/lib/Logos/DesignSystem" "$out/lib/Logos/"
+      echo "Copied Logos Design System to lib/Logos/DesignSystem/"
+    fi
     
     # Note: webview_app QML and HTML files are now embedded in the plugin via qrc
 
@@ -272,6 +281,7 @@ counter-plugin: ${counterPlugin}
 main-ui-plugin: ${mainUIPlugin}
 package-manager-ui-plugin: ${packageManagerUIPlugin}
 webview-app-plugin: ${webviewAppPlugin}
+logos-design-system: ${logosDesignSystem}
 
 Runtime Layout:
     - Binary: $out/bin/LogosApp

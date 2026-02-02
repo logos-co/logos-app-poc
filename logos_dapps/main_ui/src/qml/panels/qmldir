@@ -1,0 +1,3 @@
+module panels
+SidebarPanel 1.0 SidebarPanel.qml
+UiModulesTab 1.0 UiModulesTab.qml

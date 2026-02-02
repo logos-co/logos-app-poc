@@ -3,6 +3,7 @@
 #include <QTabBar>
 #include <QApplication>
 #include <QDebug>
+#include <QColor>
 
 MdiView::MdiView(QWidget *parent)
     : QWidget(parent), windowCounter(0)
@@ -38,8 +39,8 @@ void MdiView::setupUi()
     mdiArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     mdiArea->setViewMode(QMdiArea::SubWindowView);
     
-    QPalette palette = QApplication::palette();
-    mdiArea->setBackground(palette.color(QPalette::Window));
+    // TODO: this should probably be a qml file and should then use Logos.DesignSystem instead
+    mdiArea->setBackground(QColor("#171717"));
     
     mdiArea->setTabsClosable(true);
     

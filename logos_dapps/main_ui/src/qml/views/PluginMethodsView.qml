@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Logos.DesignSystem
 
 Item {
     id: root
@@ -202,7 +203,7 @@ Item {
                             TextArea {
                                 text: root.resultText
                                 font.pixelSize: 12
-                                font.family: "monospace"
+                                font.family: Theme.typography.publicSans
                                 color: "#4CAF50"
                                 readOnly: true
                                 wrapMode: Text.Wrap
