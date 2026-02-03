@@ -6,15 +6,16 @@
     nixpkgs.follows = "logos-liblogos/nixpkgs";
     logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
     logos-liblogos.url = "github:logos-co/logos-liblogos";
-    logos-package-manager.url = "github:logos-co/logos-package-manager";
+    logos-package-manager.url = "github:logos-co/logos-package-manager-module";
     logos-capability-module.url = "github:logos-co/logos-capability-module";
     logos-package.url = "github:logos-co/logos-package";
     logos-package-manager-ui.url = "github:logos-co/logos-package-manager-ui";
     logos-webview-app.url = "github:logos-co/logos-webview-app";
     logos-design-system.url = "github:logos-co/logos-design-system";
+    logos-counter-qml.url = "github:logos-co/counter_qml";
   };
 
-  outputs = { self, nixpkgs, logos-cpp-sdk, logos-liblogos, logos-package-manager, logos-capability-module, logos-package, logos-package-manager-ui, logos-webview-app, logos-design-system }:
+  outputs = { self, nixpkgs, logos-cpp-sdk, logos-liblogos, logos-package-manager, logos-capability-module, logos-package, logos-package-manager-ui, logos-webview-app, logos-design-system, logos-counter-qml }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f {
@@ -27,6 +28,7 @@
         logosPackageManagerUI = logos-package-manager-ui.packages.${system}.default;
         logosWebviewApp = logos-webview-app.packages.${system}.default;
         logosDesignSystem = logos-design-system.packages.${system}.default;
+        logosCounterQml = logos-counter-qml.packages.${system}.default;
         logosCppSdkSrc = logos-cpp-sdk.outPath;
         logosLiblogosSrc = logos-liblogos.outPath;
         logosPackageManagerSrc = logos-package-manager.outPath;
@@ -34,7 +36,7 @@
       });
     in
     {
-      packages = forAllSystems ({ pkgs, logosSdk, logosLiblogos, logosPackageManager, logosCapabilityModule, logosPackageLib, logosPackageManagerUI, logosWebviewApp, logosDesignSystem, ... }: 
+      packages = forAllSystems ({ pkgs, logosSdk, logosLiblogos, logosPackageManager, logosCapabilityModule, logosPackageLib, logosPackageManagerUI, logosWebviewApp, logosDesignSystem, logosCounterQml, ... }: 
         let
           # Common configuration
           common = import ./nix/default.nix { 
@@ -47,9 +49,8 @@
             inherit pkgs common src; 
           };
 
-          counterQmlPlugin = import ./nix/counter-qml.nix {
-            inherit pkgs common src;
-          };
+          # Use external counter-qml package
+          counterQmlPlugin = logosCounterQml;
           
           mainUIPlugin = import ./nix/main-ui.nix { 
             inherit pkgs common src logosSdk logosPackageManager logosLiblogos logosPackageLib; 
