@@ -13,9 +13,10 @@
     logos-webview-app.url = "github:logos-co/logos-webview-app";
     logos-design-system.url = "github:logos-co/logos-design-system";
     logos-counter-qml.url = "github:logos-co/counter_qml";
+    logos-counter.url = "github:logos-co/counter";
   };
 
-  outputs = { self, nixpkgs, logos-cpp-sdk, logos-liblogos, logos-package-manager, logos-capability-module, logos-package, logos-package-manager-ui, logos-webview-app, logos-design-system, logos-counter-qml }:
+  outputs = { self, nixpkgs, logos-cpp-sdk, logos-liblogos, logos-package-manager, logos-capability-module, logos-package, logos-package-manager-ui, logos-webview-app, logos-design-system, logos-counter-qml, logos-counter }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f {
@@ -29,6 +30,7 @@
         logosWebviewApp = logos-webview-app.packages.${system}.default;
         logosDesignSystem = logos-design-system.packages.${system}.default;
         logosCounterQml = logos-counter-qml.packages.${system}.default;
+        logosCounter = logos-counter.packages.${system}.default;
         logosCppSdkSrc = logos-cpp-sdk.outPath;
         logosLiblogosSrc = logos-liblogos.outPath;
         logosPackageManagerSrc = logos-package-manager.outPath;
@@ -36,7 +38,7 @@
       });
     in
     {
-      packages = forAllSystems ({ pkgs, logosSdk, logosLiblogos, logosPackageManager, logosCapabilityModule, logosPackageLib, logosPackageManagerUI, logosWebviewApp, logosDesignSystem, logosCounterQml, ... }: 
+      packages = forAllSystems ({ pkgs, logosSdk, logosLiblogos, logosPackageManager, logosCapabilityModule, logosPackageLib, logosPackageManagerUI, logosWebviewApp, logosDesignSystem, logosCounterQml, logosCounter, ... }: 
         let
           # Common configuration
           common = import ./nix/default.nix { 
@@ -45,9 +47,8 @@
           src = ./.;
           
           # Plugin packages (development builds)
-          counterPlugin = import ./nix/counter.nix { 
-            inherit pkgs common src; 
-          };
+          # Use external counter package
+          counterPlugin = logosCounter;
 
           # Use external counter-qml package
           counterQmlPlugin = logosCounterQml;
