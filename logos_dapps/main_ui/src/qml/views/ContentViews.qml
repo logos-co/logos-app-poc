@@ -18,7 +18,7 @@ Item {
         
         // Map backend index: 1=Dashboard, 2=Modules, 3=Settings
         // to internal index: 0=Dashboard, 1=Modules, 2=Settings
-        currentIndex: Math.max(0, backend.currentViewIndex - 1)
+        currentIndex: Math.max(0, backend.currentActiveSectionIndex - 1)
 
         // Dashboard (backend index 1 -> internal index 0)
         DashboardView {

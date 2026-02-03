@@ -32,7 +32,7 @@ extern "C" {
 
 MainUIBackend::MainUIBackend(LogosAPI* logosAPI, QObject* parent)
     : QObject(parent)
-    , m_currentViewIndex(0)
+    , m_currentActiveSectionIndex(0)
     , m_logosAPI(logosAPI)
     , m_ownsLogosAPI(false)
     , m_statsTimer(nullptr)
@@ -42,7 +42,7 @@ MainUIBackend::MainUIBackend(LogosAPI* logosAPI, QObject* parent)
         m_ownsLogosAPI = true;
     }
     
-    initializeSidebarItems();
+    initializeSections();
     
     m_statsTimer = new QTimer(this);
     connect(m_statsTimer, &QTimer::timeout, this, &MainUIBackend::updateModuleStats);
@@ -99,47 +99,49 @@ void MainUIBackend::subscribeToPackageInstallationEvents()
     });
 }
 
-void MainUIBackend::initializeSidebarItems()
+void MainUIBackend::initializeSections()
 {
-    m_sidebarItems << "Apps" << "Dashboard" << "Modules" << "Settings";
-    m_sidebarIcons << "qrc:/icons/home.png" << "qrc:/icons/chart.png" << "qrc:/icons/modules.png" 
-                   << "qrc:/icons/settings.png";
+    auto makeSection = [](const QString& name, const QString& iconPath, const QString& type) {
+        QVariantMap section;
+        section["name"] = name;
+        section["iconPath"] = iconPath;
+        section["type"] = type;
+        return section;
+    };
+
+    m_sections = QVariantList{
+        makeSection("Apps", "qrc:/icons/tent.png", "workspace"),
+        makeSection("Dashboard", "qrc:/icons/dashboard.png", "view"),
+        makeSection("Modules", "qrc:/icons/module.png", "view"),
+        makeSection("Settings", "qrc:/icons/settings.png", "view")
+    };
 }
 
-int MainUIBackend::currentViewIndex() const
+int MainUIBackend::currentActiveSectionIndex() const
 {
-    return m_currentViewIndex;
+    return m_currentActiveSectionIndex;
 }
 
-void MainUIBackend::setCurrentViewIndex(int index)
+void MainUIBackend::setCurrentActiveSectionIndex(int index)
 {
-    if (m_currentViewIndex != index && index >= 0 && index < m_sidebarItems.size()) {
-        m_currentViewIndex = index;
-        emit currentViewIndexChanged();
-        
-        if (m_sidebarItems[index] == "Modules") {
+    // Valid indices: 0-3 (Apps, Dashboard, Modules, Settings)
+    if (m_currentActiveSectionIndex != index && index >= 0 && index < m_sections.size()) {
+        m_currentActiveSectionIndex = index;
+        emit currentActiveSectionIndexChanged();
+
+        // Check if we're navigating to Modules view
+        const QVariantMap section = m_sections[index].toMap();
+        const QString name = section.value("name").toString();
+        if (name == "Modules") {
             refreshUiModules();
             refreshCoreModules();
         }
     }
 }
 
-QStringList MainUIBackend::sidebarItems() const
+QVariantList MainUIBackend::sections() const
 {
-    return m_sidebarItems;
-}
-
-QStringList MainUIBackend::sidebarIcons() const
-{
-    return m_sidebarIcons;
-}
-
-QString MainUIBackend::sidebarIconAt(int index) const
-{
-    if (index >= 0 && index < m_sidebarIcons.size()) {
-        return m_sidebarIcons[index];
-    }
-    return QString();
+    return m_sections;
 }
 
 QVariantList MainUIBackend::uiModules() const

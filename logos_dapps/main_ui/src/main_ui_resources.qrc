@@ -1,20 +1,25 @@
 <!DOCTYPE RCC>
 <RCC>
     <qresource prefix="/">
-        <file>icons/home.png</file>
+        <file>icons/dashboard.png</file>
         <file>icons/settings.png</file>
         <file>icons/profile.png</file>
-        <file>icons/chart.png</file>
-        <file>icons/modules.png</file>
-        <file>Sidebar.qml</file>
-        <file>SidebarButton.qml</file>
-        <file>ContentViews.qml</file>
-        <file>DashboardView.qml</file>
-        <file>ModulesView.qml</file>
-        <file>UiModulesTab.qml</file>
-        <file>CoreModulesView.qml</file>
-        <file>PluginMethodsView.qml</file>
-        <file>SettingsView.qml</file>
-        <file>AppLauncher.qml</file>
+        <file>icons/module.png</file>
+        <file>icons/basecamp.png</file>
+        <file>icons/tent.png</file>
+        <file>qml/panels/SidebarPanel.qml</file>
+        <file>qml/panels/qmldir</file>
+        <file>qml/controls/SidebarIconButton.qml</file>
+        <file>qml/controls/SidebarCircleButton.qml</file>
+        <file>qml/controls/SidebarCircleButtonContainer.qml</file>
+        <file>qml/controls/qmldir</file>
+        <file>qml/views/ContentViews.qml</file>
+        <file>qml/views/DashboardView.qml</file>
+        <file>qml/views/ModulesView.qml</file>
+        <file>qml/panels/UiModulesTab.qml</file>
+        <file>qml/views/CoreModulesView.qml</file>
+        <file>qml/views/PluginMethodsView.qml</file>
+        <file>qml/views/SettingsView.qml</file>
+        <file>qml/views/qmldir</file>
     </qresource>
 </RCC>
