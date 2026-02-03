@@ -21,6 +21,7 @@ extern "C" {
     void logos_core_cleanup();
     char** logos_core_get_loaded_plugins();
     int logos_core_load_plugin(const char* plugin_name);
+    int logos_core_load_plugin_with_dependencies(const char* plugin_name);
     char* logos_core_process_plugin(const char* plugin_path);
     char* logos_core_get_module_stats();
 }
@@ -69,7 +70,7 @@ int main(int argc, char *argv[])
 
     QString pluginPath = modulesDir + "/package_manager_plugin" + pluginExtension;
     logos_core_process_plugin(pluginPath.toUtf8().constData());
-    bool loaded = logos_core_load_plugin("package_manager");
+    bool loaded = logos_core_load_plugin_with_dependencies("package_manager");
 
     if (loaded) {
         qInfo() << "package_manager plugin loaded by default.";

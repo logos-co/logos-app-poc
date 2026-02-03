@@ -143,7 +143,7 @@ public:
         }
         
         setStatus(QString("Loading plugin: %1...").arg(name));
-        int result = logos_core_load_plugin(name.toUtf8().constData());
+        int result = logos_core_load_plugin_with_dependencies(name.toUtf8().constData());
         
         if (result) {
             setStatus(QString("Successfully loaded: %1").arg(name));
