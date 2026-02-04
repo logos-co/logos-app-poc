@@ -174,6 +174,24 @@ void MainUIBackend::loadUiModule(const QString& moduleName)
         return;
     }
     
+    // Load core module dependencies from metadata
+    QJsonObject metadata = readPluginMetadata(moduleName);
+    QJsonArray dependencies = metadata.value("dependencies").toArray();
+    if (!dependencies.isEmpty() && m_logosAPI) {
+        LogosModules logos(m_logosAPI);
+        for (const QJsonValue& dep : dependencies) {
+            QString depName = dep.toString();
+            if (!depName.isEmpty()) {
+                qDebug() << "Loading core module dependency for UI module" << moduleName << ":" << depName;
+                bool success = logos.core_manager.loadPlugin(depName);
+                if (!success) {
+                    qWarning() << "Failed to load core module dependency" << depName << "for UI module" << moduleName;
+                    return;
+                }
+            }
+        }
+    }
+    
     QString pluginPath = getPluginPath(moduleName);
     qDebug() << "Loading plugin from:" << pluginPath;
 
@@ -782,6 +800,22 @@ QJsonObject MainUIBackend::readQmlPluginMetadata(const QString& pluginName) cons
     }
 
     return doc.object();
+}
+
+QJsonObject MainUIBackend::readPluginMetadata(const QString& pluginName) const
+{
+    QString pluginPath = getPluginPath(pluginName);
+    QFileInfo pluginInfo(pluginPath);
+    
+    // QML plugins: directory with metadata.json file
+    if (pluginInfo.isDir()) {
+        return readQmlPluginMetadata(pluginName);
+    }
+    
+    // C++ plugins: dylib with embedded metadata
+    QPluginLoader loader(pluginPath);
+    QJsonObject metadata = loader.metaData();
+    return metadata.value("MetaData").toObject();
 }
 
 bool MainUIBackend::isQmlPlugin(const QString& name) const
