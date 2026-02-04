@@ -7,6 +7,8 @@
         <file>icons/module.png</file>
         <file>icons/basecamp.png</file>
         <file>icons/tent.png</file>
+        <file>icons/close.png</file>
+        <file>icons/add-button.png</file>
         <file>qml/panels/SidebarPanel.qml</file>
         <file>qml/panels/qmldir</file>
         <file>qml/controls/SidebarIconButton.qml</file>

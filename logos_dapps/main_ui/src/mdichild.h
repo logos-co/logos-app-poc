@@ -13,6 +13,9 @@ public:
     MdiChild(QWidget *parent = nullptr);
     ~MdiChild();
 
+protected:
+    void paintEvent(QPaintEvent* event) override;
+
 private:
     QLabel *contentLabel;
     QVBoxLayout *layout;

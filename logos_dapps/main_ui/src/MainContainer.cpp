@@ -100,7 +100,7 @@ void MainContainer::setupUi()
     // Create main horizontal layout
     m_mainLayout = new QHBoxLayout(this);
     m_mainLayout->setSpacing(0);
-    m_mainLayout->setContentsMargins(8, 4, 8, 4);
+    m_mainLayout->setContentsMargins(4, 2, 4, 2);
     // When QML_UI is set, add it to each QML engine's import path so nested
     // components (e.g. SidebarIconButton) load from disk — no rebuild for UI changes.
     QString qmlUiPath = QProcessEnvironment::systemEnvironment().value("QML_UI", "");
@@ -128,7 +128,7 @@ void MainContainer::setupUi()
     QWidget* contentArea = new QWidget(this);
     QVBoxLayout* contentLayout = new QVBoxLayout(contentArea);
     contentLayout->setSpacing(0);
-    contentLayout->setContentsMargins(8, 0, 0, 0);
+    contentLayout->setContentsMargins(4, 4, 4, 4);
     // Create content stack
     m_contentStack = new QStackedWidget(contentArea);
     m_contentStack->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);

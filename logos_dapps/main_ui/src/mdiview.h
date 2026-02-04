@@ -9,6 +9,8 @@
 #include <QHBoxLayout>
 #include <QToolBar>
 #include <QMap>
+#include <QTabBar>
+#include <QToolButton>
 
 class MdiView : public QWidget
 {
@@ -40,12 +42,22 @@ private slots:
 
 private:
     void setupUi();
-    
+
+    void ensureMdiAddButton(QTabBar* tabBar);
+    void repositionMdiAddButton();
+    void updateEmptyPlaceholder();
+
+    void customizeTabBarStyle(QTabBar* tabBar);
+    void insetTabBarGeometry(QTabBar *tabBar, int insetPx);
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
     QMdiArea *mdiArea;
     QPushButton *addButton;
     QPushButton *toggleButton;
     QToolBar *toolBar;
     QVBoxLayout *mainLayout;
+    QToolButton* m_mdiAddBtn;
+    QWidget* m_emptyPlaceholder;
     
     // Map to keep track of plugin widgets and their MDI windows
     QMap<QWidget*, QMdiSubWindow*> m_pluginWindows;
