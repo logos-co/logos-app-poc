@@ -9,9 +9,9 @@ AbstractButton {
     implicitWidth: 50
 
     // Dark gray pill background extending to left edge when active/highlighted
-    background:  Rectangle {
+    background: Rectangle {
         radius: width / 2
-        color: Theme.palette.backgroundTertiary
+        color: Theme.palette.backgroundMuted
         border.width: root.hovered ? 1 : 0
         border.color: Theme.palette.borderSecondary
     }
