@@ -105,6 +105,7 @@ private:
     QString userModulesDirectory() const;
     bool isQmlPlugin(const QString& name) const;
     QJsonObject readQmlPluginMetadata(const QString& pluginName) const;
+    QJsonObject readPluginMetadata(const QString& pluginName) const;
     void updateModuleStats();
     QString getPluginIconPath(const QString& pluginPath) const;
     
