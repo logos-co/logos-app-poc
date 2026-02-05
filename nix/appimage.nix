@@ -35,7 +35,7 @@ let
   runtimeLibsStr = pkgs.lib.concatStringsSep " " (map toString runtimeLibs);
 in
 pkgs.stdenv.mkDerivation rec {
-  pname = "logos-app-poc-appimage";
+  pname = "logos-app-appimage";
   inherit version;
 
   dontUnpack = true;
@@ -77,7 +77,7 @@ pkgs.stdenv.mkDerivation rec {
     cat > "$appDir/usr/share/applications/logos-app.desktop" <<'EOF'
 [Desktop Entry]
 Type=Application
-Name=Logos App POC
+Name=Logos App
 Exec=LogosApp
 Icon=logos-app
 Categories=Utility;
@@ -114,7 +114,7 @@ EOF
   '';
 
   meta = with pkgs.lib; {
-    description = "Logos App POC AppImage";
+    description = "Logos App AppImage";
     platforms = platforms.linux;
     mainProgram = "LogosApp";
   };

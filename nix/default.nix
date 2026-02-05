@@ -2,7 +2,7 @@
 { pkgs, logosSdk, logosLiblogos }:
 
 {
-  pname = "logos-app-poc";
+  pname = "logos-app";
   version = "1.0.0";
   
   # Common native build inputs
@@ -40,7 +40,7 @@
   
   # Metadata
   meta = with pkgs.lib; {
-    description = "Logos App POC - Qt application with UI plugins";
+    description = "Logos App - Qt application with UI plugins";
     platforms = platforms.unix;
   };
 }

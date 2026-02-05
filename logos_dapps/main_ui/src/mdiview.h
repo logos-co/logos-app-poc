@@ -45,9 +45,9 @@ private:
 
     void ensureMdiAddButton(QTabBar* tabBar);
     void repositionMdiAddButton();
-    void updateEmptyPlaceholder();
 
     void customizeTabBarStyle(QTabBar* tabBar);
+    void installTabBarCloseButtons(QTabBar* tabBar);
     void insetTabBarGeometry(QTabBar *tabBar, int insetPx);
     bool eventFilter(QObject* watched, QEvent* event) override;
 
@@ -57,8 +57,7 @@ private:
     QToolBar *toolBar;
     QVBoxLayout *mainLayout;
     QToolButton* m_mdiAddBtn;
-    QWidget* m_emptyPlaceholder;
-    
+
     // Map to keep track of plugin widgets and their MDI windows
     QMap<QWidget*, QMdiSubWindow*> m_pluginWindows;
     // Reverse map: subwindow -> widget

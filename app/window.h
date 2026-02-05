@@ -8,6 +8,9 @@ class LogosAPI;
 class QMenu;
 class QAction;
 class QCloseEvent;
+class QResizeEvent;
+class QShowEvent;
+class QWidget;
 
 class Window : public QMainWindow
 {
@@ -19,7 +22,10 @@ public:
     ~Window();
 
 protected:
+    void changeEvent(QEvent *event) override;
     void closeEvent(QCloseEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
+    void showEvent(QShowEvent *event) override;
 
 private slots:
     void showHideWindow();
@@ -30,12 +36,16 @@ private:
     void setupUi();
     void createTrayIcon();
     void setIcon();
-    
+#ifdef Q_OS_MAC
+    void setupMacOSDockReopen();
+#endif
+
     LogosAPI* m_logosAPI;
     QSystemTrayIcon* m_trayIcon;
     QMenu* m_trayIconMenu;
     QAction* m_showHideAction;
     QAction* m_quitAction;
+    QWidget* m_trafficLightsTitleBar = nullptr;
 };
 
 #endif // WINDOW_H 

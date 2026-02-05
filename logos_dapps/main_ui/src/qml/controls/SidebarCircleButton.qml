@@ -5,8 +5,8 @@ import Logos.Theme
 AbstractButton {
     id: root
 
-    implicitHeight: 50
-    implicitWidth: 50
+    implicitHeight: 38
+    implicitWidth: 38
 
     // Dark gray pill background extending to left edge when active/highlighted
     background: Rectangle {

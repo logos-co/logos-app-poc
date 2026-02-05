@@ -18,7 +18,8 @@ Control {
     signal updateLauncherIndex(int index)
 
     padding: 0
-    topPadding: Theme.spacing.large
+    topPadding: Theme.spacing.large + _d.systemTitleBarPadding
+    topInset: _d.systemTitleBarPadding
 
     QtObject {
         id: _d
@@ -39,6 +40,8 @@ Control {
         readonly property var unloadedApps: (root.launcherApps || []).filter(function(item) {
             return item && item.isLoaded === false
         })
+
+        readonly property int systemTitleBarPadding: Qt.platform.os === "osx" ? 30: 0
     }
 
     background: Rectangle {
@@ -51,8 +54,8 @@ Control {
 
         Image {
             // As per design
-            Layout.preferredWidth: 64
-            Layout.preferredHeight: 34
+            Layout.preferredWidth: 46
+            Layout.preferredHeight: 25
             Layout.alignment: Qt.AlignHCenter
             source: "qrc:/icons/basecamp.png"
         }
