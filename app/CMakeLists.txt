@@ -17,7 +17,7 @@ else()
     set(CMAKE_INSTALL_RPATH "\$ORIGIN/../lib:\$ORIGIN/lib")
 endif()
 
-find_package(Qt6 COMPONENTS Widgets REQUIRED)
+find_package(Qt6 COMPONENTS Widgets Qml Quick QuickControls2 QuickWidgets REQUIRED)
 
 # Add interfaces directory to include path
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
@@ -82,8 +82,6 @@ endif()
 
 set(PROJECT_SOURCES
     main.cpp
-    window.h
-    window.cpp
     interfaces/IComponent.h
     resources.qrc
 )
@@ -95,6 +93,10 @@ qt_add_executable(LogosApp
 # Link with logos_core library using a more flexible approach
 target_link_libraries(LogosApp PRIVATE 
     Qt6::Widgets
+    Qt6::Qml
+    Qt6::Quick
+    Qt6::QuickControls2
+    Qt6::QuickWidgets
     logos_core
 )
 

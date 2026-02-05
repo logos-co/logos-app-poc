@@ -9,7 +9,7 @@ Control {
     property alias contentModel: repeater.model
     signal moduleClicked(string name, int index)
 
-    padding: Theme.spacing.medium
+    padding: Theme.spacing.small
 
     background: Rectangle {
         id: bg

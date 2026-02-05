@@ -151,8 +151,7 @@ void MdiView::customizeTabBarStyle(QTabBar* tabBar)
     tabBar->setElideMode(Qt::ElideRight);
     tabBar->setUsesScrollButtons(false);
     tabBar->setExpanding(false);
-    tabBar->setFixedHeight(44);
-    tabBar->setIconSize(QSize(20, 20));
+    tabBar->setIconSize(QSize(15, 15));
     QScroller::grabGesture(tabBar, QScroller::LeftMouseButtonGesture);
     QScroller::grabGesture(tabBar, QScroller::TouchGesture);
     QScrollerProperties props = QScroller::scroller(tabBar)->scrollerProperties();
@@ -172,16 +171,12 @@ void MdiView::customizeTabBarStyle(QTabBar* tabBar)
             background: #262626;
             color: #A4A4A4;
     
-            padding: 0px 24px 0px 32px;
+            padding: 0px 4px 0px 0px;
             margin-right: 10px;
-            margin-left: 0px;
-    
-            margin-top: 9px;
-            margin-bottom: 4px;
-    
+        
             border-top-left-radius: 10px;
             border-top-right-radius: 10px;
-            height: 35px;
+            height: 20px;
             min-width: 120px;
         }
     
@@ -219,20 +214,17 @@ void MdiView::ensureMdiAddButton(QTabBar* tabBar)
     if (!m_mdiAddBtn) {
         m_mdiAddBtn = new QToolButton(tabBar->parentWidget());
         m_mdiAddBtn->setIcon(QIcon(":/icons/add-button.png"));
-        m_mdiAddBtn->setIconSize(QSize(24, 24));
+        m_mdiAddBtn->setIconSize(QSize(15, 15));
         m_mdiAddBtn->setAutoRaise(true);
         m_mdiAddBtn->setCursor(Qt::PointingHandCursor);
-        m_mdiAddBtn->setFixedSize(42, 35);
+        m_mdiAddBtn->setFixedSize(25, 19);
         m_mdiAddBtn->setStyleSheet(QStringLiteral(R"(
             QToolButton {
                 background: #2A2A2A;
                 color: #FFFFFF;
-                border-top-left-radius: 14px;
-                border-top-right-radius: 14px;
-                padding-top: 9px;
-                padding-bottom: 2px;
-                padding-left: 0px;
-                padding-right: 0px;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                padding-top: 1px;
             }
             QToolButton:hover {
                 background: #262626;

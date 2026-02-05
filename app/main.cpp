@@ -1,17 +1,24 @@
-#include "window.h"
 #include "logos_api.h"
 #include "token_manager.h"
-#include "logos_mode.h"
 #include <QApplication>
 #include <QIcon>
 #include <QDir>
-#include <QTimer>
 #include <QStandardPaths>
-#include <iostream>
-#include <memory>
+#include <QFileInfo>
+#include <QStringList>
 #include <QStringList>
 #include <QDebug>
 #include <QMetaObject>
+#include <QPluginLoader>
+#include <IComponent.h>
+#include <QSystemTrayIcon>
+#include <QMenu>
+#include <QAction>
+#include <QQmlApplicationEngine>
+#include <QQmlContext>
+#include <QQuickWindow>
+#include <QWidget>
+#include <QProcessEnvironment>
 
 // Replace CoreManager with direct C API functions
 extern "C" {
@@ -22,26 +29,20 @@ extern "C" {
     char** logos_core_get_loaded_plugins();
     int logos_core_load_plugin(const char* plugin_name);
     char* logos_core_process_plugin(const char* plugin_path);
-    char* logos_core_get_module_stats();
 }
 
-// Helper function to convert C-style array to QStringList
-QStringList convertPluginsToStringList(char** plugins) {
-    QStringList result;
-    if (plugins) {
-        for (int i = 0; plugins[i] != nullptr; i++) {
-            result.append(plugins[i]);
-        }
-    }
-    return result;
+static QString pluginExtension() {
+#if defined(Q_OS_WIN)
+    return ".dll";
+#elif defined(Q_OS_MAC)
+    return ".dylib";
+#else
+    return ".so";
+#endif
 }
 
 int main(int argc, char *argv[])
 {
-    // Set logos mode to Local for testing
-    //LogosModeConfig::setMode(LogosMode::Local);
-
-    // Create QApplication first
     QApplication app(argc, argv);
 
     QString modulesDir = QDir::cleanPath(QCoreApplication::applicationDirPath() + "/../modules");
@@ -53,77 +54,168 @@ int main(int argc, char *argv[])
         logos_core_add_plugins_dir(userModulesDir.toUtf8().constData());
     }
 
-    // Start the core
     logos_core_start();
-    std::cout << "Logos Core started successfully!" << std::endl;
 
-    // TODO: this should be refactored
-    QString pluginExtension;
-#if defined(Q_OS_MAC)
-    pluginExtension = ".dylib";
-#elif defined(Q_OS_WIN)
-    pluginExtension = ".dll";
-#else // Linux and others
-    pluginExtension = ".so";
-#endif
-
-    QString pluginPath = modulesDir + "/package_manager_plugin" + pluginExtension;
-    logos_core_process_plugin(pluginPath.toUtf8().constData());
-    bool loaded = logos_core_load_plugin("package_manager");
-
-    if (loaded) {
-        qInfo() << "package_manager plugin loaded by default.";
-    } else {
+    QString pluginExt = pluginExtension();
+    logos_core_process_plugin((modulesDir + "/package_manager_plugin" + pluginExt).toUtf8().constData());
+    if (!logos_core_load_plugin("package_manager"))
         qWarning() << "Failed to load package_manager plugin by default.";
-    }
-
-    // Print loaded plugins initially
-    char** loadedPlugins = logos_core_get_loaded_plugins();
-    QStringList plugins = convertPluginsToStringList(loadedPlugins);
-
-    if (plugins.isEmpty()) {
-        qInfo() << "No plugins loaded.";
-    } else {
-        qInfo() << "Currently loaded plugins:";
-        foreach (const QString &plugin, plugins) {
-            qInfo() << "  -" << plugin;
-        }
-        qInfo() << "Total plugins:" << plugins.size();
-    }
 
     LogosAPI logosAPI("core", nullptr);
-    qDebug() << "LogosAPI: printing keys";
-    QList<QString> keys = logosAPI.getTokenManager()->getTokenKeys();
-    for (const QString& key : keys) {
-        qDebug() << "LogosAPI: Token key:" << key << "value:" << logosAPI.getTokenManager()->getToken(key);
-    }
 
-    // Set application icon
     app.setWindowIcon(QIcon(":/icons/logos.png"));
-
-    // Don't quit when last window is closed (for system tray support)
     app.setQuitOnLastWindowClosed(false);
 
-    // Create and show the main window
-    Window mainWindow(&logosAPI);
-    mainWindow.show();
+    QString pluginsDir = QCoreApplication::applicationDirPath() + "/../plugins/";
 
-    // Set up timer to poll module stats every 2 seconds
-    QTimer* statsTimer = new QTimer(&app);
-    QObject::connect(statsTimer, &QTimer::timeout, [&]() {
-        char* stats_json = logos_core_get_module_stats();
-        if (stats_json) {
-            std::cout << "Module stats: " << stats_json << std::endl;
-            delete[] stats_json;
+    QString packageManagerPluginPath = pluginsDir + "package_manager_ui/package_manager_ui" + pluginExt;
+    QPluginLoader packageManagerLoader(packageManagerPluginPath);
+    QWidget* packageManagerWidget = nullptr;
+    if (packageManagerLoader.load()) {
+        QObject* pmPlugin = packageManagerLoader.instance();
+        if (pmPlugin) {
+            IComponent* component = qobject_cast<IComponent*>(pmPlugin);
+            if (component) {
+                packageManagerWidget = component->createWidget(&logosAPI);
+            }
         }
-    });
-    statsTimer->start(2000);
+    }
+    if (!packageManagerWidget)
+        qWarning() << "Failed to load package_manager_ui plugin:" << packageManagerLoader.errorString();
 
-    // Run the application
+    QString mainUiPluginPath = pluginsDir + "main_ui/main_ui" + pluginExt;
+    QPluginLoader mainUiLoader(mainUiPluginPath);
+    QWidget* mainContent = nullptr;
+    QObject* mainUiPlugin = nullptr;
+    if (mainUiLoader.load()) {
+        mainUiPlugin = mainUiLoader.instance();
+        if (mainUiPlugin) {
+            QMetaObject::invokeMethod(mainUiPlugin, "createWidget",
+                                      Qt::DirectConnection,
+                                      Q_RETURN_ARG(QWidget*, mainContent),
+                                      Q_ARG(LogosAPI*, &logosAPI));
+        }
+    }
+    if (!mainContent) {
+        qWarning() << "Failed to load main_ui plugin from:" << mainUiPluginPath;
+        return 1;
+    }
+    if (packageManagerWidget && mainUiPlugin) {
+        QMetaObject::invokeMethod(mainUiPlugin, "setPackageManagerWidget",
+                                  Qt::DirectConnection,
+                                  Q_ARG(QWidget*, packageManagerWidget));
+    }
+
+    // MainContainer must have a QWindow for embedding: create as top-level then embed
+    mainContent->setParent(nullptr);
+    mainContent->setAttribute(Qt::WA_NativeWindow, true);
+    if (!mainContent->windowHandle()) {
+        mainContent->winId(); // force native window creation
+    }
+    QWindow* mainContentWindow = mainContent->windowHandle();
+    if (!mainContentWindow) {
+        qWarning() << "MainContainer has no QWindow, cannot embed in QML.";
+        return 1;
+    }
+
+    // --- QML engine: load main.qml (ApplicationWindow) ---
+    QQmlApplicationEngine engine;
+
+    // Expose MainContainer's QWindow so QML can embed it via WindowContainer
+    engine.rootContext()->setContextProperty("mainContentWindow", QVariant::fromValue(mainContentWindow));
+
+    // Import paths for Logos.DesignSystem and main_ui QML
+    QString qmlUiPath = QProcessEnvironment::systemEnvironment().value("QML_UI", "");
+    if (!qmlUiPath.isEmpty()) {
+        QDir qmlDir(qmlUiPath);
+        engine.addImportPath(qmlDir.absoluteFilePath("qml"));
+        engine.addImportPath(qmlDir.absolutePath());
+    }
+    engine.addImportPath("qrc:/qml");
+    // Design system: try env and common locations
+    QString designQml = QProcessEnvironment::systemEnvironment().value("LOGOS_DESIGN_SYSTEM_QML", "");
+    if (!designQml.isEmpty()) {
+        engine.addImportPath(designQml);
+    } else {
+        // Fallbacks: sibling logos-design-system or app resources
+        QDir appDir(QCoreApplication::applicationDirPath());
+        QStringList tryPaths;
+        tryPaths << appDir.absoluteFilePath("../Resources/qml")
+                 << appDir.absoluteFilePath("../qml")
+                 << appDir.absoluteFilePath("../../logos-design-system/src/qml");
+        for (const QString& p : tryPaths) {
+            if (QDir(p).exists())
+                engine.addImportPath(p);
+        }
+    }
+
+    // Load main.qml from filesystem when MAIN_QML_PATH is set (e.g. run-dev.sh), else from qrc
+    QStringList qmlCandidates;
+    QString envPath = QProcessEnvironment::systemEnvironment().value("MAIN_QML_PATH", "");
+    if (!envPath.isEmpty()) {
+        if (QFileInfo(envPath).isFile())
+            qmlCandidates << QFileInfo(envPath).absoluteFilePath();
+        else
+            qmlCandidates << QDir(envPath).absoluteFilePath("main.qml");
+    }
+    QUrl mainQml;
+    for (const QString& p : qmlCandidates)
+        if (QFileInfo::exists(p)) { mainQml = QUrl::fromLocalFile(p); break; }
+    if (mainQml.isEmpty())
+        mainQml = QUrl(QStringLiteral("qrc:/main.qml"));
+
+    QObject::connect(
+        &engine, &QQmlApplicationEngine::objectCreationFailed,
+        &app, []() { QCoreApplication::exit(-1); },
+        Qt::QueuedConnection);
+    engine.load(mainQml);
+    if (engine.rootObjects().isEmpty()) {
+        qWarning() << "No root QML object created.";
+        return 1;
+    }
+
+    QObject* root = engine.rootObjects().first();
+    QQuickWindow* quickWindow = qobject_cast<QQuickWindow*>(root);
+    if (!quickWindow) {
+        qWarning() << "Root object is not a QQuickWindow.";
+        return 1;
+    }
+    // --- System tray: show/hide the QML window ---
+    QSystemTrayIcon* trayIcon = nullptr;
+    if (QSystemTrayIcon::isSystemTrayAvailable()) {
+        trayIcon = new QSystemTrayIcon(&app);
+        QIcon icon(":/icons/logos.png");
+        if (icon.isNull())
+            icon = QIcon::fromTheme("application-x-executable");
+        trayIcon->setIcon(icon);
+        trayIcon->setToolTip("Logos Core POC");
+
+        auto showOrHide = [quickWindow]() {
+            if (quickWindow->isVisible())
+                quickWindow->hide();
+            else {
+                quickWindow->show();
+                quickWindow->raise();
+                quickWindow->requestActivate();
+            }
+        };
+        QMenu* trayMenu = new QMenu();
+        QObject::connect(trayMenu->addAction(QObject::tr("Show/Hide")), &QAction::triggered, &app, showOrHide);
+        trayMenu->addSeparator();
+        QObject::connect(trayMenu->addAction(QObject::tr("Quit")), &QAction::triggered, &app, &QApplication::quit);
+        trayIcon->setContextMenu(trayMenu);
+        QObject::connect(trayIcon, &QSystemTrayIcon::activated, &app, [showOrHide](QSystemTrayIcon::ActivationReason reason) {
+            if (reason == QSystemTrayIcon::Trigger || reason == QSystemTrayIcon::DoubleClick || reason == QSystemTrayIcon::MiddleClick)
+                showOrHide();
+        });
+        trayIcon->show();
+    }
+
+    engine.rootContext()->setContextProperty("trayIconAvailable", QVariant(trayIcon != nullptr));
+
+    quickWindow->show();
+
     int result = app.exec();
-
-    // Cleanup
     logos_core_cleanup();
-
     return result;
-} 
+}

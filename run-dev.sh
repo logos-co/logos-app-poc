@@ -7,6 +7,9 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # Set QML_UI to point to the main_ui QML source directory
 export QML_UI="$SCRIPT_DIR/logos_dapps/main_ui/src"
 
+# Load main.qml from app source so edits apply without rebuilding
+export MAIN_QML_PATH="$SCRIPT_DIR/app"
+
 # Ensure QML uses filesystem sources and skips disk cache
 export QML_IMPORT_PATH="$QML_UI/qml:$QML_UI:$QML_IMPORT_PATH"
 export QML2_IMPORT_PATH="$QML_UI/qml:$QML_UI:$QML2_IMPORT_PATH"
@@ -37,7 +40,7 @@ echo ""
 echo "QML files will be loaded from the filesystem."
 echo "The QML_UI path is also added to the engine import path, so"
 echo "nested components (e.g. SidebarIconButton) load from disk too."
-echo "Edit QML files and restart the app to see changes (no rebuild)."
+echo "main.qml is loaded from: $MAIN_QML_PATH (edit and restart, no rebuild)."
 echo "================================================"
 echo ""
 
