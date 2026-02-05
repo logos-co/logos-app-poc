@@ -27,6 +27,7 @@
         logosCapabilityModule = logos-capability-module.packages.${system}.default;
         logosPackageLib = logos-package.packages.${system}.lib;
         logosPackageManagerUI = logos-package-manager-ui.packages.${system}.default;
+        logosPackageManagerUIDistributed = logos-package-manager-ui.packages.${system}.distributed;
         logosWebviewApp = logos-webview-app.packages.${system}.default;
         logosDesignSystem = logos-design-system.packages.${system}.default;
         logosCounterQml = logos-counter-qml.packages.${system}.default;
@@ -38,7 +39,7 @@
       });
     in
     {
-      packages = forAllSystems ({ pkgs, logosSdk, logosLiblogos, logosPackageManager, logosCapabilityModule, logosPackageLib, logosPackageManagerUI, logosWebviewApp, logosDesignSystem, logosCounterQml, logosCounter, ... }: 
+      packages = forAllSystems ({ pkgs, logosSdk, logosLiblogos, logosPackageManager, logosCapabilityModule, logosPackageLib, logosPackageManagerUI, logosPackageManagerUIDistributed, logosWebviewApp, logosDesignSystem, logosCounterQml, logosCounter, ... }: 
         let
           # Common configuration
           common = import ./nix/default.nix { 
@@ -69,8 +70,8 @@
             distributed = true;
           };
           
-          # Use external package-manager-ui package for distributed builds too
-          packageManagerUIPluginDistributed = logosPackageManagerUI;
+          # Use external package-manager-ui package (distributed build with LOGOS_DISTRIBUTED_BUILD=ON)
+          packageManagerUIPluginDistributed = logosPackageManagerUIDistributed;
           
           # App package (development build)
           app = import ./nix/app.nix { 
