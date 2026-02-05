@@ -72,6 +72,13 @@ pkgs.stdenv.mkDerivation rec {
       cp -RL "$qtdeclarative/lib/qt-6/qml"/* "$out/LogosApp.app/Contents/Resources/qml/" || true
     fi
     
+    # Copy Logos Design System QML module
+    if [ -d "${app}/lib/Logos/DesignSystem" ]; then
+      mkdir -p "$out/LogosApp.app/Contents/Resources/qml/Logos"
+      cp -R "${app}/lib/Logos/DesignSystem" "$out/LogosApp.app/Contents/Resources/qml/Logos/"
+      echo "Copied Logos Design System to Resources/qml/Logos/DesignSystem/"
+    fi
+    
     if [ -d "$qtdeclarative/lib/qt-6/plugins" ]; then
       cp -RL "$qtdeclarative/lib/qt-6/plugins"/* "$out/LogosApp.app/Contents/PlugIns/" || true
     fi
