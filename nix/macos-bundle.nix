@@ -135,7 +135,20 @@ EOF
     install_name_tool -add_rpath "@executable_path/../plugins" "$out/LogosApp.app/Contents/MacOS/LogosApp" 2>/dev/null || true
     
     /usr/bin/codesign --force --deep --sign - "$out/LogosApp.app" 2>/dev/null || echo "Codesigning skipped (requires macOS)"
-    
+
+    echo "Checking for hardcoded Nix store references..."
+    nix_refs=$(find "$out/LogosApp.app" -type f \( -perm +111 -o -name "*.dylib" \) -exec otool -L {} \; 2>/dev/null | grep "/nix/store" || true)
+
+    if [ -n "$nix_refs" ]; then
+      echo "ERROR: Found hardcoded Nix store references in the app bundle:"
+      echo "$nix_refs"
+      echo ""
+      echo "All library paths should use @executable_path, @loader_path, or @rpath"
+      echo "The app bundle will not be portable with these hardcoded paths."
+      exit 1
+    fi
+    echo "No hardcoded Nix store references found - app bundle is portable"
+
     ln -s "LogosApp.app/Contents/MacOS/LogosApp" "$out/LogosApp"
     
     runHook postInstall
