@@ -5,7 +5,7 @@
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Set QML_UI to point to the main_ui QML source directory
-export QML_UI="$SCRIPT_DIR/logos_dapps/main_ui/src"
+export QML_UI="$SCRIPT_DIR/src"
 
 # Ensure QML uses filesystem sources and skips disk cache
 export QML_IMPORT_PATH="$QML_UI/qml:$QML_UI:$QML_IMPORT_PATH"
