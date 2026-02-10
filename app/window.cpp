@@ -134,6 +134,8 @@ void Window::setupUi()
         qWarning() << "Failed to load main UI plugin from:" << mainUiPluginPath;
     }
 
+    // Set window title and size
+    setWindowTitle("Logos App");
     resize(1024, 768);
 
 #ifdef Q_OS_MAC

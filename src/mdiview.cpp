@@ -5,6 +5,7 @@
 #include <QColor>
 #include <QTimer>
 #include <QEvent>
+#include <QMouseEvent>
 #include <QWheelEvent>
 #include <QScroller>
 #include <QScrollerProperties>
@@ -298,7 +299,7 @@ bool MdiView::eventFilter(QObject* watched, QEvent* event)
         if (event->type() == QEvent::Resize || event->type() == QEvent::Show) {
             repositionMdiAddButton();
         } else if (event->type() == QEvent::MouseMove) {
-            const QPoint pos = tabBar->mapFromGlobal(QCursor::pos());
+            const QPoint pos = static_cast<QMouseEvent*>(event)->position().toPoint();
             for (int i = 0; i < tabBar->count(); ++i) {
                 QWidget* closeBtn = tabBar->tabButton(i, QTabBar::LeftSide);
                 if (closeBtn) {
