@@ -88,6 +88,8 @@ pkgs.stdenv.mkDerivation rec {
     runHook postPreConfigure
   '';
   
+  passthru = { extraDirs = [ "modules" "plugins" ]; };
+
   # This is an aggregate runtime layout; avoid stripping to prevent hook errors
   dontStrip = true;
   
