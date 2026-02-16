@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import Logos.DesignSystem
+import Logos.Theme
 
 Item {
     id: root

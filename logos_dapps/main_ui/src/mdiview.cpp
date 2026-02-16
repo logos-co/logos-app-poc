@@ -35,7 +35,7 @@ void MdiView::setupUi()
     mdiArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     mdiArea->setViewMode(QMdiArea::SubWindowView);
     
-    // TODO: this should probably be a qml file and should then use Logos.DesignSystem instead
+    // TODO: this should probably be a qml file and should then use Logos.Theme instead
     mdiArea->setBackground(QColor("#171717"));
     
     mdiArea->setTabsClosable(true);
