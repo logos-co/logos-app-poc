@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Logos.Controls
 
 Item {
     id: root
@@ -34,16 +35,15 @@ Item {
                     Layout.fillWidth: true
                     spacing: 4
 
-                    Text {
+                    LogosText {
                         text: "Core Modules"
                         font.pixelSize: 20
-                        font.bold: true
+                        font.weight: Font.Bold
                         color: "#ffffff"
                     }
 
-                    Text {
+                    LogosText {
                         text: "All available plugins in the system"
-                        font.pixelSize: 14
                         color: "#a0a0a0"
                     }
                 }
@@ -52,7 +52,7 @@ Item {
                     text: "Install core module from file system"
                     onClicked: backend.openInstallCoreModuleDialog()
 
-                    contentItem: Text {
+                    contentItem: LogosText {
                         text: parent.text
                         font.pixelSize: 13
                         color: "#ffffff"
@@ -74,7 +74,7 @@ Item {
                     text: "Reload"
                     onClicked: backend.refreshCoreModules()
 
-                    contentItem: Text {
+                    contentItem: LogosText {
                         text: parent.text
                         font.pixelSize: 13
                         color: "#ffffff"
@@ -126,7 +126,7 @@ Item {
                                     spacing: 10
 
                                     // Plugin name
-                                    Text {
+                                    LogosText {
                                         text: modelData.name
                                         font.pixelSize: 16
                                         color: "#e0e0e0"
@@ -134,24 +134,21 @@ Item {
                                     }
 
                                     // Status
-                                    Text {
+                                    LogosText {
                                         text: modelData.isLoaded ? "(Loaded)" : "(Not Loaded)"
-                                        font.pixelSize: 14
                                         color: modelData.isLoaded ? "#4CAF50" : "#F44336"
                                     }
 
                                     // CPU (only for loaded)
-                                    Text {
+                                    LogosText {
                                         text: modelData.isLoaded ? "CPU: " + modelData.cpu + "%" : ""
-                                        font.pixelSize: 14
                                         color: "#64B5F6"
                                         Layout.preferredWidth: 80
                                     }
 
                                     // Memory (only for loaded)
-                                    Text {
+                                    LogosText {
                                         text: modelData.isLoaded ? "Mem: " + modelData.memory + " MB" : ""
-                                        font.pixelSize: 14
                                         color: "#81C784"
                                         Layout.preferredWidth: 100
                                     }
@@ -162,7 +159,7 @@ Item {
                                     Button {
                                         text: modelData.isLoaded ? "Unload Plugin" : "Load Plugin"
                                         
-                                        contentItem: Text {
+                                        contentItem: LogosText {
                                             text: parent.text
                                             font.pixelSize: 12
                                             color: "#ffffff"
@@ -193,7 +190,7 @@ Item {
                                         text: "View Methods"
                                         visible: modelData.isLoaded
                                         
-                                        contentItem: Text {
+                                        contentItem: LogosText {
                                             text: parent.text
                                             font.pixelSize: 12
                                             color: "#ffffff"
@@ -218,9 +215,8 @@ Item {
                         }
 
                         // Empty state
-                        Text {
+                        LogosText {
                             text: "No core modules available."
-                            font.pixelSize: 14
                             color: "#606060"
                             Layout.alignment: Qt.AlignHCenter
                             Layout.topMargin: 40

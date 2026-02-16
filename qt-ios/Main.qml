@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Logos.Controls
 
 ApplicationWindow {
     id: window
@@ -62,13 +63,13 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     spacing: 8
                     
-                    Text {
+                    LogosText {
                         text: "⚡"
                         font.pixelSize: 48
                         Layout.alignment: Qt.AlignHCenter
                     }
                     
-                    Text {
+                    LogosText {
                         text: "Logos Core"
                         font.pixelSize: 32
                         font.weight: Font.Bold
@@ -77,7 +78,7 @@ ApplicationWindow {
                         Layout.alignment: Qt.AlignHCenter
                     }
                     
-                    Text {
+                    LogosText {
                         text: "iOS Integration Demo"
                         font.pixelSize: 16
                         font.family: "SF Pro Text"
@@ -121,9 +122,8 @@ ApplicationWindow {
                                 }
                             }
                             
-                            Text {
+                            LogosText {
                                 text: "Status"
-                                font.pixelSize: 14
                                 font.weight: Font.Medium
                                 font.family: "SF Pro Text"
                                 color: "#8b949e"
@@ -131,9 +131,8 @@ ApplicationWindow {
                             
                             Item { Layout.fillWidth: true }
                             
-                            Text {
+                            LogosText {
                                 text: logosBridge.initialized ? "Connected" : "Disconnected"
-                                font.pixelSize: 14
                                 font.weight: Font.Medium
                                 font.family: "SF Pro Text"
                                 color: logosBridge.initialized ? "#238636" : "#f85149"
@@ -146,7 +145,7 @@ ApplicationWindow {
                             color: "#30363d"
                         }
                         
-                        Text {
+                        LogosText {
                             text: logosBridge.status
                             font.pixelSize: 13
                             font.family: "SF Mono"
@@ -162,9 +161,8 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     spacing: 12
                     
-                    Text {
+                    LogosText {
                         text: "Controls"
-                        font.pixelSize: 14
                         font.weight: Font.Medium
                         font.family: "SF Pro Text"
                         color: "#8b949e"
@@ -179,7 +177,7 @@ ApplicationWindow {
                             text: "Initialize"
                             enabled: !logosBridge.initialized
                             
-                            contentItem: Text {
+                            contentItem: LogosText {
                                 text: parent.text
                                 font.pixelSize: 15
                                 font.weight: Font.Medium
@@ -205,7 +203,7 @@ ApplicationWindow {
                             text: "Start"
                             enabled: logosBridge.initialized
                             
-                            contentItem: Text {
+                            contentItem: LogosText {
                                 text: parent.text
                                 font.pixelSize: 15
                                 font.weight: Font.Medium
@@ -232,7 +230,7 @@ ApplicationWindow {
                         text: "Test Async Operation"
                         enabled: logosBridge.initialized
                         
-                        contentItem: Text {
+                        contentItem: LogosText {
                             text: parent.text
                             font.pixelSize: 15
                             font.weight: Font.Medium
@@ -258,7 +256,7 @@ ApplicationWindow {
                         text: "Call packageManager:testPluginCall"
                         enabled: logosBridge.initialized
                         
-                        contentItem: Text {
+                        contentItem: LogosText {
                             text: parent.text
                             font.pixelSize: 15
                             font.weight: Font.Medium
@@ -298,15 +296,14 @@ ApplicationWindow {
                         anchors.margins: 16
                         spacing: 8
                         
-                        Text {
+                        LogosText {
                             text: "Async Result"
-                            font.pixelSize: 14
                             font.weight: Font.Medium
                             font.family: "SF Pro Text"
                             color: "#8b949e"
                         }
                         
-                        Text {
+                        LogosText {
                             text: logosBridge.lastAsyncResult
                             font.pixelSize: 13
                             font.family: "SF Mono"
@@ -335,15 +332,14 @@ ApplicationWindow {
                         anchors.margins: 16
                         spacing: 8
                         
-                        Text {
+                        LogosText {
                             text: "packageManager:testPluginCall Result"
-                            font.pixelSize: 14
                             font.weight: Font.Medium
                             font.family: "SF Pro Text"
                             color: "#8b949e"
                         }
                         
-                        Text {
+                        LogosText {
                             text: logosBridge.testPluginCallResult
                             font.pixelSize: 13
                             font.family: "SF Mono"
@@ -371,9 +367,8 @@ ApplicationWindow {
                         anchors.margins: 16
                         spacing: 12
                         
-                        Text {
+                        LogosText {
                             text: "Linked Modules (Static)"
-                            font.pixelSize: 14
                             font.weight: Font.Medium
                             font.family: "SF Pro Text"
                             color: "#8b949e"
@@ -405,7 +400,7 @@ ApplicationWindow {
                                     color: logosBridge.hasPackageManager ? "#238636" : "#f85149"
                                 }
                                 
-                                Text {
+                                LogosText {
                                     text: "package_manager"
                                     font.pixelSize: 13
                                     font.family: "SF Mono"
@@ -413,7 +408,7 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                 }
                                 
-                                Text {
+                                LogosText {
                                     text: logosBridge.hasPackageManager ? "linked" : "not linked"
                                     font.pixelSize: 11
                                     font.family: "SF Mono"
@@ -442,7 +437,7 @@ ApplicationWindow {
                                     color: logosBridge.hasCapabilityModule ? "#238636" : "#f85149"
                                 }
                                 
-                                Text {
+                                LogosText {
                                     text: "capability_module"
                                     font.pixelSize: 13
                                     font.family: "SF Mono"
@@ -450,7 +445,7 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                 }
                                 
-                                Text {
+                                LogosText {
                                     text: logosBridge.hasCapabilityModule ? "linked" : "not linked"
                                     font.pixelSize: 11
                                     font.family: "SF Mono"
@@ -481,9 +476,8 @@ ApplicationWindow {
                         RowLayout {
                             Layout.fillWidth: true
                             
-                            Text {
+                            LogosText {
                                 text: "Loaded Plugins"
-                                font.pixelSize: 14
                                 font.weight: Font.Medium
                                 font.family: "SF Pro Text"
                                 color: "#8b949e"
@@ -491,7 +485,7 @@ ApplicationWindow {
                             
                             Item { Layout.fillWidth: true }
                             
-                            Text {
+                            LogosText {
                                 text: logosBridge.loadedPlugins.length.toString()
                                 font.pixelSize: 12
                                 font.weight: Font.Medium
@@ -541,7 +535,7 @@ ApplicationWindow {
                                             color: "#238636"
                                         }
                                         
-                                        Text {
+                                        LogosText {
                                             text: modelData
                                             font.pixelSize: 13
                                             font.family: "SF Mono"
@@ -553,7 +547,7 @@ ApplicationWindow {
                             }
                             
                             // Empty state
-                            Text {
+                            LogosText {
                                 visible: logosBridge.loadedPlugins.length === 0
                                 text: logosBridge.initialized ? "No plugins loaded" : "Initialize to see plugins"
                                 font.pixelSize: 13
@@ -571,9 +565,8 @@ ApplicationWindow {
                             text: "Refresh List"
                             enabled: logosBridge.initialized
                             
-                            contentItem: Text {
+                            contentItem: LogosText {
                                 text: parent.text
-                                font.pixelSize: 14
                                 font.family: "SF Pro Text"
                                 color: parent.enabled ? "#58a6ff" : "#484f58"
                                 horizontalAlignment: Text.AlignHCenter
@@ -599,7 +592,7 @@ ApplicationWindow {
                     Layout.topMargin: 16
                     spacing: 4
                     
-                    Text {
+                    LogosText {
                         text: "liblogos • Qt 6 • iOS"
                         font.pixelSize: 12
                         font.family: "SF Pro Text"
@@ -607,7 +600,7 @@ ApplicationWindow {
                         Layout.alignment: Qt.AlignHCenter
                     }
                     
-                    Text {
+                    LogosText {
                         text: "Build: " + logosBridge.buildTimestamp
                         font.pixelSize: 10
                         font.family: "SF Mono"

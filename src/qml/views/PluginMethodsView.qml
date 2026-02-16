@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Logos.Theme
+import Logos.Controls
 
 Item {
     id: root
@@ -38,9 +39,8 @@ Item {
             Button {
                 text: "← Back"
                 
-                contentItem: Text {
+                contentItem: LogosText {
                     text: parent.text
-                    font.pixelSize: 14
                     color: "#ffffff"
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
@@ -56,10 +56,10 @@ Item {
                 onClicked: root.backClicked()
             }
 
-            Text {
+            LogosText {
                 text: "Methods: " + root.pluginName
                 font.pixelSize: 20
-                font.bold: true
+                font.weight: Font.Bold
                 color: "#ffffff"
             }
 
@@ -108,16 +108,15 @@ Item {
                                         Layout.fillWidth: true
                                         spacing: 12
 
-                                        Text {
+                                        LogosText {
                                             text: modelData.name || modelData
-                                            font.pixelSize: 14
-                                            font.bold: true
+                                            font.weight: Font.Bold
                                             color: "#4A90E2"
                                         }
 
-                                        Text {
+                                        LogosText {
                                             text: modelData.signature || ""
-                                            font.pixelSize: 12
+                                            font.pixelSize: Theme.typography.secondaryText
                                             color: "#808080"
                                             visible: modelData.signature !== undefined
                                         }
@@ -127,9 +126,9 @@ Item {
                                         Button {
                                             text: "Call"
                                             
-                                            contentItem: Text {
+                                            contentItem: LogosText {
                                                 text: parent.text
-                                                font.pixelSize: 12
+                                                font.pixelSize: Theme.typography.secondaryText
                                                 color: "#ffffff"
                                                 horizontalAlignment: Text.AlignHCenter
                                                 verticalAlignment: Text.AlignVCenter
@@ -149,9 +148,9 @@ Item {
                                         }
                                     }
 
-                                    Text {
+                                    LogosText {
                                         text: modelData.description || ""
-                                        font.pixelSize: 12
+                                        font.pixelSize: Theme.typography.secondaryText
                                         color: "#a0a0a0"
                                         wrapMode: Text.Wrap
                                         Layout.fillWidth: true
@@ -162,9 +161,8 @@ Item {
                         }
 
                         // Empty state
-                        Text {
+                        LogosText {
                             text: "No methods available for this plugin."
-                            font.pixelSize: 14
                             color: "#606060"
                             Layout.alignment: Qt.AlignHCenter
                             Layout.topMargin: 40
@@ -188,10 +186,10 @@ Item {
                         anchors.margins: 12
                         spacing: 8
 
-                        Text {
+                        LogosText {
                             text: "Result:"
-                            font.pixelSize: 12
-                            font.bold: true
+                            font.pixelSize: Theme.typography.secondaryText
+                            font.weight: Font.Bold
                             color: "#a0a0a0"
                         }
 

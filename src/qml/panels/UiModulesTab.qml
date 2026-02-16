@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Logos.Controls
 
 Item {
     id: root
@@ -17,16 +18,15 @@ Item {
                 Layout.fillWidth: true
                 spacing: 4
 
-                Text {
+                LogosText {
                     text: "UI Modules"
                     font.pixelSize: 20
-                    font.bold: true
+                    font.weight: Font.Bold
                     color: "#ffffff"
                 }
 
-                Text {
+                LogosText {
                     text: "Available UI plugins in the system"
-                    font.pixelSize: 14
                     color: "#a0a0a0"
                 }
             }
@@ -35,7 +35,7 @@ Item {
                 text: "Install app from file system"
                 onClicked: backend.openInstallPluginDialog()
 
-                contentItem: Text {
+                contentItem: LogosText {
                     text: parent.text
                     font.pixelSize: 13
                     color: "#ffffff"
@@ -94,21 +94,21 @@ Item {
                                     visible: modelData.iconPath && modelData.iconPath.length > 0
                                 }
 
-                                Text {
+                                LogosText {
                                     anchors.centerIn: parent
                                     text: modelData.name.substring(0, 2).toUpperCase()
                                     font.pixelSize: 16
-                                    font.bold: true
+                                    font.weight: Font.Bold
                                     color: "#808080"
                                     visible: !modelData.iconPath || modelData.iconPath.length === 0
                                 }
                             }
 
                             // Name
-                            Text {
+                            LogosText {
                                 text: modelData.name
                                 font.pixelSize: 16
-                                font.bold: true
+                                font.weight: Font.Bold
                                 color: "#ffffff"
                                 Layout.fillWidth: true
                             }
@@ -118,7 +118,7 @@ Item {
                                 text: "Load"
                                 visible: !modelData.isMainUi && !modelData.isLoaded
 
-                                contentItem: Text {
+                                contentItem: LogosText {
                                     text: parent.text
                                     font.pixelSize: 13
                                     color: "#ffffff"
@@ -140,7 +140,7 @@ Item {
                                 text: "Unload"
                                 visible: !modelData.isMainUi && modelData.isLoaded
 
-                                contentItem: Text {
+                                contentItem: LogosText {
                                     text: parent.text
                                     font.pixelSize: 13
                                     color: "#ffffff"
@@ -162,9 +162,8 @@ Item {
                 }
 
                 // Empty state
-                Text {
+                LogosText {
                     text: "No UI plugins found in the plugins directory."
-                    font.pixelSize: 14
                     color: "#606060"
                     Layout.alignment: Qt.AlignHCenter
                     Layout.topMargin: 40

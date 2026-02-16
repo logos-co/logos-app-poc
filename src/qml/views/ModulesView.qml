@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Logos.Controls
 import panels
 
 Item {
@@ -16,10 +17,10 @@ Item {
         anchors.margins: 40
         spacing: 20
 
-        Text {
+        LogosText {
             text: "Modules"
             font.pixelSize: 24
-            font.bold: true
+            font.weight: Font.Bold
             color: "#ffffff"
         }
 
@@ -35,9 +36,8 @@ Item {
                 text: "UI Modules"
                 width: implicitWidth + 32
                 
-                contentItem: Text {
+                contentItem: LogosText {
                     text: parent.text
-                    font.pixelSize: 14
                     color: tabBar.currentIndex === 0 ? "#ffffff" : "#cccccc"
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
@@ -60,9 +60,8 @@ Item {
                 text: "Core Modules"
                 width: implicitWidth + 32
                 
-                contentItem: Text {
+                contentItem: LogosText {
                     text: parent.text
-                    font.pixelSize: 14
                     color: tabBar.currentIndex === 1 ? "#ffffff" : "#cccccc"
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter

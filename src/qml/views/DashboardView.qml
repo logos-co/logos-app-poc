@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Logos.Controls
 
 Item {
     id: root
@@ -15,14 +16,14 @@ Item {
         anchors.margins: 40
         spacing: 20
 
-        Text {
+        LogosText {
             text: "Dashboard"
             font.pixelSize: 24
-            font.bold: true
+            font.weight: Font.Bold
             color: "#ffffff"
         }
 
-        Text {
+        LogosText {
             text: "Dashboard"
             font.pixelSize: 18
             color: "#a0a0a0"
