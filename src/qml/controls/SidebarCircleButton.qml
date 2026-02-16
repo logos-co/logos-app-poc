@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import Logos.Theme
+import Logos.Controls
 
 AbstractButton {
     id: root
@@ -28,10 +29,9 @@ AbstractButton {
                      !(appIcon.status === Image.Null ||
                        appIcon.status === Image.Error)
         }
-        Text {
+        LogosText {
             anchors.centerIn: parent
             text: root.text.substring(0, 4)
-            font.family: Theme.typography.publicSans
             font.pixelSize: Theme.typography.secondaryText
             font.weight: Theme.typography.weightBold
             color: Theme.palette.textSecondary
