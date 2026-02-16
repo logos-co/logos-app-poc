@@ -257,11 +257,16 @@ pkgs.stdenv.mkDerivation rec {
       echo "Copied counter_qml QML plugin to plugins/"
     fi
 
-    # Copy design system QML module (Logos/DesignSystem) for runtime
-    if [ -d "${logosDesignSystem}/lib/Logos/DesignSystem" ]; then
+    # Copy design system QML modules (Logos.Theme, Logos.Controls) for runtime
+    if [ -d "${logosDesignSystem}/lib/Logos/Theme" ]; then
       mkdir -p "$out/lib/Logos"
-      cp -R "${logosDesignSystem}/lib/Logos/DesignSystem" "$out/lib/Logos/"
-      echo "Copied Logos Design System to lib/Logos/DesignSystem/"
+      cp -R "${logosDesignSystem}/lib/Logos/Theme" "$out/lib/Logos/"
+      echo "Copied Logos.Theme to lib/Logos/Theme/"
+    fi
+    if [ -d "${logosDesignSystem}/lib/Logos/Controls" ]; then
+      mkdir -p "$out/lib/Logos"
+      cp -R "${logosDesignSystem}/lib/Logos/Controls" "$out/lib/Logos/"
+      echo "Copied Logos.Controls to lib/Logos/Controls/"
     fi
     
     # Note: webview_app QML and HTML files are now embedded in the plugin via qrc

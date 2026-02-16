@@ -89,7 +89,7 @@ QUrl MainContainer::resolveQmlUrl(const QString& qmlFile)
 
 void MainContainer::setupUi()
 {
-    // We would likely move this to qml and use Logos.DesignSystem instead
+    // We would likely move this to qml and use Logos.Theme instead
     QColor bgColor("#171717");
     // set background color
     setAutoFillBackground(true);

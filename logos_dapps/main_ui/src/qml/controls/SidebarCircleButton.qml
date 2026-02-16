@@ -1,6 +1,6 @@
 import QtQuick
 import QtQuick.Controls
-import Logos.DesignSystem
+import Logos.Theme
 
 AbstractButton {
     id: root
