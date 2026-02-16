@@ -1,5 +1,5 @@
 {
-  description = "Logos App POC - Qt application with UI plugins";
+  description = "Logos App - Qt application with UI plugins";
 
   inputs = {
     # Follow the same nixpkgs as logos-liblogos to ensure compatibility
@@ -168,7 +168,7 @@
             export LOGOS_PACKAGE_MANAGER_SRC="${logosPackageManagerSrc}"
             export LOGOS_CAPABILITY_MODULE_SRC="${logosCapabilityModuleSrc}"
             
-            echo "Logos App POC development environment"
+            echo "Logos App development environment"
             echo ""
             echo "Nix packages (host builds):"
             echo "  LOGOS_CPP_SDK_ROOT: $LOGOS_CPP_SDK_ROOT"

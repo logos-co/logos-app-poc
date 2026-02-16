@@ -100,7 +100,7 @@ void MainContainer::setupUi()
     // Create main horizontal layout
     m_mainLayout = new QHBoxLayout(this);
     m_mainLayout->setSpacing(0);
-    m_mainLayout->setContentsMargins(4, 2, 4, 2);
+    m_mainLayout->setContentsMargins(4, 0, 4, 2);
     // When QML_UI is set, add it to each QML engine's import path so nested
     // components (e.g. SidebarIconButton) load from disk — no rebuild for UI changes.
     QString qmlUiPath = QProcessEnvironment::systemEnvironment().value("QML_UI", "");
@@ -119,8 +119,8 @@ void MainContainer::setupUi()
     qDebug() << "Sidebar engine import paths:" << m_sidebarWidget->engine()->importPathList();
     m_sidebarWidget->rootContext()->setContextProperty("backend", m_backend);
     m_sidebarWidget->setSource(resolveQmlUrl("qml/panels/SidebarPanel.qml"));
-    m_sidebarWidget->setMinimumWidth(80);
-    m_sidebarWidget->setMaximumWidth(80);
+    m_sidebarWidget->setMinimumWidth(60);
+    m_sidebarWidget->setMaximumWidth(60);
     // set clear color to sidebar so that rounded corners don't show white
     m_sidebarWidget->setClearColor(bgColor);
 
@@ -128,7 +128,7 @@ void MainContainer::setupUi()
     QWidget* contentArea = new QWidget(this);
     QVBoxLayout* contentLayout = new QVBoxLayout(contentArea);
     contentLayout->setSpacing(0);
-    contentLayout->setContentsMargins(4, 4, 4, 4);
+    contentLayout->setContentsMargins(4, 9, 4, 4);
     // Create content stack
     m_contentStack = new QStackedWidget(contentArea);
     m_contentStack->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);

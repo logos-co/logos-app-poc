@@ -1,4 +1,4 @@
-# logos-app-poc
+# logos-app
 
 ## How to Build
 
@@ -15,7 +15,7 @@ nix build '.#default'
 ```
 
 The result will include:
-- `/bin/logos-app-poc` - The main Logos application executable
+- `/bin/logos-app` - The main Logos application executable
 - All required modules and dependencies
 
 #### Build Individual Components
@@ -48,7 +48,7 @@ After building with `nix build`, you can run the application:
 
 ```bash
 # Run the main Logos application
-./result/bin/logos-app-poc
+./result/bin/logos-app
 ```
 
 The application will automatically load all required modules and dependencies. All components are bundled in the Nix store layout.

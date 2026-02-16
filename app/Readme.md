@@ -1,4 +1,4 @@
-# Logos Core POC
+# Logos App
 
 ## Building the Application
 

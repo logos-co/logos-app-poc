@@ -5,7 +5,7 @@
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Set QML_UI to point to the main_ui QML source directory
-export QML_UI="$SCRIPT_DIR/logos_dapps/main_ui/src"
+export QML_UI="$SCRIPT_DIR/src"
 
 # Ensure QML uses filesystem sources and skips disk cache
 export QML_IMPORT_PATH="$QML_UI/qml:$QML_UI:$QML_IMPORT_PATH"
@@ -30,22 +30,22 @@ fi
 
 # Print the paths being used
 echo "================================================"
-echo "Starting Logos App POC in DEVELOPMENT mode"
+echo "Starting Logos App in DEVELOPMENT mode"
 echo "================================================"
 echo "QML_UI path: $QML_UI"
 echo ""
 echo "QML files will be loaded from the filesystem."
 echo "The QML_UI path is also added to the engine import path, so"
 echo "nested components (e.g. SidebarIconButton) load from disk too."
-echo "Edit QML files and restart the app to see changes (no rebuild)."
 echo "================================================"
 echo ""
 
 # Run the app from the nix result
-if [ -f "./result/bin/LogosApp" ]; then
+# Use logos-app launcher (sets Qt env, execs LogosApp binary - Dock shows "LogosApp")
+if [ -f "./result/bin/logos-app" ]; then
+    ./result/bin/logos-app "$@"
+elif [ -f "./result/bin/LogosApp" ]; then
     ./result/bin/LogosApp "$@"
-elif [ -f "./result/bin/logos-app-poc-app" ]; then
-    ./result/bin/logos-app-poc-app "$@"
 else
     echo "Error: Application binary not found in ./result/bin/"
     echo "Please build the app first with: nix build"

@@ -1,4 +1,4 @@
-# Builds the logos-app-poc standalone application
+# Builds the logos-app standalone application
 { pkgs, common, src, logosLiblogos, logosSdk, logosPackageManager, logosCapabilityModule, logosDesignSystem, counterPlugin, counterQmlPlugin, mainUIPlugin, packageManagerUIPlugin, webviewAppPlugin }:
 
 let
@@ -7,7 +7,7 @@ let
   webkitgtk = pkgs.webkitgtk_4_1 or pkgs.webkitgtk_4_0 or pkgs.webkitgtk;
 in
 pkgs.stdenv.mkDerivation rec {
-  pname = "logos-app-poc-app";
+  pname = "logos-app";
   version = common.version;
   
   inherit src;
@@ -91,12 +91,9 @@ pkgs.stdenv.mkDerivation rec {
   # This is an aggregate runtime layout; avoid stripping to prevent hook errors
   dontStrip = true;
   
-  # Ensure proper Qt environment setup via wrapper
-  qtWrapperArgs = [
-    "--prefix" "LD_LIBRARY_PATH" ":" qtLibPath
-    "--prefix" "QT_PLUGIN_PATH" ":" qtPluginPath
-    "--prefix" "QML2_IMPORT_PATH" ":" qmlImportPath
-  ];
+  # Skip wrapQtApps: wrapper renames binary to .LogosApp-wrapped; macOS Dock uses executable filename
+  # We create a custom launcher that execs the binary (keeps process name "LogosApp")
+  dontWrapQtApps = true;
   
   # Additional environment variables for Qt and RPATH cleanup
   preFixup = ''
@@ -136,7 +133,7 @@ pkgs.stdenv.mkDerivation rec {
   configurePhase = ''
     runHook preConfigure
     
-    echo "Configuring logos-app-poc-app..."
+    echo "Configuring logos-app..."
     echo "liblogos: ${logosLiblogos}"
     echo "cpp-sdk: ${logosSdk}"
     echo "package-manager: ${logosPackageManager}"
@@ -177,7 +174,7 @@ pkgs.stdenv.mkDerivation rec {
     runHook preBuild
     
     cmake --build build
-    echo "logos-app-poc-app built successfully!"
+    echo "logos-app built successfully!"
     
     runHook postBuild
   '';
@@ -271,12 +268,20 @@ pkgs.stdenv.mkDerivation rec {
     
     # Note: webview_app QML and HTML files are now embedded in the plugin via qrc
 
-    # Create symlink for the expected binary name
-    ln -s $out/bin/LogosApp $out/bin/logos-app-poc-app
+    # Create launcher script (sets Qt env, execs binary - process name stays "LogosApp" for Dock)
+    cat > $out/bin/logos-app << 'EOF'
+#!/bin/sh
+EOF
+    echo "export QT_PLUGIN_PATH=\"${qtPluginPath}\"" >> $out/bin/logos-app
+    echo "export QML2_IMPORT_PATH=\"${qmlImportPath}\"" >> $out/bin/logos-app
+    echo "export DYLD_LIBRARY_PATH=\"${qtLibPath}:\$DYLD_LIBRARY_PATH\"" >> $out/bin/logos-app
+    echo "export LD_LIBRARY_PATH=\"${qtLibPath}:\$LD_LIBRARY_PATH\"" >> $out/bin/logos-app
+    echo 'exec "$(dirname "$0")/LogosApp" "$@"' >> $out/bin/logos-app
+    chmod +x $out/bin/logos-app
 
     # Create a README for reference
     cat > $out/README.txt <<EOF
-Logos App POC - Build Information
+Logos App - Build Information
 ==================================
 liblogos: ${logosLiblogos}
 cpp-sdk: ${logosSdk}

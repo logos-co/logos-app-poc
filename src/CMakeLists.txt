@@ -14,23 +14,23 @@ find_package(Qt6 REQUIRED COMPONENTS Core Widgets RemoteObjects Quick Qml QuickW
 if(NOT DEFINED LOGOS_CPP_SDK_ROOT)
     # Get the real path to handle symlinks correctly
     get_filename_component(REAL_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" REALPATH)
-    set(_parent_cpp_sdk "${REAL_SOURCE_DIR}/../../../logos-cpp-sdk")
+    set(_parent_cpp_sdk "${REAL_SOURCE_DIR}/../../logos-cpp-sdk")
     if(EXISTS "${_parent_cpp_sdk}/cpp/logos_api.h")
         set(LOGOS_CPP_SDK_ROOT "${_parent_cpp_sdk}")
     else()
         # Fallback to relative path
-        set(LOGOS_CPP_SDK_ROOT "${REAL_SOURCE_DIR}/../../../logos-cpp-sdk")
+        set(LOGOS_CPP_SDK_ROOT "${REAL_SOURCE_DIR}/../../logos-cpp-sdk")
     endif()
 endif()
 
 # Allow override for logos-liblogos (for nix builds)
 if(NOT DEFINED LOGOS_LIBLOGOS_ROOT)
     get_filename_component(REAL_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" REALPATH)
-    set(_parent_liblogos "${REAL_SOURCE_DIR}/../../../logos-liblogos")
+    set(_parent_liblogos "${REAL_SOURCE_DIR}/../../logos-liblogos")
     if(EXISTS "${_parent_liblogos}/interface.h")
         set(LOGOS_LIBLOGOS_ROOT "${_parent_liblogos}")
     else()
-        set(LOGOS_LIBLOGOS_ROOT "${REAL_SOURCE_DIR}/../../../logos-liblogos")
+        set(LOGOS_LIBLOGOS_ROOT "${REAL_SOURCE_DIR}/../../logos-liblogos")
     endif()
 endif()
 
@@ -77,25 +77,25 @@ find_package(component-interfaces QUIET)
 # If not found, use the app/interfaces folder
 if(NOT component-interfaces_FOUND)
     # Include the app/interfaces directory
-    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../app/interfaces)
+    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../app/interfaces)
     
     # Create a component-interfaces library
     add_library(component-interfaces INTERFACE)
-    target_include_directories(component-interfaces INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/../../app/interfaces)
+    target_include_directories(component-interfaces INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/../app/interfaces)
 endif()
 
 set(SOURCES
-    src/main_ui_plugin.cpp
-    src/MainContainer.cpp
-    src/MainUIBackend.cpp
-    src/LogosQmlBridge.cpp
-    src/restricted/DenyAllReply.cpp
-    src/restricted/DenyAllNetworkAccessManager.cpp
-    src/restricted/DenyAllNAMFactory.cpp
-    src/restricted/RestrictedUrlInterceptor.cpp
-    src/mdichild.cpp
-    src/mdiview.cpp
-    src/main_ui_resources.qrc
+    main_ui_plugin.cpp
+    MainContainer.cpp
+    MainUIBackend.cpp
+    LogosQmlBridge.cpp
+    restricted/DenyAllReply.cpp
+    restricted/DenyAllNetworkAccessManager.cpp
+    restricted/DenyAllNAMFactory.cpp
+    restricted/RestrictedUrlInterceptor.cpp
+    mdichild.cpp
+    mdiview.cpp
+    main_ui_resources.qrc
 )
 
 # Add SDK sources based on layout type
@@ -139,12 +139,12 @@ if(EXISTS ${GENERATED_LOGOS_SDK_CPP})
 endif()
 
 # Run Logos C++ generator on metadata before compilation (only for source layout)
-set(METADATA_JSON "${CMAKE_CURRENT_SOURCE_DIR}/src/metadata.json")
+set(METADATA_JSON "${CMAKE_CURRENT_SOURCE_DIR}/metadata.json")
 
 # Only run generator for source layout - nix builds already have generated files
 if(_cpp_sdk_is_source)
     # Source layout: build and run the generator
-    set(REPO_ROOT "${REAL_SOURCE_DIR}/../../..")
+    set(REPO_ROOT "${REAL_SOURCE_DIR}/../..")
     set(CPP_GENERATOR "${REPO_ROOT}/build/cpp-generator/bin/logos-cpp-generator")
     set(PLUGINS_OUTPUT_DIR "${REPO_ROOT}/modules/build/modules")
     
@@ -175,7 +175,7 @@ endif()
 
 # Add include directories before target_link_libraries
 target_include_directories(main_ui PRIVATE 
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 # Add SDK include directories based on layout type

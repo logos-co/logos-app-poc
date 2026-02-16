@@ -13,6 +13,11 @@
 #include <QIcon>
 #include <QPixmap>
 #include <IComponent.h>
+#include <QTimer>
+#ifdef Q_OS_MAC
+    #include "trafficLightsTitleBar.h"
+    #include "macWindowStyle.h"
+#endif
 
 Window::Window(QWidget *parent)
     : QMainWindow(parent)
@@ -103,7 +108,6 @@ void Window::setupUi()
 
     if (mainContent) {
         setCentralWidget(mainContent);
-        
         // Pass the package manager widget to main_ui if it was loaded
         if (packageManagerWidget && mainUiPlugin) {
             QMetaObject::invokeMethod(mainUiPlugin, "setPackageManagerWidget",
@@ -127,14 +131,80 @@ void Window::setupUi()
 
         layout->addWidget(messageLabel);
         setCentralWidget(fallbackWidget);
-
         qWarning() << "Failed to load main UI plugin from:" << mainUiPluginPath;
     }
 
     // Set window title and size
-    setWindowTitle("Logos Core POC");
+    setWindowTitle("Logos App");
     resize(1024, 768);
+
+#ifdef Q_OS_MAC
+    setWindowFlags(windowFlags() | Qt::FramelessWindowHint);
+    setupMacOSDockReopen();
+    // Create title bar after resize() so it gets full width from the start
+    m_trafficLightsTitleBar = new TrafficLightsTitleBar(this);
+    m_trafficLightsTitleBar->setGeometry(0, 0, width(), TrafficLightsTitleBar::kTitleBarHeight);
+    m_trafficLightsTitleBar->show();
+    m_trafficLightsTitleBar->raise();
+#endif
 }
+
+void Window::changeEvent(QEvent* event)
+{
+    QMainWindow::changeEvent(event);
+#ifdef Q_OS_MAC
+    if (event->type() == QEvent::WindowStateChange) {
+        const bool fullScreen = (windowState() & Qt::WindowFullScreen) != 0;
+        if (m_trafficLightsTitleBar) {
+            if (fullScreen)
+                m_trafficLightsTitleBar->hide();
+            else
+                m_trafficLightsTitleBar->show();
+        }
+        applyMacWindowRoundedCorners(this, !fullScreen);
+        // This is needed to fix squared corners after exiting fullscreen mode
+        if (!fullScreen) {
+            const int w = width();
+            const int h = height();
+            resize(w - 1, h - 1);
+            QTimer::singleShot(0, this, [this, w, h]() {
+                resize(w, h);
+                applyMacWindowRoundedCorners(this, true);
+            });
+        }
+    }
+#endif
+}
+
+void Window::resizeEvent(QResizeEvent* event)
+{
+    QMainWindow::resizeEvent(event);
+#ifdef Q_OS_MAC
+    if (m_trafficLightsTitleBar && m_trafficLightsTitleBar->isVisible())
+        m_trafficLightsTitleBar->setGeometry(0, 0, width(), TrafficLightsTitleBar::kTitleBarHeight);
+#endif
+}
+
+void Window::showEvent(QShowEvent* event)
+{
+    QMainWindow::showEvent(event);
+#ifdef Q_OS_MAC
+    applyMacWindowRoundedCorners(this);
+#endif
+}
+
+#ifdef Q_OS_MAC
+void Window::setupMacOSDockReopen()
+{
+    connect(qApp, &QApplication::applicationStateChanged, this, [this](Qt::ApplicationState state) {
+        if (state == Qt::ApplicationActive && !isVisible()) {
+            show();
+            raise();
+            activateWindow();
+        }
+    });
+}
+#endif
 
 void Window::createTrayIcon()
 {
@@ -146,7 +216,7 @@ void Window::createTrayIcon()
     // Create tray icon
     m_trayIcon = new QSystemTrayIcon(this);
     setIcon();
-    m_trayIcon->setToolTip("Logos Core POC");
+    m_trayIcon->setToolTip("Logos App");
 
     // Create context menu
     m_trayIconMenu = new QMenu(this);
@@ -192,6 +262,15 @@ void Window::setIcon()
 
 void Window::closeEvent(QCloseEvent *event)
 {
+#ifdef Q_OS_MAC
+    // In full screen, close only exits full screen (Discord-style); do not hide
+    if (windowState() & Qt::WindowFullScreen) {
+        setWindowState(Qt::WindowNoState);
+        event->ignore();
+        return;
+    }
+#endif
+
     if (m_trayIcon && m_trayIcon->isVisible()) {
         // Hide the window instead of closing
         hide();
@@ -200,7 +279,7 @@ void Window::closeEvent(QCloseEvent *event)
         // Show a message to inform the user
         if (m_trayIcon->supportsMessages()) {
             m_trayIcon->showMessage(
-                tr("Logos Core POC"),
+                tr("Logos App"),
                 tr("The application will continue to run in the system tray. "
                    "Click the tray icon to restore the window."),
                 QSystemTrayIcon::Information,

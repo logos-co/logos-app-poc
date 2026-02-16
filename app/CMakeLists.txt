@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.16)
 project(LogosApp LANGUAGES CXX)
 
+if(APPLE)
+    enable_language(OBJCXX)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)  # Enable Qt's Meta-Object Compiler
@@ -19,9 +23,10 @@ endif()
 
 find_package(Qt6 COMPONENTS Widgets REQUIRED)
 
-# Add interfaces directory to include path
+# Add interfaces and macos directories to include path
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/interfaces)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/macos)
 
 # Allow override from environment or command line (for nix builds)
 if(NOT DEFINED LOGOS_LIBLOGOS_ROOT)
@@ -84,9 +89,16 @@ set(PROJECT_SOURCES
     main.cpp
     window.h
     window.cpp
+    macos/trafficLightsTitleBar.h
+    macos/trafficLightsTitleBar.cpp
+    macos/macWindowStyle.h
     interfaces/IComponent.h
     resources.qrc
 )
+
+if(APPLE)
+    list(APPEND PROJECT_SOURCES macos/macWindowStyle.mm)
+endif()
 
 qt_add_executable(LogosApp
     ${PROJECT_SOURCES}
@@ -97,6 +109,10 @@ target_link_libraries(LogosApp PRIVATE
     Qt6::Widgets
     logos_core
 )
+
+if(APPLE)
+    target_link_libraries(LogosApp PRIVATE "-framework Cocoa" "-framework QuartzCore")
+endif()
 
 # Copy the core library to the app's lib directory and fix its install name
 if(APPLE)
@@ -170,5 +186,5 @@ add_custom_command(TARGET LogosApp POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E echo "Creating app plugins directory at ${CMAKE_CURRENT_BINARY_DIR}/bin/plugins"
 )
 
-# Add logos_dapps directory
-# add_subdirectory(${CMAKE_SOURCE_DIR}/logos-app-poc/logos_dapps/main_ui)
+# Add src/main_ui plugin
+# add_subdirectory(${CMAKE_SOURCE_DIR}/src/main_ui)

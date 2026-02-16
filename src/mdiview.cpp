@@ -5,6 +5,7 @@
 #include <QColor>
 #include <QTimer>
 #include <QEvent>
+#include <QMouseEvent>
 #include <QWheelEvent>
 #include <QScroller>
 #include <QScrollerProperties>
@@ -14,7 +15,6 @@ MdiView::MdiView(QWidget *parent)
     : QWidget(parent)
     , windowCounter(0)
     , m_mdiAddBtn(nullptr)
-    , m_emptyPlaceholder(nullptr)
 {
     setupUi();
     addMdiWindow();
@@ -47,9 +47,6 @@ void MdiView::setupUi()
     setLayout(mainLayout);
     mdiArea->setViewMode(QMdiArea::TabbedView);
 
-    m_emptyPlaceholder = new MdiChild(mdiArea);
-    m_emptyPlaceholder->setVisible(false);
-    m_emptyPlaceholder->setGeometry(mdiArea->rect());
     mdiArea->installEventFilter(this);
 
     // Ensure tab bar styling applies after the tab bar is created
@@ -90,8 +87,7 @@ void MdiView::updateTabCloseButtons()
     if (mdiArea->viewMode() == QMdiArea::TabbedView) {
         QTabBar* tabBar = mdiArea->findChild<QTabBar*>();
         if (tabBar) {
-            tabBar->setTabsClosable(true);
-                    
+            tabBar->setTabsClosable(false);
             disconnect(tabBar, &QTabBar::tabCloseRequested, nullptr, nullptr);
             
             connect(tabBar, &QTabBar::tabCloseRequested, [this](int index) {
@@ -112,8 +108,6 @@ void MdiView::updateTabCloseButtons()
             });
         }
     }
-
-    updateEmptyPlaceholder();
 }
 
 void MdiView::insetTabBarGeometry(QTabBar *tabBar, int insetPx)
@@ -151,8 +145,7 @@ void MdiView::customizeTabBarStyle(QTabBar* tabBar)
     tabBar->setElideMode(Qt::ElideRight);
     tabBar->setUsesScrollButtons(false);
     tabBar->setExpanding(false);
-    tabBar->setFixedHeight(44);
-    tabBar->setIconSize(QSize(20, 20));
+    tabBar->setIconSize(QSize(15, 15));
     QScroller::grabGesture(tabBar, QScroller::LeftMouseButtonGesture);
     QScroller::grabGesture(tabBar, QScroller::TouchGesture);
     QScrollerProperties props = QScroller::scroller(tabBar)->scrollerProperties();
@@ -172,16 +165,12 @@ void MdiView::customizeTabBarStyle(QTabBar* tabBar)
             background: #262626;
             color: #A4A4A4;
     
-            padding: 0px 24px 0px 32px;
+            padding: 0px 8px 0px 4px;
             margin-right: 10px;
-            margin-left: 0px;
-    
-            margin-top: 9px;
-            margin-bottom: 4px;
-    
+        
             border-top-left-radius: 10px;
             border-top-right-radius: 10px;
-            height: 35px;
+            height: 20px;
             min-width: 120px;
         }
     
@@ -193,20 +182,43 @@ void MdiView::customizeTabBarStyle(QTabBar* tabBar)
         QTabBar::tab:hover { 
             background: #262626; 
         }
-    
-        QTabBar::close-button {
-            image: url(:/icons/close.png);
-            width: 14px;
-            height: 14px;
-            margin-left: 16px;
-            margin-top: 10px;
-        }
-        QTabBar::close-button:hover {
-            background: #262626; 
-            border-radius: 7px;
-        }
 
     )"));
+    installTabBarCloseButtons(tabBar);
+}
+
+void MdiView::installTabBarCloseButtons(QTabBar* tabBar)
+{
+    if (!tabBar) return;
+    const QTabBar::ButtonPosition closeSide = QTabBar::LeftSide;
+    for (int i = 0; i < tabBar->count(); ++i) {
+        QWidget* oldBtn = tabBar->tabButton(i, closeSide);
+        if (oldBtn) {
+            tabBar->setTabButton(i, closeSide, nullptr);
+            oldBtn->deleteLater();
+        }
+        QToolButton* btn = new QToolButton(tabBar);
+        btn->setIcon(QIcon(QStringLiteral(":/icons/close.png")));
+        btn->setIconSize(QSize(12, 12));
+        btn->setFixedSize(12, 12);
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setStyleSheet(QStringLiteral(R"(
+            QToolButton { background: transparent; border: none; }
+            QToolButton:hover { background: rgba(255,255,255,0.1); border-radius: 6px; }
+        )"));
+        connect(btn, &QToolButton::clicked, this, [tabBar, btn, closeSide]() {
+            for (int j = 0; j < tabBar->count(); ++j) {
+                if (tabBar->tabButton(j, closeSide) == btn) {
+                    tabBar->tabCloseRequested(j);
+                    break;
+                }
+            }
+        });
+        btn->setVisible(false);  // show only on tab hover
+        btn->installEventFilter(this);  // keep visible when hovering the button itself
+        tabBar->setTabButton(i, closeSide, btn);
+    }
+    tabBar->setMouseTracking(true);  // needed for hover-to-show close buttons
 }
 
 void MdiView::ensureMdiAddButton(QTabBar* tabBar)
@@ -219,20 +231,17 @@ void MdiView::ensureMdiAddButton(QTabBar* tabBar)
     if (!m_mdiAddBtn) {
         m_mdiAddBtn = new QToolButton(tabBar->parentWidget());
         m_mdiAddBtn->setIcon(QIcon(":/icons/add-button.png"));
-        m_mdiAddBtn->setIconSize(QSize(24, 24));
+        m_mdiAddBtn->setIconSize(QSize(15, 15));
         m_mdiAddBtn->setAutoRaise(true);
         m_mdiAddBtn->setCursor(Qt::PointingHandCursor);
-        m_mdiAddBtn->setFixedSize(42, 35);
+        m_mdiAddBtn->setFixedSize(25, 19);
         m_mdiAddBtn->setStyleSheet(QStringLiteral(R"(
             QToolButton {
                 background: #2A2A2A;
                 color: #FFFFFF;
-                border-top-left-radius: 14px;
-                border-top-right-radius: 14px;
-                padding-top: 9px;
-                padding-bottom: 2px;
-                padding-left: 0px;
-                padding-right: 0px;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                padding-top: 1px;
             }
             QToolButton:hover {
                 background: #262626;
@@ -283,34 +292,29 @@ void MdiView::repositionMdiAddButton()
     m_mdiAddBtn->raise();
 }
 
-void MdiView::updateEmptyPlaceholder()
-{
-    if (!m_emptyPlaceholder || !mdiArea)
-        return;
-
-    const bool empty = mdiArea->subWindowList().isEmpty();
-    m_emptyPlaceholder->setVisible(empty);
-    if (empty) {
-        int top = 0;
-        if (QTabBar* bar = mdiArea->findChild<QTabBar*>())
-            top = bar->mapTo(mdiArea, QPoint(0, bar->height())).y();
-        m_emptyPlaceholder->setGeometry(0, top, mdiArea->width(), mdiArea->height() - top);
-        m_emptyPlaceholder->raise();
-    }
-}
-
 bool MdiView::eventFilter(QObject* watched, QEvent* event)
 {
-    if (m_emptyPlaceholder && mdiArea && watched == mdiArea) {
-        if (event->type() == QEvent::Resize || event->type() == QEvent::Show) {
-            updateEmptyPlaceholder();
-        }
-    }
-
     QTabBar* tabBar = mdiArea->findChild<QTabBar*>();
     if (tabBar && watched == tabBar) {
         if (event->type() == QEvent::Resize || event->type() == QEvent::Show) {
             repositionMdiAddButton();
+        } else if (event->type() == QEvent::MouseMove) {
+            const QPoint pos = static_cast<QMouseEvent*>(event)->position().toPoint();
+            for (int i = 0; i < tabBar->count(); ++i) {
+                QWidget* closeBtn = tabBar->tabButton(i, QTabBar::LeftSide);
+                if (closeBtn) {
+                    const QRect tabRect = tabBar->tabRect(i);
+                    const bool overTabOrButton = tabRect.contains(pos)
+                        || closeBtn->geometry().contains(pos);
+                    closeBtn->setVisible(overTabOrButton);
+                }
+            }
+        } else if (event->type() == QEvent::Leave) {
+            for (int i = 0; i < tabBar->count(); ++i) {
+                QWidget* closeBtn = tabBar->tabButton(i, QTabBar::LeftSide);
+                if (closeBtn)
+                    closeBtn->setVisible(false);
+            }
         } else if (event->type() == QEvent::Wheel && tabBar->count() > 1) {
             auto *wheelEvent = static_cast<QWheelEvent*>(event);
             int delta = 0;
@@ -324,6 +328,20 @@ bool MdiView::eventFilter(QObject* watched, QEvent* event)
                     tabBar->setCurrentIndex(next);
                     return true;
                 }
+            }
+        }
+    }
+
+    // Close button hover: show when pointer enters the button, hide on leave
+    if (tabBar) {
+        for (int i = 0; i < tabBar->count(); ++i) {
+            if (tabBar->tabButton(i, QTabBar::LeftSide) == watched) {
+                auto* w = static_cast<QWidget*>(watched);
+                if (event->type() == QEvent::Enter)
+                    w->setVisible(true);
+                else if (event->type() == QEvent::Leave)
+                    w->setVisible(false);
+                return false;
             }
         }
     }
