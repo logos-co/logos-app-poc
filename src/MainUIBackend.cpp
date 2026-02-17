@@ -15,6 +15,7 @@
 #include <QQmlEngine>
 #include <QQmlError>
 #include <QUrl>
+#include <QIcon>
 #include <QStandardPaths>
 #include <QFileDialog>
 #include <QTemporaryDir>
@@ -238,6 +239,7 @@ void MainUIBackend::loadUiModule(const QString& moduleName)
         LogosQmlBridge* bridge = new LogosQmlBridge(m_logosAPI, qmlWidget);
         qmlWidget->rootContext()->setContextProperty("logos", bridge);
         qmlWidget->setSource(QUrl::fromLocalFile(qmlFilePath));
+        qmlWidget->setWindowIcon(QIcon(getPluginIconPath(pluginPath, true)));
 
         if (qmlWidget->status() == QQuickWidget::Error) {
             qWarning() << "Failed to load QML plugin" << moduleName;
@@ -289,6 +291,7 @@ void MainUIBackend::loadUiModule(const QString& moduleName)
         return;
     }
     
+    componentWidget->setWindowIcon(QIcon(getPluginIconPath(pluginPath, true)));
     m_loadedUiModules[moduleName] = component;
     m_uiModuleWidgets[moduleName] = componentWidget;
     m_loadedApps.insert(moduleName);
@@ -916,61 +919,45 @@ QString MainUIBackend::getPluginPath(const QString& name) const
     return pluginsDirectory() + "/" + name + "/" + name + libExtension;
 }
 
-QString MainUIBackend::getPluginIconPath(const QString& pluginPath) const
+QString MainUIBackend::getPluginIconPath(const QString& pluginPath, bool forWidgetIcon) const
 {
     QFileInfo pluginInfo(pluginPath);
+    QDir pluginDir = pluginInfo.isDir() ? QDir(pluginInfo.filePath()) : QDir(pluginInfo.absolutePath());
+
+    QJsonObject meta;
     if (pluginInfo.isDir()) {
-        QFile metadataFile(pluginInfo.filePath() + "/metadata.json");
-        if (!metadataFile.exists()) {
+        QFile f(pluginInfo.filePath() + "/metadata.json");
+        if (!f.open(QIODevice::ReadOnly)) {
             return "";
         }
-
-        if (!metadataFile.open(QIODevice::ReadOnly)) {
-            qWarning() << "Failed to open metadata for QML plugin icon at" << metadataFile.fileName()
-                       << ":" << metadataFile.errorString();
+        QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
+        if (!doc.isObject()) {
             return "";
         }
-
-        QJsonParseError parseError;
-        QJsonDocument doc = QJsonDocument::fromJson(metadataFile.readAll(), &parseError);
-        if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
-            qWarning() << "Failed to parse metadata for QML plugin icon at" << metadataFile.fileName()
-                       << ":" << parseError.errorString();
-            return "";
-        }
-
-        QJsonObject metaDataObj = doc.object();
-        if (metaDataObj.contains("icon")) {
-            QString iconPath = metaDataObj.value("icon").toString();
-
-            if (iconPath.startsWith(":/")) {
-                iconPath = "qrc" + iconPath;
-            } else if (!iconPath.isEmpty()) {
-                QString resolvedPath = pluginInfo.filePath() + "/" + iconPath;
-                iconPath = QUrl::fromLocalFile(resolvedPath).toString();
-            }
-
-            return iconPath;
-        }
-
+        meta = doc.object();
+    } else {
+        meta = QPluginLoader(pluginPath).metaData().value("MetaData").toObject();
+    }
+    QString iconPath = meta.value("icon").toString();
+    if (iconPath.isEmpty()) {
         return "";
     }
 
-    QPluginLoader loader(pluginPath);
-    QJsonObject metadata = loader.metaData();
-    QJsonObject metaDataObj = metadata.value("MetaData").toObject();
-    
-    if (metaDataObj.contains("icon")) {
-        QString iconPath = metaDataObj.value("icon").toString();
-        
-        if (iconPath.startsWith(":/")) {
-            iconPath = "qrc" + iconPath;
+    QString filePath = pluginDir.absoluteFilePath(iconPath.startsWith(":/") ? iconPath.mid(2) : iconPath);
+    bool exists = QFile::exists(filePath);
+
+    if (forWidgetIcon) {
+        if (exists) {
+            return filePath;
         }
-        
-        return iconPath;
+        if (iconPath.startsWith(":/")) {
+            qWarning() << "Plugin icon not on disk, using resource path; expected:" << filePath;
+            return iconPath;
+        }
+        qWarning() << "Plugin icon not found, expected:" << filePath;
+        return QString();
     }
-    
-    return "";
+    return exists ? QUrl::fromLocalFile(filePath).toString() : (iconPath.startsWith(":/") ? "qrc" + iconPath : QString());
 }
 
 void MainUIBackend::updateModuleStats()
