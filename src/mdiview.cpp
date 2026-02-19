@@ -359,14 +359,12 @@ QMdiSubWindow* MdiView::addPluginWindow(QWidget* pluginWidget, const QString& ti
     subWindow->setWidget(pluginWidget);
     subWindow->setAttribute(Qt::WA_DeleteOnClose);
     subWindow->setWindowTitle(title);
-    if (subWindow->windowIcon().isNull()) {
-        QIcon icon = pluginWidget ? pluginWidget->windowIcon() : QIcon();
-        if (icon.isNull()) {
-            icon = QApplication::windowIcon();
-        }
-        if (!icon.isNull()) {
-            subWindow->setWindowIcon(icon);
-        }
+    QIcon icon = pluginWidget->windowIcon();
+    if (icon.isNull()) {
+        icon = QApplication::windowIcon();
+    }
+    if (!icon.isNull()) {
+        subWindow->setWindowIcon(icon);
     }
     
     subWindow->setMinimumSize(200, 200);

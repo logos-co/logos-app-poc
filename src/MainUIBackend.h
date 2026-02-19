@@ -107,7 +107,7 @@ private:
     QJsonObject readQmlPluginMetadata(const QString& pluginName) const;
     QJsonObject readPluginMetadata(const QString& pluginName) const;
     void updateModuleStats();
-    QString getPluginIconPath(const QString& pluginPath) const;
+    QString getPluginIconPath(const QString& pluginPath, bool forWidgetIcon = false) const;
     
     // Navigation state
     int m_currentActiveSectionIndex;
