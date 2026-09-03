@@ -29,11 +29,24 @@ AbstractButton {
 
     contentItem: Item {
         Image {
+            id: glyph
             anchors.centerIn: parent
             width: 24
             height: 24
             source: root.icon.source
             fillMode: Image.PreserveAspectFit
+        }
+
+        Rectangle {
+            objectName: "sidebar.workspaceActiveDot"
+            visible: root.checked
+            width: 4
+            height: 4
+            radius: width / 2
+            color: Theme.palette.accentOrange
+            anchors.horizontalCenter: glyph.horizontalCenter
+            anchors.top: glyph.bottom
+            anchors.topMargin: Theme.spacing.tiny
         }
     }
 }

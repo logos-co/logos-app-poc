@@ -178,6 +178,8 @@ private slots:
     void testNoProviderIsUnavailableAfterFloor();
     void testRestrictedRequesterIsDeniedIndistinguishably();
     void testHappyPathDispatchesAndRoutesBack();
+    void testShellCanRequestPackageIntentsItDeclares();
+    void testShellPackageIntentUndeclaredIsRefused();
     void testDispatchIdDiffersFromRequestId();
     void testSpoofedResponseIsIgnored();
     void testResponseFromWrongEndpointIsIgnored();
@@ -335,6 +337,99 @@ void TestIntentBroker::testRestrictedRequesterIsDeniedIndistinguishably()
     QCOMPARE(evilEndpoint.results.size(), 1);
     QCOMPARE(evilEndpoint.error(), QStringLiteral("unavailable"));
     QVERIFY2(timer.elapsed() >= 200, "denial was delivered before the error floor");
+}
+
+// The shell asks the Package Manager to reveal a package (`packages.show`,
+// welcome-page tile click) and to install one (`packages.install`, Install…).
+// Both go out through the shell's own endpoint, so both need `main_ui` to
+// DECLARE them — registerShellUses is the shell's stand-in for a metadata.json,
+// and startRequest rejects an undeclared requester before anything else.
+//
+// Worth pinning because the failure is silent from the outside: drop one name
+// from that list and the Install button answers not_declared and does nothing
+// visible.
+//
+// No chooser, deliberately — startRequest exempts a shell REQUESTER with one
+// provider, because confirming the navigation the user just clicked is a dialog
+// answering itself. That exemption is load-bearing for these two: the user
+// clicked Install on a tile, and a "who should handle this?" prompt in front of
+// the install gate would be two consent dialogs for one action.
+void TestIntentBroker::testShellCanRequestPackageIntentsItDeclares()
+{
+    QTemporaryDir root;
+    const QString pm = writeApp(root, QStringLiteral("pm"),
+        R"({"provides":[{"intent":"packages.show"},{"intent":"packages.install"}]})");
+    IntentRegistry registry;
+    registry.rebuild({ { QStringLiteral("package_manager_ui"), plugin(pm) } },
+                     nullptr, nullptr);
+    registry.registerShellUses(QStringLiteral("main_ui"),
+                               { QStringLiteral("packages.show"),
+                                 QStringLiteral("packages.install") });
+
+    FakePresenter presenter;
+    presenter.loaded << QStringLiteral("package_manager_ui");
+    IntentBroker broker(&registry, &presenter);
+    broker.setTimeouts(1000, 1000, 20);
+
+    FakeEndpoint shellEndpoint, pmEndpoint;
+    broker.registerEndpoint(QStringLiteral("main_ui"), &shellEndpoint);
+    broker.registerEndpoint(QStringLiteral("package_manager_ui"), &pmEndpoint);
+
+    // Present but never used — asserting it stays empty is the point.
+    FakeChooser chooser;
+    broker.setChooser(&chooser);
+
+    for (const QString& intent : { QStringLiteral("packages.show"),
+                                   QStringLiteral("packages.install") }) {
+        pmEndpoint.requests.clear();
+        chooser.presented.clear();
+
+        broker.submit(&shellEndpoint, QStringLiteral("shell-") + intent, intent,
+                      QVariantMap{ { QStringLiteral("name"),
+                                     QStringLiteral("waku_module") } });
+        spin(80);
+
+        QCOMPARE(chooser.presented.size(), 0);
+        QCOMPARE(pmEndpoint.requests.size(), 1);
+        QCOMPARE(pmEndpoint.requests.first().intent, intent);
+        QCOMPARE(pmEndpoint.requests.first().requesterName, QStringLiteral("main_ui"));
+        QCOMPARE(pmEndpoint.requests.first().params.value(QStringLiteral("name")).toString(),
+                 QStringLiteral("waku_module"));
+    }
+}
+
+// The other side of the same rule: the shell gets no free pass for having
+// registered SOME uses. This is the shape the bug would take if packages.install
+// were ever dropped from registerShellUses — an immediate not_declared rather
+// than anything the user could see.
+void TestIntentBroker::testShellPackageIntentUndeclaredIsRefused()
+{
+    QTemporaryDir root;
+    const QString pm = writeApp(root, QStringLiteral("pm"),
+        R"({"provides":[{"intent":"packages.install"}]})");
+    IntentRegistry registry;
+    registry.rebuild({ { QStringLiteral("package_manager_ui"), plugin(pm) } },
+                     nullptr, nullptr);
+    // Deliberately only packages.show.
+    registry.registerShellUses(QStringLiteral("main_ui"),
+                               { QStringLiteral("packages.show") });
+
+    FakePresenter presenter;
+    presenter.loaded << QStringLiteral("package_manager_ui");
+    IntentBroker broker(&registry, &presenter);
+    broker.setTimeouts(1000, 1000, 20);
+
+    FakeEndpoint shellEndpoint, pmEndpoint;
+    broker.registerEndpoint(QStringLiteral("main_ui"), &shellEndpoint);
+    broker.registerEndpoint(QStringLiteral("package_manager_ui"), &pmEndpoint);
+
+    broker.submit(&shellEndpoint, QStringLiteral("shell-install"),
+                  QStringLiteral("packages.install"), {});
+    spin(80);
+
+    QCOMPARE(pmEndpoint.requests.size(), 0);
+    QCOMPARE(shellEndpoint.results.size(), 1);
+    QCOMPARE(shellEndpoint.error(), QStringLiteral("not_declared"));
 }
 
 void TestIntentBroker::testHappyPathDispatchesAndRoutesBack()

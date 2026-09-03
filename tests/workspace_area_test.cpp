@@ -15,6 +15,7 @@
 #include <QSignalSpy>
 #include <QIcon>
 #include <QPixmap>
+#include <QQuickItem>
 #include <QQuickWidget>
 #include <QTabBar>
 #include <QToolButton>

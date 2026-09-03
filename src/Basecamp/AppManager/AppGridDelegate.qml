@@ -11,6 +11,8 @@ ItemDelegate {
 
     // ─── Public API ───
     property var appData: ({})
+    property int tileSize: 80
+    property bool contextMenuEnabled: true
     signal appClicked(string name, string repositoryUrl)
     signal detailsRequested(string name, string repositoryUrl)
     signal installRequested(string name, string repositoryUrl)
@@ -66,7 +68,7 @@ ItemDelegate {
         readonly property real tileOpacity:
             (d.isInstalled || root.hovered) ? 1.0 : 0.55
 
-        readonly property int tileSize: 80
+        readonly property int tileSize: root.tileSize
 
         // Plain-object copy of the row for the context menu. `model` itself is
         // owned by the delegate and would dangle if the row recycled while the
@@ -91,6 +93,7 @@ ItemDelegate {
     onClicked: root.appClicked(d.nameText, d.repositoryUrl)
 
     TapHandler {
+        enabled: root.contextMenuEnabled
         acceptedButtons: Qt.RightButton
         onTapped: contextMenu.openFor(d.snapshot())
     }
@@ -182,6 +185,8 @@ ItemDelegate {
             }
 
             LogosText {
+                id: label
+
                 Layout.alignment: Qt.AlignHCenter
                 Layout.preferredWidth: d.tileSize
                 horizontalAlignment: Text.AlignHCenter
@@ -189,6 +194,11 @@ ItemDelegate {
                 font.pixelSize: Theme.typography.subtitleText
                 color: d.isInstalled ? Theme.palette.text : Theme.palette.textSubtle
                 elide: Text.ElideRight
+                LogosToolTip {
+                    text: d.displayName
+                    placement: LogosToolTip.Top
+                    visible: root.hovered && label.truncated
+                }
             }
         }
     }

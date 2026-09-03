@@ -103,7 +103,7 @@ test("welcome: first launch shows the welcome page", async (app) => {
       throw new Error(
         `backend.launcherApps.length=${JSON.stringify(lenRes.result)} (expected number)`);
     }
-    const expected = lenRes.result === 0 ? "Welcome to Basecamp!" : "Welcome back";
+    const expected = lenRes.result === 0 ? "Welcome to Basecamp!" : "Welcome Back,";
     await app.expectTexts([expected]);
   }, { timeout: 10000, interval: 500, description: "greeting to match backend.launcherApps" });
 
@@ -122,7 +122,7 @@ test("welcome: first launch shows the welcome page", async (app) => {
       // The inspector serializes object results as "<QJSValue>" — return JSON.
       return JSON.stringify({
         hasFirstLaunch: hasText(this, "Welcome to Basecamp!"),
-        hasWelcomeBack: hasText(this, "Welcome back"),
+        hasWelcomeBack: hasText(this, "Welcome Back,"),
       });
     })()`,
   });
@@ -135,26 +135,175 @@ test("welcome: first launch shows the welcome page", async (app) => {
   if (hasFirstLaunch === hasWelcomeBack) {
     throw new Error(
       `greeting texts present: "Welcome to Basecamp!"=${hasFirstLaunch}, ` +
-      `"Welcome back"=${hasWelcomeBack} (expected exactly one)`);
+      `"Welcome Back,"=${hasWelcomeBack} (expected exactly one)`);
+  }
+});
+
+// --- Welcome page: search, filters and Recently Closed -------------------
+// Placed before the navigation tests below, which click the welcome page away.
+// All of these drive the page through the inspector rather than synthesised
+// keystrokes, because the QML lives in an offscreen QQuickWindow.
+
+// Set a QML property through the inspector. `evaluate` runs in the object's
+// scope, so an assignment is the portable way to poke one.
+async function setQmlProperty(app, objectName, expression) {
+  const obj = await findByObjectName(app.inspector, objectName);
+  if (!obj) throw new Error(`no object named "${objectName}"`);
+  const res = await app.inspector.send("evaluate", { objectId: obj.id, expression });
+  if (res.error) throw new Error(`evaluate("${expression}") failed: ${res.error}`);
+  return obj;
+}
+
+async function visibilityOf(app, objectName) {
+  const obj = await findByObjectName(app.inspector, objectName);
+  if (!obj) return null;
+  const res = await app.inspector.send("evaluate", {
+    objectId: obj.id, expression: "visible",
+  });
+  if (res.error) throw new Error(`evaluate(visible) on ${objectName}: ${res.error}`);
+  return res.result;
+}
+
+test("welcome: Recently Closed is hidden until an app has been closed", async (app) => {
+  const page = await findWelcomePage(app);
+  if (!page) throw new Error("no WelcomePage instance in the QML tree");
+
+  const countRes = await app.inspector.send("evaluate", {
+    objectId: page.id, expression: "backend.recentlyClosedApps.length",
+  });
+  if (countRes.error) {
+    throw new Error(`evaluate(recentlyClosedApps.length) failed: ${countRes.error}`);
+  }
+  const count = countRes.result;
+  if (typeof count !== "number") {
+    throw new Error(`recentlyClosedApps.length=${JSON.stringify(count)} (expected number)`);
+  }
+
+  // The section is bound to the list being non-empty, both ways round: an
+  // empty heading over blank space is as wrong as a populated list not showing.
+  const visible = await visibilityOf(app, "welcomePage.recentlyClosed");
+  if (count === 0 && visible === true) {
+    throw new Error("Recently Closed is visible with an empty list");
+  }
+  if (count > 0 && visible !== true) {
+    throw new Error(`Recently Closed hidden with ${count} entries — the list is `
+                  + "restored from disk, so this is the startup-race regression");
+  }
+});
+
+test("welcome: a query swaps Recently Closed for results", async (app) => {
+  await setQmlProperty(app, "welcomePage.search", 'text = "a"');
+
+  await app.waitFor(async () => {
+    if (await visibilityOf(app, "welcomePage.searchResults") !== true) {
+      throw new Error("results section did not appear");
+    }
+    if (await visibilityOf(app, "welcomePage.recentlyClosed") === true) {
+      throw new Error("Recently Closed still visible while searching");
+    }
+  }, { timeout: 5000, interval: 200, description: "results to replace Recently Closed" });
+
+  // Clearing restores the resting state.
+  await setQmlProperty(app, "welcomePage.search", 'text = ""');
+  await app.waitFor(async () => {
+    if (await visibilityOf(app, "welcomePage.searchResults") === true) {
+      throw new Error("results still visible after clearing the query");
+    }
+  }, { timeout: 5000, interval: 200, description: "results to clear" });
+});
+
+test("welcome: a query with no matches explains itself", async (app) => {
+  await setQmlProperty(app, "welcomePage.search", 'text = "zzzzz-no-such-package"');
+
+  await app.waitFor(async () => {
+    if (await visibilityOf(app, "welcomePage.noResults") !== true) {
+      throw new Error("no-results notice did not appear");
+    }
+  }, { timeout: 5000, interval: 200, description: "no-results notice" });
+
+  await setQmlProperty(app, "welcomePage.search", 'text = ""');
+});
+
+test("welcome: the filter chips scope which result rows show", async (app) => {
+  await setQmlProperty(app, "welcomePage.search", 'text = "a"');
+  await sleep(300);
+
+  const chip = await findByObjectName(app.inspector, "welcomePage.filterPackages");
+  if (!chip) throw new Error("packages filter chip not found");
+  const clicked = await app.inspector.send("callMethod", {
+    objectId: chip.id, method: "clicked",
+  });
+  if (clicked.error) throw new Error(`callMethod(clicked) failed: ${clicked.error}`);
+
+  // The apps row must yield to the active chip. The packages row may still be
+  // empty on a bare install, so only the exclusion is asserted.
+  await app.waitFor(async () => {
+    if (await visibilityOf(app, "welcomePage.results.apps") === true) {
+      throw new Error("applications row still visible under the packages filter");
+    }
+  }, { timeout: 5000, interval: 200, description: "apps row to hide" });
+
+  await app.inspector.send("callMethod", { objectId: chip.id, method: "clicked" });
+  await setQmlProperty(app, "welcomePage.search", 'text = ""');
+});
+
+// ⌘K cannot be driven end-to-end here: the inspector cannot synthesise a key
+// event into the offscreen QQuickWindow, and that window is never "active", so
+// activeFocus is false for every item no matter what has focus. What IS
+// assertable is the half that regressed before — that the page still declares
+// the shortcut for ShortcutBridge to mirror onto the host. The bridge logs
+// "bound N QML shortcut(s)" for the welcome pane when it picks it up.
+test("welcome: the page declares a ⌘K shortcut for the bridge to mirror", async (app) => {
+  const res = await app.inspector.send("findByType", { typeName: "QQuickShortcut" });
+  const shortcuts = res.matches ?? [];
+  if (shortcuts.length === 0) throw new Error("no Shortcut declared on the welcome page");
+
+  let found = false;
+  for (const sc of shortcuts) {
+    const seq = await app.inspector.send("evaluate", {
+      objectId: sc.id, expression: "JSON.stringify({ s: nativeText, on: enabled })",
+    });
+    if (seq.error) continue;
+    const info = JSON.parse(seq.result);
+    if (typeof info.s === "string" && /K$/i.test(info.s)) {
+      if (info.on !== true) throw new Error(`⌘K shortcut present but enabled=${info.on}`);
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
+    throw new Error("no enabled ⌘K shortcut among "
+                  + `${shortcuts.length} declared shortcut(s)`);
   }
 });
 
 const CI_MODE = process.argv.includes("--ci");
 // --- Welcome page (A2) — must run right after A1: navigating clicks the
 // welcome page away ---
-test('welcome: "Install now" navigates to Applications', async (app) => {
-  // Prefer the spec objectName; fall back to the button text until
-  // "welcomePage.installNow" exists in WelcomePage.qml.
+test('welcome: "Discover Applications" navigates to Applications', async (app) => {
+  // Typed before navigating, asserted after: the welcome search is INVOCATION
+  // search — summoned, used, left — so it must not survive the page going
+  // away. Checked here rather than in its own test because navigation is
+  // one-way; by the time a later test ran, the welcome page would be gone.
+  //
+  // This is the one regression only a real app can catch. WorkspaceArea drives
+  // the clear from hideEvent, because the QML cannot see it happen: the root
+  // Item's `visible` stays true inside the offscreen QQuickWidget host (see the
+  // "workspace" assertion at the end of this test). A QML onVisibleChanged
+  // handler is silently dead, and the unit suite cannot tell — rootObject() is
+  // null there, since the QML module is not linked into that binary.
+  await setQmlProperty(app, "welcomePage.search", 'text = "waku"');
+
   let button = null;
   await app.waitFor(async () => {
-    const byName = await app.findByProperty("objectName", "welcomePage.installNow");
+    const byName = await app.findByProperty(
+      "objectName", "welcomePage.discoverApplications");
     button = (byName.matches ?? [])[0] || null;
     if (!button) {
-      const byText = await app.findByProperty("text", "Install now");
-      button = (byText.matches ?? []).find((m) => (m.type ?? "").includes("Button")) || null;
+      throw new Error('"Discover Applications" block not found on the welcome page');
     }
-    if (!button) throw new Error('"Install now" button not found on the welcome page');
-  }, { timeout: 10000, interval: 500, description: '"Install now" button to exist' });
+  }, { timeout: 10000, interval: 500,
+       description: '"Discover Applications" block to exist' });
 
   // Signal-level click — coordinate hit-testing on offscreen is fragile
   // (see installViaPmu); the onClicked handler chain is identical.
@@ -216,6 +365,19 @@ test('welcome: "Install now" navigates to Applications', async (app) => {
     throw new Error(
       `welcome page still visible: workspace visible=` +
       `${JSON.stringify(visible)} (expected false)`);
+  }
+
+  // ...and the query typed at the top of this test died with the page.
+  const field = await findByObjectName(app.inspector, "welcomePage.search");
+  if (!field) throw new Error("welcome search field not found after navigating");
+  const text = await app.inspector.send("evaluate", {
+    objectId: field.id, expression: "text",
+  });
+  if (text.error) throw new Error(`evaluate(text) failed: ${text.error}`);
+  if (text.result !== "") {
+    throw new Error(
+      `welcome search still holds ${JSON.stringify(text.result)} after ` +
+      "navigating away — WorkspaceArea::clearWelcomeSearch did not run");
   }
 });
 
@@ -483,10 +645,10 @@ test("workspace: closing the last dock brings the welcome page back", async (app
 
   // …with the installed-apps greeting — closing unloads fixture A but does
   // not uninstall it, so launcherApps stays non-empty and the greeting is
-  // "Welcome back", not the first-launch text.
+  // "Welcome Back,", not the first-launch text.
   await app.waitFor(
-    async () => { await app.expectTexts(["Welcome back"]); },
-    { timeout: 5000, interval: 250, description: '"Welcome back" greeting to render' }
+    async () => { await app.expectTexts(["Welcome Back,"]); },
+    { timeout: 5000, interval: 250, description: '"Welcome Back," greeting to render' }
   );
 
   // Gate: the backend no longer reports a front-most app.

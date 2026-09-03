@@ -53,7 +53,14 @@ public:
 signals:
     void pluginClosed(const QString& moduleName);
     void dockLayoutChanged();
-    void installClicked();
+    // WelcomePage's two navigation blocks.
+    void discoverApplicationsClicked();
+    void managePackagesClicked();
+    void reopenAppRequested(const QString& moduleName);   
+    void appActivated(const QString& moduleName, const QString& repositoryUrl);
+    void packageActivated(const QString& moduleName);
+    void packageInstallRequested(const QString& moduleName);
+    void showAllResultsRequested(const QString& typeValue, const QString& query);
     // Emitted when the front-most dock changes (tab click, close, activate).
     // Empty string when no real dock is current (welcome page).
     void activeAppChanged(const QString& moduleName);
@@ -70,6 +77,7 @@ private:
     void styleAllTabBars();
     void updateQmlPluginActiveStates();
     void updateWelcomeVisibility();
+    void clearWelcomeSearch();
     QString moduleNameForTabText(const QString& tabText) const;
 
     // Ensure the tab bar is visible even when only one real dock is open.
