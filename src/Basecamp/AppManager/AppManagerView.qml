@@ -14,6 +14,11 @@ Rectangle {
 
     // ─── Public API ───
     property var appsProxy: null
+
+    // Applies a query from outside the view — the welcome page's search hands
+    // its text over when a result routes here. Goes through d.searchText so the
+    // visible field and the proxy stay in step.
+    function applySearch(query) { d.searchText = query }
     property var repositories: []
     property bool loading: false
     signal appClicked(string name, string repositoryUrl)

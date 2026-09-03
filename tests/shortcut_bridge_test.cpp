@@ -8,6 +8,7 @@
 #include <QtTest/QtTest>
 #include <QApplication>
 #include <QLabel>
+#include <QLineEdit>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QQuickItem>
@@ -159,6 +160,85 @@ private slots:
         pump();
 
         QCOMPARE(pane->rootObject()->property("hits").toInt(), 1);
+    }
+
+    // The mirror fires on the HOST, so without this the QML handler runs
+    // while the pane still has no Qt keyboard focus. A handler that focuses
+    // something then leaves the two halves of focus split: the item has
+    // activeFocus inside the offscreen QQuickWindow and draws a caret, while
+    // key events keep going to whichever widget actually holds focus. ⌘K on
+    // the welcome page looked ready and swallowed every keystroke.
+    //
+    // focusWidget() rather than hasFocus(): the latter also requires an active
+    // window, which a test run offscreen cannot rely on.
+    void mirrorActivatedGivesThePaneKeyboardFocus()
+    {
+        QWidget host;
+        auto* layout = new QVBoxLayout(&host);
+        auto* stack = new QStackedWidget(&host);
+        layout->addWidget(stack);
+
+        // Something else holds focus first, so passing is not just the pane
+        // happening to be the only candidate.
+        auto* other = new QLineEdit(&host);
+        layout->addWidget(other);
+
+        auto* pane = makePane(
+            "import QtQuick 2.15\n"
+            "Item {\n"
+            "  Shortcut { objectName: \"sc\"; sequence: \"Ctrl+K\" }\n"
+            "}\n",
+            stack);
+        stack->addWidget(pane);
+        host.show();
+        other->setFocus();
+        pump();
+        QCOMPARE(host.focusWidget(), other);
+
+        ShortcutBridge bridge(&host, stack);
+        pump();
+
+        auto* mirror = host.findChild<QShortcut*>();
+        QVERIFY(mirror);
+        emit mirror->activated();
+        pump();
+
+        QCOMPARE(host.focusWidget(), pane);
+    }
+
+    // A disabled QML shortcut is skipped entirely — including the focus hand-off
+    // above, which must not fire for a handler that is never going to run.
+    void disabledQmlShortcutDoesNotStealFocus()
+    {
+        QWidget host;
+        auto* layout = new QVBoxLayout(&host);
+        auto* stack = new QStackedWidget(&host);
+        layout->addWidget(stack);
+
+        auto* other = new QLineEdit(&host);
+        layout->addWidget(other);
+
+        auto* pane = makePane(
+            "import QtQuick 2.15\n"
+            "Item {\n"
+            "  Shortcut { objectName: \"sc\"; sequence: \"Ctrl+K\"; enabled: false }\n"
+            "}\n",
+            stack);
+        stack->addWidget(pane);
+        host.show();
+        other->setFocus();
+        pump();
+
+        ShortcutBridge bridge(&host, stack);
+        pump();
+
+        auto* mirror = host.findChild<QShortcut*>();
+        if (mirror) {
+            emit mirror->activated();
+            pump();
+        }
+
+        QCOMPARE(host.focusWidget(), other);
     }
 
     // macOS first-press case: Qt fires activatedAmbiguously on the QML

@@ -9,6 +9,10 @@ import Basecamp.Backend
 Item {
     id: root
 
+    // Entry point for the shell: the welcome page's search routes a result
+    // here and hands over the query that produced it.
+    function applyAppSearch(query) { appManagerView.applySearch(query) }
+
     // Section indices come from ShellSection (src/ShellSections.h), the single
     // source of truth shared with MainContainer's C++ switch and
     // SidebarPanel.qml's viewSections order.
@@ -77,6 +81,7 @@ Item {
         // App Manager (sidebar sidebarAppManager -> stack index 0)
         AppManagerView {
             id: appManagerView
+
             appsProxy:      uiAppsProxy
             repositories:   backend.repositories
             loading:        backend.appsLoading

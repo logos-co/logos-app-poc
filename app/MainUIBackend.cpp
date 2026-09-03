@@ -119,6 +119,8 @@ MainUIBackend::MainUIBackend(LogosAPI* logosAPI, ICoreRuntime* core, QObject* pa
             });
     connect(m_uiPluginManager, &UIPluginManager::launcherAppsChanged,
             this,              &MainUIBackend::launcherAppsChanged);
+    connect(m_uiPluginManager, &UIPluginManager::recentlyClosedAppsChanged,
+            this,              &MainUIBackend::recentlyClosedAppsChanged);
     connect(m_uiPluginManager, &UIPluginManager::loadingModulesChanged,
             this,              &MainUIBackend::loadingModulesChanged);
     connect(m_uiPluginManager, &UIPluginManager::currentVisibleAppChanged,
@@ -157,6 +159,10 @@ MainUIBackend::MainUIBackend(LogosAPI* logosAPI, ICoreRuntime* core, QObject* pa
             this,             &MainUIBackend::addApplicationDataUpdated);
     connect(m_packageCoordinator, &PackageCoordinator::launchAppRequested,
             this,             &MainUIBackend::launchAppRequested);
+    connect(m_packageCoordinator, &PackageCoordinator::launchAppRequested,
+            this, [this](const QString& name) {
+        m_uiPluginManager->onAppLauncherClicked(name);
+    }, Qt::QueuedConnection);
     // The resolver's required packages are cached here and published as a
     // property; QML binds a shell-declared AppsFilterProxy to it. Nothing on
     // this side holds a pointer to that proxy.
@@ -305,6 +311,7 @@ void MainUIBackend::refreshCoreModulesModel()
 }
 
 QVariantList MainUIBackend::launcherApps() const     { return m_uiPluginManager->launcherApps(); }
+QVariantList MainUIBackend::recentlyClosedApps() const { return m_uiPluginManager->recentlyClosedApps(); }
 QString      MainUIBackend::currentVisibleApp() const{ return m_uiPluginManager->currentVisibleApp(); }
 QStringList  MainUIBackend::loadingModules() const   { return m_uiPluginManager->loadingModules(); }
 
@@ -460,7 +467,8 @@ void MainUIBackend::wireIntents()
     // What the shell itself asks apps for. Declared in code because the shell
     // has no metadata.json, but checked by the broker exactly like an app's.
     m_intentRegistry->registerShellUses(
-        QStringLiteral("main_ui"), {QStringLiteral("packages.show")});
+        QStringLiteral("main_ui"), {QStringLiteral("packages.show"),
+                                    QStringLiteral("packages.install")});
 
     // repositories.manage is a HAND-OFF: it puts the user on the Settings
     // repositories page and leaves them there for as long as they like, so its
@@ -641,7 +649,7 @@ void MainUIBackend::showPackageDetails(const QString& packageName)
     // favour of the generic path. Adding a second would be walking backwards.
     // This also means the shell dogfoods the mechanism it asks apps to use.
     if (m_intentBroker && m_shellEndpoint
-        && m_registryDeclaresPackagesShow()) {
+        && m_registryDeclares(QStringLiteral("packages.show"))) {
         m_intentBroker->submit(m_shellEndpoint.get(),
                                QStringLiteral("shell-details-") + packageName,
                                QStringLiteral("packages.show"),
@@ -652,11 +660,27 @@ void MainUIBackend::showPackageDetails(const QString& packageName)
     showPackageDetailsFallback(packageName);
 }
 
-bool MainUIBackend::m_registryDeclaresPackagesShow() const
+void MainUIBackend::requestPackageInstall(const QString& packageName)
+{
+    if (packageName.isEmpty()) return;
+    if (m_intentBroker && m_shellEndpoint
+        && m_registryDeclares(QStringLiteral("packages.install"))) {
+        m_intentBroker->submit(m_shellEndpoint.get(),
+                               QStringLiteral("shell-install-") + packageName,
+                               QStringLiteral("packages.install"),
+                               QVariantMap{{QStringLiteral("name"), packageName}});
+        return;
+    }
+
+    if (m_packageCoordinator)
+        m_packageCoordinator->openApp(packageName, repositoryUrlFor(packageName),
+                                      {}, /*allowFastLaunch=*/false);
+}
+
+bool MainUIBackend::m_registryDeclares(const QString& intent) const
 {
     return m_intentRegistry
-        && m_intentRegistry->resolve(QStringLiteral("packages.show")).status
-               != IntentRegistry::None;
+        && m_intentRegistry->resolve(intent).status != IntentRegistry::None;
 }
 
 void MainUIBackend::showPackageDetailsFallback(const QString& packageName)

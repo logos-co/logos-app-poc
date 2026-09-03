@@ -92,6 +92,8 @@ class MainUIBackend : public QObject {
 
     // App Launcher
     Q_PROPERTY(QVariantList launcherApps READ launcherApps NOTIFY launcherAppsChanged)
+    // Most-recently-closed apps, persisted across restarts.
+    Q_PROPERTY(QVariantList recentlyClosedApps READ recentlyClosedApps NOTIFY recentlyClosedAppsChanged)
     Q_PROPERTY(QString currentVisibleApp READ currentVisibleApp NOTIFY currentVisibleAppChanged)
     Q_PROPERTY(QStringList loadingModules READ loadingModules NOTIFY loadingModulesChanged)
 
@@ -148,6 +150,7 @@ public:
 
     // Delegations to UIPluginManager.
     QVariantList launcherApps() const;
+    QVariantList recentlyClosedApps() const;
     QString      currentVisibleApp() const;
     QStringList  loadingModules() const;
 
@@ -213,6 +216,12 @@ public slots:
     // "Who is this?" from the chooser — opens the App Manager's own detail
     // view for a package rather than summarising it in a dialog.
     Q_INVOKABLE void showPackageDetails(const QString& packageName);
+
+    // "Install this package" from outside the Package Manager — the welcome
+    // page's result tiles. Hands off to whoever provides `packages.install`,
+    // so the user lands in the Package Manager on that package, in front of
+    // the same gate dialog its own rows raise.
+    Q_INVOKABLE void requestPackageInstall(const QString& packageName);
 
     // Uninstall flow — delegated to PackageCoordinator. uninstallApp is the
     // App-Manager entry point: it composes a batch (app + orphaned deps) and
@@ -300,6 +309,7 @@ signals:
     void catalogInstallFinished(const QString& name);
     void catalogInstallFailed(const QString& name, const QString& error);
     void launcherAppsChanged();
+    void recentlyClosedAppsChanged();
     void currentVisibleAppChanged();
     void loadingModulesChanged();
     void navigateToApps();
@@ -405,7 +415,7 @@ public:
     Q_INVOKABLE QVariantMap providerDetailsFor(const QString& packageName) const;
 
 private:
-    bool m_registryDeclaresPackagesShow() const;
+    bool m_registryDeclares(const QString& intent) const;
     void showPackageDetailsFallback(const QString& packageName);
 
 private slots:

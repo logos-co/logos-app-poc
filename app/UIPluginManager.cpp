@@ -6,6 +6,7 @@
 #include "PackageCoordinator.h"
 #include "PluginLoader.h"
 #include "utils/DependencyBlocker.h"
+#include "utils/LogosBasecampPaths.h"
 
 #include <QDebug>
 #include <QDir>
@@ -53,6 +54,17 @@ UIPluginManager::UIPluginManager(LogosAPI* logosAPI,
     , m_pluginLoader(nullptr)
     , m_currentVisibleApp("")
 {
+    m_recentlyClosed = std::make_unique<RecentlyClosedStore>(
+        LogosBasecampPaths::baseDirectory() + "/recently-closed.ini");
+
+    // recentlyClosedApps() filters against m_uiPluginMetadata, which arrives
+    // asynchronously via onUiPluginsFetched — long after QML first binds. Without
+    // this chain the welcome page evaluates the list once against an empty
+    // metadata map, filters everything out, and never re-checks: a list restored
+    // from disk stays invisible for the whole session.
+    connect(this, &UIPluginManager::launcherAppsChanged,
+            this, &UIPluginManager::recentlyClosedAppsChanged);
+
     m_pluginLoader = new PluginLoader(m_logosAPI, m_coreModuleManager, this);
     connect(m_pluginLoader, &PluginLoader::pluginLoaded,
             this, &UIPluginManager::onPluginLoaded);
@@ -474,6 +486,17 @@ void UIPluginManager::unloadUiModuleImpl(const QString& moduleName)
     m_qmlPluginWidgets.remove(moduleName);
     m_loadedApps.remove(moduleName);
 
+    // The user closed this app. Three paths deliberately do NOT record:
+    //   * shutdown() — it unloads every open app on quit, which would file them
+    //     all as "recently closed" and evict the ones actually closed by hand.
+    //     Restoring what was open at exit is a different feature.
+    //   * teardownUiPluginWidgetNow — uninstall; a removed app is not "recent".
+    //   * shell internals (main_ui / package_manager_ui) — never launchable.
+    if (m_recentlyClosed && !m_shuttingDown && !isShellInternalApp(moduleName)) {
+        m_recentlyClosed->record(moduleName);
+        emit recentlyClosedAppsChanged();
+    }
+
     emit uiModulesChanged();
     emit launcherAppsChanged();
 
@@ -629,48 +652,69 @@ void UIPluginManager::refreshUiModules()
     }
 }
 
+// Shell-internal apps: never launchable, so never in a launcher or a
+// recently-closed list.
+bool UIPluginManager::isShellInternalApp(const QString& name)
+{
+    return name == "main_ui" || name == "package_manager_ui";
+}
+
+// One row shape, built once. launcherApps() and recentlyClosedApps() both use
+// it so the sidebar and the welcome page cannot drift apart.
+QVariantMap UIPluginManager::buildAppRow(const QString& pluginName) const
+{
+    QVariantMap app;
+    app["name"] = pluginName;
+    const QString metaDn =
+        m_uiPluginMetadata.value(pluginName).value("displayName").toString();
+    app["displayName"] = metaDn;
+    app["isLoaded"] = m_loadedApps.contains(pluginName);
+    app["iconPath"] = pluginIconUrl(pluginName);
+    app["supportsFullBleedIcon"] =
+        AppsModel::supportsFullBleedIcon(pluginManifestVersion(pluginName));
+    const QStringList missing = m_packageCoordinator
+        ? m_packageCoordinator->missingDepsOf(pluginName)
+        : QStringList{};
+    app["hasMissingDeps"] = !missing.isEmpty();
+    // "" | "absent" | "mismatch" | "signer" | "mixed" — picks the
+    // marker's shape.
+    app["depBlockKind"] = m_packageCoordinator
+        ? logos::summariseDependencyBlockers(
+              m_packageCoordinator->blockingDepsOf(pluginName))
+        : QString();
+    return app;
+}
+
 QVariantList UIPluginManager::launcherApps() const
 {
     QVariantList apps;
-    QStringList availablePlugins = findAvailableUiPlugins();
+    const QStringList availablePlugins = findAvailableUiPlugins();
 
     for (const QString& pluginName : availablePlugins) {
-        if (pluginName == "main_ui") {
+        if (isShellInternalApp(pluginName)) {
             continue;
         }
+        apps.append(buildAppRow(pluginName));
+    }
 
-        if (pluginName == "package_manager_ui") {
+    return apps;
+}
+
+QVariantList UIPluginManager::recentlyClosedApps() const
+{
+    QVariantList apps;
+    if (!m_recentlyClosed) {
+        return apps;
+    }
+
+    // Filter against what is installed *now*: an app uninstalled between
+    // sessions must not render as a tile that launches nothing.
+    const QStringList available = findAvailableUiPlugins();
+    for (const QString& name : m_recentlyClosed->names()) {
+        if (isShellInternalApp(name) || !available.contains(name)) {
             continue;
         }
-
-        QVariantMap app;
-        app["name"] = pluginName;
-        const QString metaDn =
-            m_uiPluginMetadata.value(pluginName).value("displayName").toString();
-        app["displayName"] = metaDn;
-        app["isLoaded"] = m_loadedApps.contains(pluginName);
-        app["iconPath"] = pluginIconUrl(pluginName);
-        // Manifest >= 0.4.0 guarantees a validated 256x256 icon, so the
-        // sidebar tile can render it edge-to-edge; older packages ship a
-        // small glyph that must stay inset.
-        app["supportsFullBleedIcon"] =
-            AppsModel::supportsFullBleedIcon(pluginManifestVersion(pluginName));
-        // Sidebar marker source, read directly by SidebarAppDelegate. The
-        // blocker list is deliberately not shipped here: the sidebar draws
-        // only an indicator, and the click-triggered popup fetches the detail
-        // from PackageCoordinator::blockingDepsOf.
-        const QStringList missing = m_packageCoordinator
-            ? m_packageCoordinator->missingDepsOf(pluginName)
-            : QStringList{};
-        app["hasMissingDeps"] = !missing.isEmpty();
-        // "" | "absent" | "mismatch" | "signer" | "mixed" — picks the
-        // marker's shape.
-        app["depBlockKind"] = m_packageCoordinator
-            ? logos::summariseDependencyBlockers(
-                  m_packageCoordinator->blockingDepsOf(pluginName))
-            : QString();
-
-        apps.append(app);
+        apps.append(buildAppRow(name));
     }
 
     return apps;
@@ -1049,6 +1093,14 @@ void UIPluginManager::teardownUiPluginWidgetNow(const QString& moduleName)
     m_uiModuleWidgets.remove(moduleName);
     m_qmlPluginWidgets.remove(moduleName);
     m_loadedApps.remove(moduleName);
+
+    // This is the uninstall path. Drop any recent-close record so a later
+    // reinstall does not resurrect the app as "recently closed". The read-time
+    // installed-filter would hide it anyway; this keeps the file honest.
+    if (m_recentlyClosed) {
+        m_recentlyClosed->forget(moduleName);
+        emit recentlyClosedAppsChanged();
+    }
 
     if (m_currentVisibleApp == moduleName) {
         m_currentVisibleApp.clear();
