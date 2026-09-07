@@ -41,7 +41,7 @@ Item {
         // answered, or the requester waits out the full deadline for a reply
         // never coming.
         //
-        // NOT EVERY SHELL INTENT REACHES HERE. `logos.packages.confirm_*` is
+        // NOT EVERY SHELL INTENT REACHES HERE. `basecamp.packages.confirm_*` is
         // intercepted in C++ before this signal is emitted — see
         // kPackageConfirmIntents in MainUIBackend.cpp. Those need the
         // cascade-unload, the dependent caches and a pending dispatch id, and
@@ -50,9 +50,17 @@ Item {
         // before concluding an intent is unhandled.
         function onShellIntentRequested(requestId, intent, params, requesterName) {
             switch (intent) {
-            case "logos.repositories.manage":
+            case "basecamp.repositories.manage":
                 backend.setCurrentActiveSectionIndex(root.sidebarSettings)
                 settingsView.showRepositories()
+                backend.respondToShellIntent(requestId, true, ({}), "")
+                return
+            case "basecamp.settings.open":
+                backend.setCurrentActiveSectionIndex(root.sidebarSettings)
+                backend.respondToShellIntent(requestId, true, ({}), "")
+                return
+            case "basecamp.apps.open":
+                backend.setCurrentActiveSectionIndex(root.sidebarAppManager)
                 backend.respondToShellIntent(requestId, true, ({}), "")
                 return
             }

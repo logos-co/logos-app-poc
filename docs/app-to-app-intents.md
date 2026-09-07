@@ -45,7 +45,7 @@ Nothing is signed yet, so a name is a claim rather than an identity. §6 sets ou
 | Payload is the wrong shape | `bad_request` — fix what you sent rather than retrying |
 | User dismisses the chooser | `cancelled`, distinct from "nobody was there" |
 | Provider declares but ships no handler | `timeout` after 20s, with a log warning naming it |
-| The shell is the provider | `logos.repositories.manage` and the three `logos.packages.confirm_*` are serviced by Basecamp itself |
+| The shell is the provider | `basecamp.repositories.manage`, `basecamp.settings.open`, `basecamp.apps.open` and the three `basecamp.packages.confirm_*` are serviced by Basecamp itself |
 | Requester is not on a restricted intent's list | `unavailable`, floored — indistinguishable from "nothing provides it" |
 
 **Providers are `ui_qml` apps, by design.** Intents exist for *user-mediated* actions: the caller does not know who will service the request, and a human chooses. Core modules have no such problem — they already call each other directly by name through `LogosAPI`, with no chooser and no consent step, because nothing is being decided. A backend that needs another backend should make that call, not raise an intent.
@@ -83,7 +83,11 @@ A response is accepted only when the dispatch id is pending, the phase is `Dispa
 
 **Payloads** must survive crossing between two QML engines, so they are plain data only: ≤8 levels deep, ≤1000 nodes, strings ≤64 KB, keys ≤64 chars, integers within ±(2⁵³−1). No `QObject*` and no functions — that is what stops one app handing another a live handle into its engine. The same check runs on the result.
 
-**Names** are `namespace.verb`: 2–4 dot-separated segments, 3–64 chars, lowercase with single underscores. `logos.*` is reserved for the shell. Matched byte-exactly — no case folding, no Unicode normalisation — because a name is a contract between independently shipped apps, and "looks the same" is not good enough.
+**Names** are `namespace.verb`: 2–4 dot-separated segments, 3–64 chars, lowercase with single underscores. Two namespaces are reserved and refused from any on-disk record: **`logos.*` is the platform's** — liblogos, logoscore, anything below the shell — and **`basecamp.*` is this shell's**. The split matters because Basecamp is one frontend among several possible ones: a capability of *this shell* has no business claiming the name of the platform every frontend sits on. Nothing claims `logos.*` yet; it is reserved now because reserving it later, once apps have declared `uses` against it, is not possible.
+
+The two reservations live in different places, and that is the same split the rest of this document turns on. `logos.*` is enforced by the frozen surface (`LogosIntent.h`), because the platform's namespace outlives any particular shell. `basecamp.*` is enforced in `IntentRegistry`, because *which shell owns which prefix* is policy, and policy belongs in the disposable half — another frontend reserves its own prefix without touching the frozen header.
+
+Matched byte-exactly — no case folding, no Unicode normalisation — because a name is a contract between independently shipped apps, and "looks the same" is not good enough.
 
 ---
 
@@ -120,6 +124,34 @@ Connections {
 
 The check runs only once a provider is chosen, never at submit: two providers may describe one intent differently, and testing all their specs would reveal how many exist. It describes what *that app* wants, not what the name means — there is no schema for `wallet.send` itself to appeal to yet (§7).
 
+### What the shell provides
+
+Registered in code (`registerShellProvider`), because the shell has no `metadata.json`. Two groups, and the line between them is load-bearing:
+
+| Intent | Kind | Hand-off |
+|---|---|---|
+| `basecamp.repositories.manage` | navigation | yes |
+| `basecamp.settings.open` | navigation | yes |
+| `basecamp.apps.open` | navigation | yes |
+| `basecamp.apps.launch` | navigation, takes `{ "app": … }` | yes |
+| `basecamp.packages.confirm_install` | dialog | no |
+| `basecamp.packages.confirm_uninstall` | dialog, restricted | no |
+| `basecamp.packages.confirm_upgrade` | dialog, restricted | no |
+
+The navigation group is all hand-offs: `ok` means "you are there", not "we are done", so returning the user would undo the request.
+
+**The navigation list must stay navigation-only, and that is a security property, not a taste one.** The broker skips the chooser when the shell is the only provider (§2) — so everything in that group is something a requester can make the shell do *with no consent dialog at all*. That is correct for moving between the shell's own sections: nothing crosses a boundary, nothing is destructive, and confirming a navigation the user just asked for is a dialog answering itself. It stops being correct the instant an entry mutates state. Adding `basecamp.packages.uninstall` to that list would be a silent, unconsented removal, reachable by anything that can raise an intent.
+
+**`basecamp.apps.launch` carries the app name as a parameter, and answers the same way whether or not that app exists.** Both halves are load-bearing.
+
+The name is a parameter because `basecamp.launch.<appName>` — the obvious alternative — fails three ways. App names are not bound by the intent-name grammar, so anything with a hyphen or a capital produces a name that is silently dropped. `provides` would have to be re-registered on every install and uninstall. And a caller's `uses` would have to name each app it might launch, which is exactly the "a request names a capability, never a provider" line in §1. `packages.show` already carries a package name this way.
+
+The answer is constant because "launch X, tell me if it worked" is otherwise an installed-app enumeration oracle: iterate plausible names, read the answers, recover the user's whole app list. `unavailable` merging "absent" with "denied", the timing floor, and install offers that never report back all exist to prevent precisely that, and a differential answer here would undo all three at once. So the requester always gets `ok`, on the floor, and learns nothing; when the app is absent the shell may offer an install, which is between the shell and the user. A malformed payload takes the same path for the same reason — `bad_request` would confirm the name was well-formed but absent, which is half the oracle back.
+
+Note the asymmetry that makes this workable: from a link there is no oracle at all, because nothing returns to the browser and the user clicked it themselves. The constant answer is what makes the app-to-app case safe as well.
+
+**These were `logos.*` before the namespace split, and no alias is carried.** `package_manager_ui` is the only consumer and was never released declaring the old names, so no installed copy asks for them. That makes a compatibility window pure cost: restrictions are keyed on the name as submitted and checked before delivery, so a surviving `logos.packages.confirm_uninstall` would be a second live path to a restricted, destructive capability — and one nothing on disk would ever have used.
+
 ---
 
 ## 5. Calling one
@@ -149,7 +181,7 @@ Anything else a provider returns is coerced to `failed` — free text in the cal
 
 **Some intents restrict who may ask.** A provider-side allow-list, declared in code beside the shell's own `provides` (`IntentRegistry::restrictIntentToRequesters`). Absent = unrestricted, which is every intent except two.
 
-It exists because attribution is not always enough. Showing who asked works when the user has context to judge against — they clicked something, and "Chat App wants to send funds" is a question they can answer. An *unsolicited* prompt to remove or downgrade one of your packages has no such context, and its correct answer is always no. A dialog whose right answer is unconditional can only cost you: it trains dismissal, and one mis-click is destructive and not undoable. So `logos.packages.confirm_uninstall` and `logos.packages.confirm_upgrade` are restricted to `package_manager_ui`, while `confirm_install` stays open — an app saying "you need X" is legitimate, and the shell already offers catalog installs an app's request provoked.
+It exists because attribution is not always enough. Showing who asked works when the user has context to judge against — they clicked something, and "Chat App wants to send funds" is a question they can answer. An *unsolicited* prompt to remove or downgrade one of your packages has no such context, and its correct answer is always no. A dialog whose right answer is unconditional can only cost you: it trains dismissal, and one mis-click is destructive and not undoable. So `basecamp.packages.confirm_uninstall` and `basecamp.packages.confirm_upgrade` are restricted to `package_manager_ui`, while `confirm_install` stays open — an app saying "you need X" is legitimate, and the shell already offers catalog installs an app's request provoked.
 
 Three properties are load-bearing. Denial answers `unavailable` **on the same floor** as "nothing provides it", so a refused app cannot learn the capability exists. An empty requester list is **refused**, not stored — it reads as "restricted to nobody" but would behave as unrestricted, so a typo must not silently open a destructive capability. And the list survives `rebuild()`, because it is code-declared policy rather than something read off disk.
 
@@ -189,17 +221,17 @@ Note what the manifest does **not** carry: the author's `params`. Only intent na
 
 **Well-known intents defined somewhere public.** `wallet.sign` currently means whatever two developers independently decided. A caller learns the shape by reading a provider's `metadata.json`, which describes *that provider*, not *the intent* — two wallets can describe the same name differently and both be "correct". What is needed is a published, versioned registry: name, parameter schema, result schema, semantics, compatibility policy. It should be where names are *published*, not where they are *permitted* — anyone should be able to define `myapp.thing` and have others implement it, with reserved namespaces the exception.
 
-**Shell-defined intents with third-party providers.** `logos.repositories.manage` is serviced by Basecamp today. The interesting inverse is intents Basecamp *defines* and any app may *implement* — `logos.share`, `logos.open` — so a user can replace a built-in without the shell knowing. The plumbing supports it; missing are the definitions and the rule for when the shell's own implementation should lose to an installed one.
+**Shell-defined intents with third-party providers.** `basecamp.repositories.manage` is serviced by Basecamp today. The interesting inverse is intents Basecamp *defines* and any app may *implement* — `basecamp.share`, `basecamp.open` — so a user can replace a built-in without the shell knowing. The plumbing supports it; missing are the definitions and the rule for when the shell's own implementation should lose to an installed one.
 
-**Opening an app from a link outside Basecamp.** Today the only thing that can raise an intent is an installed `ui_qml` app. The obvious extension is a `logos://` URL: a user clicks a link in a browser and Basecamp comes up with the request already in flight. Nothing in the design resists it — the URL becomes an intent submitted on behalf of a requester the shell mints itself, and resolution, consent, dispatch and the spoofing guard all work unchanged. What is missing is everything around that one line.
+**Opening an app from a link outside Basecamp.** Today the only thing that can raise an intent is an installed `ui_qml` app. The obvious extension is a `basecamp://` URL: a user clicks a link in a browser and Basecamp comes up with the request already in flight. Nothing in the design resists it — the URL becomes an intent submitted on behalf of a requester the shell mints itself, and resolution, consent, dispatch and the spoofing guard all work unchanged. What is missing is everything around that one line.
 
-*Registration and delivery, which is plumbing.* Nothing registers a scheme today: `app/macos/Info.plist.in` has no `CFBundleURLTypes`, and `assets/logos-basecamp.desktop` has no `x-scheme-handler/logos` and takes no `%u`.
+*Registration and delivery, which is plumbing.* Nothing registers a scheme today: `app/macos/Info.plist.in` has no `CFBundleURLTypes`, and `assets/logos-basecamp.desktop` has no `x-scheme-handler/basecamp` and takes no `%u`.
 
 | Platform | What it needs | Note |
 |---|---|---|
 | macOS | `CFBundleURLTypes` in the plist | LaunchServices registers on first launch and delivers the URL to the *running* instance as a `QFileOpenEvent`, so there is nothing else to build |
-| Linux | `MimeType=x-scheme-handler/logos;`, `Exec=… %u` | Only takes effect once the desktop file is in the user's database. The shipped artifact is an AppImage, whose embedded desktop file the system never sees unless the user runs AppImageLauncher — so this needs first-run self-registration into `~/.local/share/applications` |
-| Windows | `HKCU\Software\Classes\logos` | No installer exists, so the same first-run self-registration |
+| Linux | `MimeType=x-scheme-handler/basecamp;`, `Exec=… %u` | Only takes effect once the desktop file is in the user's database. The shipped artifact is an AppImage, whose embedded desktop file the system never sees unless the user runs AppImageLauncher — so this needs first-run self-registration into `~/.local/share/applications` |
+| Windows | `HKCU\Software\Classes\basecamp` | No installer exists, so the same first-run self-registration |
 
 On Linux and Windows the OS launches a *new process* per click, and Basecamp has no single-instance guard — a second click would start a second app rather than hand the URL to the first. That guard must be keyed on the resolved user directory rather than being global: `--user-dir` exists precisely so instances can run side by side, and a naive lock would break it.
 
@@ -264,7 +296,7 @@ Absent means `false`. Per *(provider, intent)*, like `params` and for the same r
 
 **`handoff` governs navigation only.** When a provider answers is a separate, independent decision: on arrival when there is no completion to wait for, or when the user marks the action done — at which point the caller learns it really happened and the user still is not sent back. The one constraint is the deadline a provider that accepted already lives under: **10 minutes** before the backstop reports `timeout`. Ample for a button press, not for work waiting on a network or a chain, where the provider should answer once the work is *started* and let the caller read the outcome from its own data source.
 
-`logos.repositories.manage` is declared a hand-off in code, through `registerShellProvider`. It happens not to auto-return anyway — the broker never presents a shell provider, so `didNavigate` is false — but that is the right behaviour by an unrelated route, and it would stop holding the day a shell intent is transactional.
+`basecamp.repositories.manage` is declared a hand-off in code, through `registerShellProvider`. It happens not to auto-return anyway — the broker never presents a shell provider, so `didNavigate` is false — but that is the right behaviour by an unrelated route, and it would stop holding the day a shell intent is transactional.
 
 **Not carried into the manifest.** `handoff` stays in the installed `metadata.json`, exactly like `params`, and `bundle.sh` copies intent names alone. A second copy in the signed manifest would be a bundle-time snapshot nothing reads and that can drift from the file actually enforced.
 

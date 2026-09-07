@@ -32,7 +32,7 @@ import Logos.Theme
 //                       operation isn't a bare uninstall. Confirm/Cancel flow
 //                       through `continueClicked` / `cancelClicked`.
 //  - "installGate"    — confirmation before a fresh install, raised as the
-//                       `logos.packages.confirm_install` intent. Every install
+//                       `basecamp.packages.confirm_install` intent. Every install
 //                       the app performs comes through here: package_manager_ui
 //                       initiates them all, whether the source is a catalog
 //                       download or a local .lgx the user picked. Leads with the

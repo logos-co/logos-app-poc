@@ -9,7 +9,7 @@
 
 // The shell itself, as an intent endpoint.
 //
-// main_ui provides capabilities like `logos.repositories.manage` that operate on
+// main_ui provides capabilities like `basecamp.repositories.manage` that operate on
 // the shell's own chrome. To the broker it is just another provider — one
 // dispatch path, and no privilege earned from being the host.
 //

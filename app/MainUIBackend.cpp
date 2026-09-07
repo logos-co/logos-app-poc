@@ -8,6 +8,7 @@
 #include "ShellIntentChooser.h"
 #include "ShellIntentInstaller.h"
 #include "ShellIntentEndpoint.h"
+#include "ShellIntents.h"
 #include "UIPluginPresenter.h"
 #include "AppsModel.h"
 #include "BasecampModelRoles.h"
@@ -19,22 +20,13 @@
 
 #include <QDebug>
 #include <QJSValue>
+#include <QMap>
 #include <QTimer>
 
-namespace {
-const QStringList kPackageConfirmIntents = {
-    QStringLiteral("logos.packages.confirm_install"),
-    QStringLiteral("logos.packages.confirm_uninstall"),
-    QStringLiteral("logos.packages.confirm_upgrade"),
-};
-
-// Of those, the ones no third party has a legitimate reason to raise.
-const QStringList kRestrictedToPackageManagerUi = {
-    QStringLiteral("logos.packages.confirm_uninstall"),
-    QStringLiteral("logos.packages.confirm_upgrade"),
-};
-
-} // namespace
+// The shell's own capability tables and their registration live in
+// ShellIntents so a unit test can reach them; this file cannot be linked into
+// the test harness. Unqualified below to keep the use sites unchanged.
+using namespace ShellIntents;
 
 MainUIBackend::MainUIBackend(LogosAPI* logosAPI, ICoreRuntime* core, QObject* parent)
     : QObject(parent)
@@ -439,6 +431,13 @@ void MainUIBackend::wireIntents()
             // They also could not use the relay's receiver count: that counts
             // ContentViews' connections, and these dialogs live in the separate
             // OverlayDialogs widget.
+            // Also serviced in C++ rather than the QML relay: it takes a
+            // parameter, has to decide whether the named app is installed, and
+            // must answer on a timing floor. A `case` in ContentViews' switch
+            // could do none of that.
+            if (intent == kAppLaunchIntent)
+                return beginAppLaunch(dispatchId, params);
+
             if (kPackageConfirmIntents.contains(intent)) {
                 return m_packageCoordinator
                     && m_packageCoordinator->beginPackageConfirmation(
@@ -462,36 +461,20 @@ void MainUIBackend::wireIntents()
             });
     }
 
-    // The shell's own provided capabilities. main_ui is the only module allowed
-    // a "logos.*" name; IntentRegistry refuses that name from any disk record.
-    // What the shell itself asks apps for. Declared in code because the shell
-    // has no metadata.json, but checked by the broker exactly like an app's.
-    m_intentRegistry->registerShellUses(
-        QStringLiteral("main_ui"), {QStringLiteral("packages.show"),
-                                    QStringLiteral("packages.install")});
-
-    // repositories.manage is a HAND-OFF: it puts the user on the Settings
-    // repositories page and leaves them there for as long as they like, so its
-    // `ok` means "I have taken you there", not "we are done". Declared rather
-    // than left to fall out of the broker skipping presentApp for shell
-    // providers — that gives the right answer by an unrelated route, and stops
-    // doing so the day a shell intent is transactional. The confirm intents are
-    // not hand-offs: they are dialogs that resolve.
-    m_intentRegistry->registerShellProvider(
+    // The shell's own provided capabilities, its `uses`, and the requester
+    // restrictions on the destructive ones. main_ui is the only module allowed
+    // a "basecamp.*" name; IntentRegistry refuses that namespace, and the
+    // platform's "logos.*", from any disk record.
+    //
+    // In ShellIntents rather than inline so shell_intents_test.cpp can assert
+    // against this exact registration — this file cannot be linked into the
+    // unit-test harness, and the shell's capability list is the last thing that
+    // should be covered only by reading.
+    ShellIntents::registerWith(
+        m_intentRegistry,
         QStringLiteral("main_ui"),
-        QStringList{QStringLiteral("logos.repositories.manage")} + kPackageConfirmIntents,
-        QStringList{QStringLiteral("logos.repositories.manage")},
         QStringLiteral("Logos"),
         QStringLiteral("qrc:/qt/qml/Basecamp/Icons/assets/settings.svg"));
-
-    // confirm_install stays open: an app suggesting "you need X" is legitimate,
-    // and the shell already offers catalog installs an app's request provoked.
-    // Removal and version changes are restricted — no third party has a use for
-    // them, so the prompt would be one whose right answer is always no.
-    for (const QString& destructive : kRestrictedToPackageManagerUi) {
-        m_intentRegistry->restrictIntentToRequesters(
-            destructive, {QStringLiteral("package_manager_ui")});
-    }
 
     rebuildIntentRegistry();
 }
@@ -681,6 +664,31 @@ bool MainUIBackend::m_registryDeclares(const QString& intent) const
 {
     return m_intentRegistry
         && m_intentRegistry->resolve(intent).status != IntentRegistry::None;
+}
+
+int MainUIBackend::beginAppLaunch(const QString& dispatchId,
+                                  const QVariantMap& params)
+{
+    const QVariant raw = params.value(kAppLaunchParam);
+    const QString appName =
+        raw.typeId() == QMetaType::QString ? raw.toString().trimmed() : QString();
+
+    if (!appName.isEmpty() && m_intentPresenter) {
+        if (m_uiPluginManager
+            && m_uiPluginManager->uiPluginMetadataSnapshot().contains(appName)) {
+            m_intentPresenter->ensureAppLoaded(appName);
+            m_intentPresenter->presentApp(appName);
+        } else {
+            requestPackageInstall(appName);
+        }
+    }
+
+    constexpr int kLaunchAnswerFloorMs = 400;
+    QTimer::singleShot(kLaunchAnswerFloorMs, this, [this, dispatchId]() {
+        respondToShellIntent(dispatchId, true, QVariant(), QString());
+    });
+
+    return 1;
 }
 
 void MainUIBackend::showPackageDetailsFallback(const QString& packageName)
