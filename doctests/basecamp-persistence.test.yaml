@@ -339,7 +339,7 @@ sections:
               find_value: "pmui.BackendStore"
               method: "installLocalPackage"
               args: ["file:///tmp/basecamp-persist/test_persist_qml-0.1.1.lgx"]
-              text: "PMU inspects the LGX, sees it isn't installed, and raises the `logos.packages.confirm_install` intent; Basecamp services it and raises the install gate."
+              text: "PMU inspects the LGX, sees it isn't installed, and raises the `basecamp.packages.confirm_install` intent; Basecamp services it and raises the install gate."
 
             - name: "Basecamp's install gate asks for confirmation"
               action: wait_for

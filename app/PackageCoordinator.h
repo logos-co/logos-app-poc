@@ -26,7 +26,7 @@ class UIPluginManager;
 // Scope:
 //   * Package scanning (getInstalledPackagesAsync, getInstalledUiPluginsAsync)
 //     and the derived installType / missing-deps / dependents caches.
-//   * Servicing the three `logos.packages.confirm_*` intents raised by
+//   * Servicing the three `basecamp.packages.confirm_*` intents raised by
 //     package_manager_ui: draw the dialog, run the cascade-unload, answer. The
 //     answer IS the permission — PMU removes nothing until it arrives, so the
 //     unload has always finished first. Basecamp initiates no install of its
@@ -102,7 +102,7 @@ public:
     void setIntentResponder(IntentResponder responder)
     { m_intentResponder = std::move(responder); }
 
-    // Entry point for the three `logos.packages.confirm_*` intents. Opens the
+    // Entry point for the three `basecamp.packages.confirm_*` intents. Opens the
     // matching dialog and takes ownership of answering `dispatchId`. Returns
     // false when the request cannot be shown at all, so the broker can fail it
     // closed rather than park it behind a dialog that never appeared.

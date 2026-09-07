@@ -107,7 +107,10 @@ IntentDialog {
         // back to the raw name rather than inventing wording for a capability
         // the shell does not define.
         readonly property var intentLabels: ({
-            "logos.repositories.manage": qsTr("manage package repositories")
+            "basecamp.repositories.manage": qsTr("manage package repositories"),
+            "basecamp.settings.open":       qsTr("open Settings"),
+            "basecamp.apps.open":           qsTr("open the App Manager"),
+            "basecamp.apps.launch":         qsTr("open an app")
         })
 
         readonly property string intentLabel:

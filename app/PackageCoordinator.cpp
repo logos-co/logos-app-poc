@@ -761,7 +761,7 @@ bool PackageCoordinator::beginPackageConfirmation(const QString& dispatchId,
     const QString name    = params.value(QStringLiteral("name")).toString();
     const QString version = params.value(QStringLiteral("version")).toString();
 
-    if (intent == QLatin1String("logos.packages.confirm_install")) {
+    if (intent == QLatin1String("basecamp.packages.confirm_install")) {
         if (name.isEmpty()) {
             finishIntent(dispatchId, false, logos::intent::errBadRequest());
             return true;
@@ -780,7 +780,7 @@ bool PackageCoordinator::beginPackageConfirmation(const QString& dispatchId,
         return true;
     }
 
-    if (intent == QLatin1String("logos.packages.confirm_upgrade")) {
+    if (intent == QLatin1String("basecamp.packages.confirm_upgrade")) {
         if (name.isEmpty()) {
             finishIntent(dispatchId, false, logos::intent::errBadRequest());
             return true;
@@ -802,7 +802,7 @@ bool PackageCoordinator::beginPackageConfirmation(const QString& dispatchId,
         return true;
     }
 
-    if (intent == QLatin1String("logos.packages.confirm_uninstall")) {
+    if (intent == QLatin1String("basecamp.packages.confirm_uninstall")) {
         QStringList names;
         for (const QVariant& v : params.value(QStringLiteral("names")).toList()) {
             const QString n = v.toString();

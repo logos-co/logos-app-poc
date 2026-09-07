@@ -45,6 +45,7 @@ private slots:
     void testNoProviderIsNone();
     void testDeclaresUseAndProvide();
     void testReservedNamespaceRefusedFromApps();
+    void testPlatformNamespaceRefusedFromApps();
     void testShellMayProvideReservedNamespace();
     void testDiskRecordCannotClaimShellIdentity();
     void testMalformedJsonIsDiagnosedNotFatal();
@@ -136,17 +137,17 @@ void TestIntentRegistry::testReservedNamespaceRefusedFromApps()
     // intercept requests intended for the shell.
     QTemporaryDir root;
     const QString dir = makeApp(root, QStringLiteral("evil"),
-        R"({"provides":[{"intent":"logos.repositories.manage"},{"intent":"evil.ok"}]})");
+        R"({"provides":[{"intent":"basecamp.repositories.manage"},{"intent":"evil.ok"}]})");
 
     IntentRegistry registry;
     registry.registerShellProvider(QStringLiteral("main_ui"), {}, {},
                                    QStringLiteral("Basecamp"), {});
     registry.rebuild({ { QStringLiteral("evil_ui"), plugin(dir) } }, nullptr, nullptr);
 
-    QCOMPARE(registry.resolve(QStringLiteral("logos.repositories.manage")).status,
+    QCOMPARE(registry.resolve(QStringLiteral("basecamp.repositories.manage")).status,
              IntentRegistry::None);
     QVERIFY(!registry.declaresProvide(QStringLiteral("evil_ui"),
-                                      QStringLiteral("logos.repositories.manage")));
+                                      QStringLiteral("basecamp.repositories.manage")));
 
     // Its legitimate declaration is unaffected — one bad entry is not fatal.
     QVERIFY(registry.declaresProvide(QStringLiteral("evil_ui"), QStringLiteral("evil.ok")));
@@ -157,15 +158,34 @@ void TestIntentRegistry::testReservedNamespaceRefusedFromApps()
     QVERIFY(diagnosed);
 }
 
+void TestIntentRegistry::testPlatformNamespaceRefusedFromApps()
+{
+    // "logos." is the PLATFORM's namespace — liblogos, logoscore — and stays
+    // reserved after the shell's capabilities moved to "basecamp.". Nothing
+    // claims it today, which is exactly why it needs a test: an unclaimed
+    // reservation is the kind that quietly stops being enforced.
+    QTemporaryDir root;
+    const QString dir = makeApp(root, QStringLiteral("squatter"),
+        R"({"provides":[{"intent":"logos.core.restart"},{"intent":"fine.ok"}]})");
+
+    IntentRegistry registry;
+    registry.rebuild({ { QStringLiteral("squatter_ui"), plugin(dir) } }, nullptr, nullptr);
+
+    QCOMPARE(registry.resolve(QStringLiteral("logos.core.restart")).status,
+             IntentRegistry::None);
+    QVERIFY(registry.declaresProvide(QStringLiteral("squatter_ui"),
+                                     QStringLiteral("fine.ok")));
+}
+
 void TestIntentRegistry::testShellMayProvideReservedNamespace()
 {
     IntentRegistry registry;
     registry.registerShellProvider(QStringLiteral("main_ui"),
-                                   { QStringLiteral("logos.repositories.manage") }, {},
+                                   { QStringLiteral("basecamp.repositories.manage") }, {},
                                    QStringLiteral("Logos Basecamp"),
                                    QStringLiteral("qrc:/logo.png"));
 
-    const auto resolution = registry.resolve(QStringLiteral("logos.repositories.manage"));
+    const auto resolution = registry.resolve(QStringLiteral("basecamp.repositories.manage"));
     QCOMPARE(resolution.status, IntentRegistry::Ok);
     QCOMPARE(resolution.found.first().moduleName, QStringLiteral("main_ui"));
     QCOMPARE(resolution.found.first().displayName, QStringLiteral("Logos Basecamp"));
@@ -316,24 +336,24 @@ void TestIntentRegistry::testRestrictedIntentAllowsOnlyListedRequesters()
     IntentRegistry registry;
 
     // Unrestricted by default — a restriction is opt-in, never implied.
-    QVERIFY(registry.requesterAllowed(QStringLiteral("logos.packages.confirm_uninstall"),
+    QVERIFY(registry.requesterAllowed(QStringLiteral("basecamp.packages.confirm_uninstall"),
                                       QStringLiteral("evil_ui")));
 
     registry.restrictIntentToRequesters(
-        QStringLiteral("logos.packages.confirm_uninstall"),
+        QStringLiteral("basecamp.packages.confirm_uninstall"),
         { QStringLiteral("package_manager_ui") });
 
-    QVERIFY(registry.requesterAllowed(QStringLiteral("logos.packages.confirm_uninstall"),
+    QVERIFY(registry.requesterAllowed(QStringLiteral("basecamp.packages.confirm_uninstall"),
                                       QStringLiteral("package_manager_ui")));
-    QVERIFY(!registry.requesterAllowed(QStringLiteral("logos.packages.confirm_uninstall"),
+    QVERIFY(!registry.requesterAllowed(QStringLiteral("basecamp.packages.confirm_uninstall"),
                                        QStringLiteral("evil_ui")));
 
     // Byte-exact, like every other name comparison on this surface.
-    QVERIFY(!registry.requesterAllowed(QStringLiteral("logos.packages.confirm_uninstall"),
+    QVERIFY(!registry.requesterAllowed(QStringLiteral("basecamp.packages.confirm_uninstall"),
                                        QStringLiteral("Package_Manager_UI")));
 
     // Restricting one intent must not touch its siblings.
-    QVERIFY(registry.requesterAllowed(QStringLiteral("logos.packages.confirm_install"),
+    QVERIFY(registry.requesterAllowed(QStringLiteral("basecamp.packages.confirm_install"),
                                       QStringLiteral("evil_ui")));
 }
 
@@ -344,9 +364,9 @@ void TestIntentRegistry::testEmptyRequesterListIsRefusedNotAnOpenDoor()
     // destructive capability to every installed app.
     IntentRegistry registry;
     registry.restrictIntentToRequesters(
-        QStringLiteral("logos.packages.confirm_uninstall"), {});
+        QStringLiteral("basecamp.packages.confirm_uninstall"), {});
 
-    QVERIFY(registry.requesterAllowed(QStringLiteral("logos.packages.confirm_uninstall"),
+    QVERIFY(registry.requesterAllowed(QStringLiteral("basecamp.packages.confirm_uninstall"),
                                       QStringLiteral("evil_ui")));
     QVERIFY(!registry.diagnostics().isEmpty());
 }
@@ -357,17 +377,17 @@ void TestIntentRegistry::testRestrictionSurvivesRebuild()
     // triggered by any install/uninstall must not drop it.
     IntentRegistry registry;
     registry.restrictIntentToRequesters(
-        QStringLiteral("logos.packages.confirm_uninstall"),
+        QStringLiteral("basecamp.packages.confirm_uninstall"),
         { QStringLiteral("package_manager_ui") });
 
     QTemporaryDir root;
     const QString dir = makeApp(root, QStringLiteral("evil_ui"), R"({
         "name": "evil_ui", "type": "ui_qml",
-        "uses": [{"intent": "logos.packages.confirm_uninstall"}]
+        "uses": [{"intent": "basecamp.packages.confirm_uninstall"}]
     })");
     registry.rebuild({ { QStringLiteral("evil_ui"), plugin(dir) } }, nullptr, nullptr);
 
-    QVERIFY(!registry.requesterAllowed(QStringLiteral("logos.packages.confirm_uninstall"),
+    QVERIFY(!registry.requesterAllowed(QStringLiteral("basecamp.packages.confirm_uninstall"),
                                        QStringLiteral("evil_ui")));
 }
 
@@ -443,22 +463,22 @@ void TestIntentRegistry::testShellHandoffSurvivesRebuild()
     // quietly turn its hand-off back into a transaction.
     IntentRegistry registry;
     registry.registerShellProvider(QStringLiteral("main_ui"),
-                                   { QStringLiteral("logos.repositories.manage"),
-                                     QStringLiteral("logos.packages.confirm_install") },
-                                   { QStringLiteral("logos.repositories.manage") },
+                                   { QStringLiteral("basecamp.repositories.manage"),
+                                     QStringLiteral("basecamp.packages.confirm_install") },
+                                   { QStringLiteral("basecamp.repositories.manage") },
                                    QStringLiteral("Logos"), {});
 
     QVERIFY(registry.isHandoff(QStringLiteral("main_ui"),
-                               QStringLiteral("logos.repositories.manage")));
+                               QStringLiteral("basecamp.repositories.manage")));
     QVERIFY(!registry.isHandoff(QStringLiteral("main_ui"),
-                                QStringLiteral("logos.packages.confirm_install")));
+                                QStringLiteral("basecamp.packages.confirm_install")));
 
     registry.rebuild({}, nullptr, nullptr);
 
     QVERIFY(registry.isHandoff(QStringLiteral("main_ui"),
-                               QStringLiteral("logos.repositories.manage")));
+                               QStringLiteral("basecamp.repositories.manage")));
     QVERIFY(!registry.isHandoff(QStringLiteral("main_ui"),
-                                QStringLiteral("logos.packages.confirm_install")));
+                                QStringLiteral("basecamp.packages.confirm_install")));
 }
 
 QTEST_MAIN(TestIntentRegistry)
