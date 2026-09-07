@@ -621,14 +621,584 @@ private slots:
             "Welcome page must be visible when no docks are open");
     }
 
-    void welcomePageHiddenWhenDockAdded()
+    // The welcome page is a permanent tab, not the central widget, so opening
+    // an app no longer destroys or detaches it — it stops being the CURRENT
+    // tab while staying available to click back to. Asserting on its dock
+    // rather than on visibility, because "not current" and "gone" look the
+    // same through isVisibleTo().
+    void welcomePageSurvivesAsATabWhenDockAdded()
     {
         QObject stubBackend;
         WorkspaceArea ws(&stubBackend);
         ws.addPluginDock(makePluginWidget("A"), "A");
         processDeferred();
-        QVERIFY2(!ws.welcomePageWidget()->isVisibleTo(&ws),
-            "Welcome page must hide as soon as a dock exists");
+
+        QVERIFY2(ws.welcomePageWidget() != nullptr,
+            "Welcome page must outlive opening an app");
+        auto* dock = ws.findChild<QDockWidget*>(QStringLiteral("__welcome_tab__"));
+        QVERIFY2(dock != nullptr, "Welcome tab's dock must still exist");
+        QVERIFY2(!dock->features().testFlag(QDockWidget::DockWidgetClosable),
+            "Welcome tab must not be closeable");
+    }
+
+    // Its tab carries no text — that emptiness is what keeps it out of the
+    // close-button, close-request and active-app paths, so it is worth pinning
+    // down rather than leaving as an implementation detail.
+    void welcomeTabHasNoTitleAndNoCloseButton()
+    {
+        QObject stubBackend;
+        WorkspaceArea ws(&stubBackend);
+        ws.addPluginDock(makePluginWidget("A"), "A");
+        processDeferred();
+
+        auto* dock = ws.findChild<QDockWidget*>(QStringLiteral("__welcome_tab__"));
+        QVERIFY(dock != nullptr);
+        QVERIFY2(dock->windowTitle().isEmpty(),
+            "Welcome tab must stay icon-only");
+
+        for (QTabBar* bar : ws.findChildren<QTabBar*>()) {
+            for (int i = 0; i < bar->count(); ++i) {
+                if (!bar->tabText(i).isEmpty()) continue;
+                QVERIFY2(bar->tabButton(i, QTabBar::LeftSide) == nullptr,
+                    "Welcome tab must not carry a close button");
+            }
+        }
+    }
+
+    // ── Welcome tab regressions ──────────────────────────────────────────
+    // Each of these pins something that broke at least once while the welcome
+    // page was being turned into a permanent tab.
+
+    // Adding the welcome tab must not cost the app tabs their close button.
+    // installTabBarCloseButtons() skips "furniture" tabs, and the definition of
+    // furniture changed twice — first empty text, then empty text OR the spacer
+    // sentinel — so it is worth asserting the app tabs still get one.
+    void appTabsKeepTheirCloseButtons()
+    {
+        QObject stubBackend;
+        WorkspaceArea ws(&stubBackend);
+        ws.addPluginDock(makePluginWidget("A"), "A");
+        ws.addPluginDock(makePluginWidget("B"), "B");
+        processDeferred();
+
+        QTabBar* bar = tabBarOf(ws);
+        QVERIFY(bar != nullptr);
+
+        int appTabs = 0;
+        for (int i = 0; i < bar->count(); ++i) {
+            const QString text = bar->tabText(i);
+            if (text.isEmpty() || text.startsWith("__")) continue;   // furniture
+            ++appTabs;
+            QVERIFY2(bar->tabButton(i, QTabBar::LeftSide) != nullptr,
+                     qPrintable(QString("app tab '%1' lost its close button")
+                                    .arg(text)));
+        }
+        QCOMPARE(appTabs, 2);
+    }
+
+    // The close buttons must survive repeated layout passes. They were being
+    // created correctly and then destroyed again: QTabBar::moveTab drops a
+    // tab's buttons, and the tab-pinning code ran moveTab on every relayout.
+    //
+    // Mirrors the real startup sequence deliberately — resize, show, THEN add
+    // the dock, then pump raw events. An earlier version of this test used the
+    // shared processDeferred() helper and passed even with the bug present,
+    // because the destroy-then-recreate race settles differently when the
+    // event loop is drained with a timeout.
+    void closeButtonsSurviveRepeatedRelayouts()
+    {
+        QObject stubBackend;
+        WorkspaceArea ws(&stubBackend);
+        ws.resize(1200, 700);
+        ws.show();
+        for (int i = 0; i < 8; ++i) QCoreApplication::processEvents();
+
+        ws.addPluginDock(makePluginWidget("A"), "A", "App A");
+        for (int i = 0; i < 8; ++i) QCoreApplication::processEvents();
+
+        QTabBar* bar = tabBarOf(ws);
+        QVERIFY(bar != nullptr);
+
+        int appTabs = 0;
+        for (int i = 0; i < bar->count(); ++i) {
+            const QString text = bar->tabText(i);
+            if (text.isEmpty() || text.startsWith("__")) continue;
+            ++appTabs;
+            QVERIFY2(bar->tabButton(i, QTabBar::LeftSide) != nullptr,
+                     qPrintable(QString("tab '%1' lost its close button")
+                                    .arg(text)));
+        }
+        QCOMPARE(appTabs, 1);
+    }
+
+    // The welcome tab's icon must sit centred in its plate. Qt LEFT-aligns an
+    // icon inside a content box wider than the icon, so any slack in the
+    // stylesheet's min/max-width lands entirely on the right and the icon hugs
+    // the left edge. Asserted by rendering: the tab's own geometry says nothing
+    // about where the icon was actually painted.
+    void welcomeTabIconIsCentred()
+    {
+        QObject stubBackend;
+        WorkspaceArea ws(&stubBackend);
+        ws.resize(1200, 700);
+        ws.show();
+        for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
+
+        QTabBar* bar = tabBarOf(ws);
+        QVERIFY(bar != nullptr);
+        QVERIFY(bar->tabText(0).isEmpty());
+
+        // The real icon lives in the main_ui plugin's qrc, which a unit test
+        // does not link — so paint a recognisable stand-in. styleAllTabBars()
+        // only assigns when its own lookup succeeds, so this survives.
+        QPixmap pm(bar->iconSize());
+        pm.fill(QColor(255, 0, 255));
+        bar->setTabIcon(0, QIcon(pm));
+        for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
+
+        const QImage shot = bar->grab().toImage();
+        int iconL = INT_MAX, iconR = -1, row = -1;
+        for (int y = 0; y < shot.height() && iconR < 0; ++y) {
+            for (int x = 0; x < shot.width(); ++x) {
+                const QColor c = shot.pixelColor(x, y);
+                if (c.red() > 200 && c.blue() > 200 && c.green() < 80) {
+                    iconL = std::min(iconL, x);
+                    iconR = std::max(iconR, x);
+                    row = y;
+                }
+            }
+            if (iconR >= 0) break;
+        }
+        QVERIFY2(iconR >= 0, "the welcome tab painted no icon at all");
+
+        // Find the painted plate on the icon's row: the tab background is
+        // lighter than the bar behind it. Using the paint rather than
+        // tabRect() keeps the assertion independent of the margin.
+        const QRect tr = bar->tabRect(0);
+        int plateL = -1, plateR = -1;
+        for (int x = tr.left(); x <= tr.right() && x < shot.width(); ++x) {
+            const QColor c = shot.pixelColor(x, row);
+            const bool plate = (c.red() + c.green() + c.blue()) / 3 > 30;
+            if (plate) { if (plateL < 0) plateL = x; plateR = x; }
+        }
+        QVERIFY2(plateL >= 0 && plateR > plateL, "could not find the tab plate");
+
+        const int leftGap  = iconL - plateL;
+        const int rightGap = plateR - iconR;
+        QVERIFY2(qAbs(leftGap - rightGap) <= 1,
+                 qPrintable(QString("icon not centred: %1px left vs %2px right "
+                                    "(plate %3..%4, icon %5..%6)")
+                                .arg(leftGap).arg(rightGap)
+                                .arg(plateL).arg(plateR).arg(iconL).arg(iconR)));
+    }
+
+    // The welcome page must yield the view to an open app and take it back
+    // when the last one closes. Qt does NOT do this for us: a non-current
+    // tabified dock keeps its `visible` flag set and merely gets zero
+    // geometry, so the page has to be hidden explicitly. Dropping that during
+    // the tab rework is what broke the "opening an app replaces the welcome
+    // page" integration test — and this asserts BOTH directions, because
+    // hiding it was easy to get right while forgetting to bring it back.
+    void welcomeVisibilityFollowsTheCurrentTab()
+    {
+        QObject stubBackend;
+        WorkspaceArea ws(&stubBackend);
+        ws.resize(1200, 700);
+        ws.show();
+        for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
+
+        QQuickWidget* page = ws.welcomePageWidget();
+        QVERIFY(page != nullptr);
+        QVERIFY2(page->isVisible(), "welcome page must show when nothing is open");
+
+        ws.addPluginDock(makePluginWidget("A"), "A", "App A");
+        for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
+        QVERIFY2(!page->isVisible(),
+                 "welcome page must yield to an app that has just opened");
+
+        ws.removePluginDock("A");
+        for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
+        QVERIFY2(page->isVisible(),
+                 "welcome page must return when the last app closes");
+    }
+
+    // The tabbed/side-by-side choice belongs to Ctrl+Shift+L alone. Qt's own
+    // dock-drag would otherwise re-dock a plugin the moment its tab is dragged
+    // out of the bar, silently switching layout mode. Docks stay closable so
+    // the tab's x still works.
+    void docksCannotBeDraggedOutOfTheTabBar()
+    {
+        QObject stubBackend;
+        WorkspaceArea ws(&stubBackend);
+        ws.show();
+        ws.addPluginDock(makePluginWidget("A"), "A", "App A");
+        ws.addPluginDock(makePluginWidget("B"), "B", "App B");
+        for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
+
+        for (const QString& name : {QStringLiteral("A"), QStringLiteral("B")}) {
+            QDockWidget* dock = ws.dockFor(name);
+            QVERIFY2(dock != nullptr, qPrintable(name));
+            QVERIFY2(!dock->features().testFlag(QDockWidget::DockWidgetMovable),
+                     qPrintable(QString("dock '%1' is user-movable, so dragging "
+                                        "its tab can change the layout mode")
+                                    .arg(name)));
+            QVERIFY2(!dock->features().testFlag(QDockWidget::DockWidgetFloatable),
+                     qPrintable(QString("dock '%1' can be floated out").arg(name)));
+            QVERIFY2(dock->features().testFlag(QDockWidget::DockWidgetClosable),
+                     qPrintable(QString("dock '%1' must stay closable").arg(name)));
+        }
+    }
+
+    // ...and the shortcut still does change it, so locking the drag has not
+    // locked the feature.
+    void layoutModeStillTogglesViaTheShortcut()
+    {
+        QObject stubBackend;
+        WorkspaceArea ws(&stubBackend);
+        ws.show();
+        ws.addPluginDock(makePluginWidget("A"), "A", "App A");
+        ws.addPluginDock(makePluginWidget("B"), "B", "App B");
+        for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
+
+        const QString before = ws.layoutMode();
+        QTest::keyClick(&ws, Qt::Key_L, Qt::ControlModifier | Qt::ShiftModifier);
+        for (int i = 0; i < 20; ++i) QCoreApplication::processEvents();
+
+        QVERIFY2(ws.layoutMode() != before,
+                 qPrintable(QString("layoutMode stayed '%1' after Ctrl+Shift+L")
+                                .arg(before)));
+    }
+
+    // The welcome tab must stay narrow — it is icon-only. Its width comes from
+    // a POSITIONAL stylesheet rule, and that rule failed to apply three
+    // separate times (once because the bar was never styled at launch, once
+    // because the hidden spacer took index 0, once because a single visible tab
+    // matches :only-one rather than :first). Each time it showed up as a tab
+    // several times too wide. welcomeTabIconIsCentred does catch it, but
+    // reports "icon not centred", which sends you looking in the wrong place.
+    void welcomeTabStaysNarrowerThanAppTabs()
+    {
+        QObject stubBackend;
+        WorkspaceArea ws(&stubBackend);
+        ws.resize(1200, 700);
+        ws.show();
+        for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
+
+        QTabBar* bar = tabBarOf(ws);
+        QVERIFY(bar != nullptr);
+
+        // At launch the welcome tab is the ONLY visible one — the :only-one
+        // case, which is exactly where this last regressed.
+        const int soloWidth = bar->tabRect(0).width();
+        QVERIFY2(soloWidth > 0 && soloWidth < 60,
+                 qPrintable(QString("welcome tab is %1px wide at launch; the "
+                                    "icon-only rule is not applying")
+                                .arg(soloWidth)));
+
+        ws.addPluginDock(makePluginWidget("A"), "A", "App A");
+        for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
+
+        int welcomeW = -1, appW = -1;
+        for (int i = 0; i < bar->count(); ++i) {
+            const QString t = bar->tabText(i);
+            if (t.isEmpty()) welcomeW = bar->tabRect(i).width();
+            else if (t == "App A") appW = bar->tabRect(i).width();
+        }
+        QVERIFY(welcomeW > 0 && appW > 0);
+        QVERIFY2(welcomeW * 2 < appW,
+                 qPrintable(QString("welcome tab (%1px) should be far narrower "
+                                    "than an app tab (%2px)")
+                                .arg(welcomeW).arg(appW)));
+    }
+
+    // The whole point of the tab: with an app open, clicking it returns you to
+    // the welcome page — and clicking back returns you to the app. Nothing
+    // covered this, which is how the page could stay hidden (or stay showing)
+    // through several rounds of fixes without a test noticing.
+    void clickingTheWelcomeTabReturnsToTheWelcomePage()
+    {
+        QObject stubBackend;
+        WorkspaceArea ws(&stubBackend);
+        ws.resize(1200, 700);
+        ws.show();
+        ws.addPluginDock(makePluginWidget("A"), "A", "App A");
+        for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
+
+        QQuickWidget* page = ws.welcomePageWidget();
+        QVERIFY(page != nullptr);
+        QVERIFY2(!page->isVisible(), "an open app should be showing first");
+
+        QTabBar* bar = tabBarOf(ws);
+        QVERIFY(bar != nullptr);
+        int welcomeTab = -1, appTab = -1;
+        for (int i = 0; i < bar->count(); ++i) {
+            if (bar->tabText(i).isEmpty()) welcomeTab = i;
+            else if (bar->tabText(i) == "App A") appTab = i;
+        }
+        QVERIFY(welcomeTab >= 0 && appTab >= 0);
+
+        bar->setCurrentIndex(welcomeTab);
+        for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
+        QVERIFY2(page->isVisible(),
+                 "clicking the welcome tab must bring the welcome page back");
+
+        bar->setCurrentIndex(appTab);
+        for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
+        QVERIFY2(!page->isVisible(),
+                 "clicking back to the app must hide the welcome page again");
+    }
+
+    // Dragging the welcome tab is refused, but an APP tab could still be
+    // dropped in front of it. That matters because the welcome tab's width
+    // comes from a positional rule (:first) — with an app tab at index 0 the
+    // app wears the icon-only 15px styling and the welcome tab wears the 120px
+    // app styling. Asserts the order is restored AND that the close buttons
+    // survive it, since the restoring moveTab destroys them.
+    void appTabDraggedBeforeWelcomeIsPutBack()
+    {
+        QObject stubBackend;
+        WorkspaceArea ws(&stubBackend);
+        ws.resize(1200, 700);
+        ws.show();
+        ws.addPluginDock(makePluginWidget("A"), "A", "App A");
+        ws.addPluginDock(makePluginWidget("B"), "B", "App B");
+        for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
+
+        QTabBar* bar = tabBarOf(ws);
+        QVERIFY(bar != nullptr);
+        QVERIFY2(bar->tabText(0).isEmpty(), "welcome tab should start at index 0");
+
+        int appTab = -1;
+        for (int i = 0; i < bar->count(); ++i) {
+            if (bar->tabText(i) == "App A") { appTab = i; break; }
+        }
+        QVERIFY(appTab > 0);
+
+        // Straight to the front — what a user dragging leftwards produces.
+        bar->moveTab(appTab, 0);
+        for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
+
+        QVERIFY2(bar->tabText(0).isEmpty(),
+                 qPrintable(QString("welcome tab must be restored to index 0, "
+                                    "found '%1'").arg(bar->tabText(0))));
+
+        for (int i = 0; i < bar->count(); ++i) {
+            const QString t = bar->tabText(i);
+            if (t.isEmpty() || t.startsWith("__")) continue;
+            QVERIFY2(bar->tabButton(i, QTabBar::LeftSide) != nullptr,
+                     qPrintable(QString("tab '%1' lost its close button when the "
+                                        "order was restored").arg(t)));
+        }
+    }
+
+    // Invariant: once the dust settles, the last thing activeAppChanged
+    // reported names the open app — never "".
+    //
+    // HONEST LIMIT: this does not discriminate on x86_64. The bug it belongs to
+    // (currentVisibleApp="" with a dock open) only reproduces on macOS and
+    // aarch64, where Qt passes through a furniture tab on the way to the app's
+    // tab and the old code emitted from the index the SIGNAL carried rather
+    // than the settled one. Verified against a control build with the old
+    // emission restored: it still passes here. Kept because the invariant is
+    // real and CI runs the platforms where it bites.
+    void transientFurnitureTabDoesNotClearTheActiveApp()
+    {
+        QObject stubBackend;
+        WorkspaceArea ws(&stubBackend);
+        ws.resize(1200, 700);
+        ws.show();
+        for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
+
+        ws.addPluginDock(makePluginWidget("A"), "A", "App A");
+        for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
+
+        QTabBar* bar = tabBarOf(ws);
+        QVERIFY(bar != nullptr);
+        int appTab = -1, welcomeTab = -1;
+        for (int i = 0; i < bar->count(); ++i) {
+            if (bar->tabText(i) == "App A") appTab = i;
+            else if (bar->tabText(i).isEmpty()) welcomeTab = i;
+        }
+        QVERIFY(appTab >= 0 && welcomeTab >= 0);
+
+        QSignalSpy active(&ws, &WorkspaceArea::activeAppChanged);
+
+        // Both in one turn, exactly as dock activation does it.
+        bar->setCurrentIndex(welcomeTab);
+        bar->setCurrentIndex(appTab);
+        for (int i = 0; i < 10; ++i) QCoreApplication::processEvents();
+
+        QVERIFY2(!active.isEmpty(), "activeAppChanged never fired");
+        const QString last = active.last().at(0).toString();
+        QCOMPARE(last, QStringLiteral("A"));
+    }
+
+    // Guards the CAUSE rather than the symptom. QTabBar::moveTab destroys a
+    // tab's buttons, so hideSpacerTab must never reorder: it hides the spacer
+    // where Qt put it and leaves every index alone. Asserting on the buttons
+    // directly does not work here — the destroy-then-recreate race settles
+    // differently under QtTest than in a real app, so a symptom test passes
+    // even with the reordering restored. The index is deterministic.
+    void hidingTheSpacerDoesNotReorderTabs()
+    {
+        QObject stubBackend;
+        WorkspaceArea ws(&stubBackend);
+        ws.show();
+        for (int i = 0; i < 8; ++i) QCoreApplication::processEvents();
+
+        QTabBar* bar = tabBarOf(ws);
+        QVERIFY(bar != nullptr);
+
+        int spacerIndexBefore = -1;
+        for (int i = 0; i < bar->count(); ++i) {
+            if (bar->tabText(i).startsWith("__")) { spacerIndexBefore = i; break; }
+        }
+        QVERIFY2(spacerIndexBefore >= 0, "spacer tab not found");
+
+        ws.addPluginDock(makePluginWidget("A"), "A", "App A");
+        for (int i = 0; i < 8; ++i) QCoreApplication::processEvents();
+
+        int spacerIndexAfter = -1;
+        for (int i = 0; i < bar->count(); ++i) {
+            if (bar->tabText(i).startsWith("__")) { spacerIndexAfter = i; break; }
+        }
+        QCOMPARE(spacerIndexAfter, spacerIndexBefore);
+    }
+
+    // The welcome tab's width comes from a POSITIONAL stylesheet rule, so its
+    // index is load-bearing: if the hidden spacer takes index 0 the rule lands
+    // on a tab nobody sees and the welcome tab renders at the default width.
+    void welcomeTabIsFirstAndSpacerIsLast()
+    {
+        QObject stubBackend;
+        WorkspaceArea ws(&stubBackend);
+        ws.addPluginDock(makePluginWidget("A"), "A");
+        processDeferred();
+
+        QTabBar* bar = tabBarOf(ws);
+        QVERIFY(bar != nullptr);
+        QVERIFY2(bar->tabText(0).isEmpty(),
+                 "the title-less welcome tab must hold index 0");
+        bool spacerHidden = false;
+        for (int i = 0; i < bar->count(); ++i) {
+            if (!bar->isTabVisible(i)) { spacerHidden = true; break; }
+        }
+        QVERIFY2(spacerHidden, "the spacer's tab must be hidden");
+    }
+
+    // The spacer exists only to make QMainWindow draw a tab bar for a single
+    // dock; it must never be visible, clickable, or draggable.
+    void spacerTabIsHiddenAndInert()
+    {
+        QObject stubBackend;
+        WorkspaceArea ws(&stubBackend);
+        processDeferred();
+
+        QTabBar* bar = tabBarOf(ws);
+        QVERIFY2(bar != nullptr,
+                 "a tab bar must exist at launch, before any app is opened");
+
+        int visible = 0;
+        for (int i = 0; i < bar->count(); ++i) {
+            if (!bar->isTabVisible(i)) {
+                QVERIFY2(!bar->isTabEnabled(i), "hidden spacer must be disabled");
+                continue;
+            }
+            ++visible;
+        }
+        QCOMPARE(visible, 1);   // just the welcome tab
+    }
+
+    // Dragging the welcome tab must be refused outright, not corrected after
+    // the fact. Drives real mouse events rather than moveTab() so it exercises
+    // QTabBar's own move machinery — the thing being suppressed.
+    void welcomeTabCannotBeDraggedAway()
+    {
+        QObject stubBackend;
+        WorkspaceArea ws(&stubBackend);
+        ws.addPluginDock(makePluginWidget("A"), "A");
+        ws.addPluginDock(makePluginWidget("B"), "B");
+        processDeferred();
+
+        QTabBar* bar = tabBarOf(ws);
+        QVERIFY(bar != nullptr);
+        QVERIFY2(bar->tabText(0).isEmpty(), "welcome tab should start at index 0");
+
+        const QPoint from = bar->tabRect(0).center();
+        const QPoint to   = bar->tabRect(bar->count() - 1).center();
+
+        // Asserting on tabMoved, not on the final index: the pin-back handler
+        // restores index 0 either way, so a position check passes even with
+        // the refusal removed and proves nothing. The move must never START.
+        QSignalSpy moved(bar, &QTabBar::tabMoved);
+
+        QTest::mousePress(bar, Qt::LeftButton, Qt::NoModifier, from);
+        // Several steps: one jump can fall short of the drag threshold.
+        for (int i = 1; i <= 4; ++i) {
+            QTest::mouseMove(bar, from + (to - from) * i / 4);
+        }
+        QTest::mouseRelease(bar, Qt::LeftButton, Qt::NoModifier, to);
+        processDeferred();
+
+        QCOMPARE(moved.count(), 0);
+        QVERIFY2(bar->tabText(0).isEmpty(),
+                 "welcome tab must still be at index 0 after a drag attempt");
+    }
+
+    // The counterpart: the same synthetic drag DOES move an app tab. Without
+    // this, the test above could pass simply because the synthetic events never
+    // reach QTabBar's drag machinery in an offscreen window.
+    void appTabDragActuallyMoves()
+    {
+        QObject stubBackend;
+        WorkspaceArea ws(&stubBackend);
+        ws.addPluginDock(makePluginWidget("A"), "A");
+        ws.addPluginDock(makePluginWidget("B"), "B");
+        processDeferred();
+
+        QTabBar* bar = tabBarOf(ws);
+        QVERIFY(bar != nullptr);
+        QVERIFY(bar->count() >= 3);          // welcome + A + B (+ hidden spacer)
+
+        // Locate app tabs by TEXT, not index: the hidden spacer occupies an
+        // index of its own and its tabRect is zero-sized, so dragging from a
+        // hard-coded index can silently drag nothing.
+        QList<int> appTabs;
+        for (int i = 0; i < bar->count(); ++i) {
+            const QString t = bar->tabText(i);
+            if (!t.isEmpty() && !t.startsWith("__") && bar->isTabVisible(i))
+                appTabs << i;
+        }
+        QVERIFY2(appTabs.size() >= 2, "need two app tabs to drag between");
+
+        QSignalSpy moved(bar, &QTabBar::tabMoved);
+        const QPoint from = bar->tabRect(appTabs.at(0)).center();
+        const QPoint to   = bar->tabRect(appTabs.at(1)).center();
+
+        QTest::mousePress(bar, Qt::LeftButton, Qt::NoModifier, from);
+        for (int i = 1; i <= 4; ++i) {
+            QTest::mouseMove(bar, from + (to - from) * i / 4);
+        }
+        QTest::mouseRelease(bar, Qt::LeftButton, Qt::NoModifier, to);
+
+        QVERIFY2(moved.count() > 0,
+                 "an app tab drag must reach QTabBar — otherwise the welcome "
+                 "tab's drag test is vacuous");
+    }
+
+    // The app tabs keep their reordering — the refusal above must be scoped to
+    // the welcome tab, not implemented by turning movable off for the bar.
+    void appTabsRemainDraggable()
+    {
+        QObject stubBackend;
+        WorkspaceArea ws(&stubBackend);
+        ws.addPluginDock(makePluginWidget("A"), "A");
+        processDeferred();
+
+        QTabBar* bar = tabBarOf(ws);
+        QVERIFY(bar != nullptr);
+        QVERIFY2(bar->isMovable(),
+                 "app tabs must still be reorderable");
     }
 
     void welcomePageReappearsWhenLastDockRemoved()

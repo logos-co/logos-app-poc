@@ -75,14 +75,11 @@ private:
     void installTabBarCloseButtons(QTabBar* tabBar);
     void insetTabBarGeometry(QTabBar* tabBar, int insetPx);
     void styleAllTabBars();
+    void hideSpacerTab(QTabBar* tabBar);
     void updateQmlPluginActiveStates();
-    void updateWelcomeVisibility();
+    void syncWelcomeVisibility();
     void clearWelcomeSearch();
     QString moduleNameForTabText(const QString& tabText) const;
-
-    // Ensure the tab bar is visible even when only one real dock is open.
-    void ensurePhantomTab();
-    void removePhantom();
 
     void placeDockInGrid(QDockWidget* dock, int gridIndex);
 
@@ -94,7 +91,9 @@ private:
     QMap<QString, QDockWidget*> m_docks;
     QStringList                 m_dockOrder;
     QDockWidget*                m_firstDock = nullptr;
-    QPointer<QDockWidget>       m_phantomDock;
+    QDockWidget*                m_welcomeDock = nullptr;
+    QDockWidget*                m_tabBarSpacer = nullptr;
     bool                        m_sideBySide = false;
+    bool                        m_pressedWelcomeTab = false;
     QQuickWidget*               m_welcomeWidget = nullptr;
 };
