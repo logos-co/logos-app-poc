@@ -4,6 +4,7 @@
 #include <QBoxLayout>
 #include <QDebug>
 #include <QDir>
+#include <QDirIterator>
 #include <QDockWidget>
 #include <QEasingCurve>
 #include <QEvent>
@@ -164,6 +165,59 @@ void applyDevQmlImportPath(QQmlEngine* engine) {
 }
 
 constexpr int kTabBarInsetPx = 24;
+const QString kTabBarSpacerName = QStringLiteral("__tabbar_spacer__");
+
+// Resolving the welcome tab's icon out of qrc. Two traps here, both of which
+// produced a silently blank tab:
+//   * QIcon(path) is NOT null for a path that does not exist — it still gets an
+//     engine, so isNull() returns false. availableSizes() is the honest check.
+//   * qt_add_qml_module nests RESOURCES under <prefix>/<uri>/<source-relative
+//     path>, so the directory appears twice — the same shape as the
+//     WelcomePage.qml URL above, and easy to get wrong by hand.
+// So: try the known paths, verify the icon carries real pixmap data, then fall
+// back to a search; on failure list what IS there rather than leaving the next
+// person to guess.
+QIcon welcomeTabIcon()
+{
+    static QIcon cached;
+    // Only a resolved icon is cached — caching a failure would make an early
+    // call, before resources register, permanent.
+    if (!cached.availableSizes().isEmpty())
+        return cached;
+
+    const QStringList candidates = {
+        QStringLiteral(":/qt/qml/Basecamp/Icons/Basecamp/Icons/tent.png"),
+        QStringLiteral(":/qt/qml/Basecamp/Icons/tent.png"),
+    };
+    for (const QString& path : candidates) {
+        QIcon icon(path);
+        if (!icon.availableSizes().isEmpty()) {
+            cached = icon;
+            return cached;
+        }
+    }
+
+    QDirIterator it(QStringLiteral(":"), QStringList{QStringLiteral("tent.png")},
+                    QDir::Files, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        QIcon icon(it.next());
+        if (!icon.availableSizes().isEmpty()) {
+            cached = icon;
+            return cached;
+        }
+    }
+
+    qWarning() << "WorkspaceArea: tent.png not resolvable in qrc; the welcome "
+                  "tab will be blank. Tried:" << candidates;
+    QDirIterator listing(QStringLiteral(":/qt/qml/Basecamp/Icons"),
+                         QDir::Files, QDirIterator::Subdirectories);
+    QStringList found;
+    while (listing.hasNext() && found.size() < 20) found << listing.next();
+    qWarning() << "WorkspaceArea: qrc under Basecamp/Icons contains:"
+               << (found.isEmpty() ? QStringList{QStringLiteral("<nothing>")}
+                                   : found);
+    return {};
+}
 }  // namespace
 
 WorkspaceArea::WorkspaceArea(QObject* backend, QWidget* parent)
@@ -174,8 +228,7 @@ WorkspaceArea::WorkspaceArea(QObject* backend, QWidget* parent)
 
     setDockOptions(QMainWindow::AllowNestedDocks
                    | QMainWindow::AllowTabbedDocks
-                   | QMainWindow::AnimatedDocks
-                   | QMainWindow::GroupedDragging);
+                   | QMainWindow::AnimatedDocks);
     setTabPosition(Qt::AllDockWidgetAreas, QTabWidget::North);
 
     setAutoFillBackground(true);
@@ -202,7 +255,33 @@ WorkspaceArea::WorkspaceArea(QObject* backend, QWidget* parent)
                        << m_welcomeWidget->errors();
         }
 
-        setCentralWidget(m_welcomeWidget);
+        m_welcomeDock = new QDockWidget(this);
+        m_welcomeDock->setObjectName(QStringLiteral("__welcome_tab__"));
+        m_welcomeDock->setWindowTitle(QString());
+        m_welcomeDock->setWindowIcon(welcomeTabIcon());
+        m_welcomeDock->setFeatures(QDockWidget::NoDockWidgetFeatures);
+        m_welcomeDock->setTitleBarWidget(new ZeroTitleWidget(m_welcomeDock));
+        m_welcomeDock->setWidget(m_welcomeWidget);
+        addDockWidget(Qt::LeftDockWidgetArea, m_welcomeDock);
+        m_firstDock = m_welcomeDock;
+
+        m_tabBarSpacer = new QDockWidget(this);
+        m_tabBarSpacer->setObjectName(kTabBarSpacerName);
+        m_tabBarSpacer->setWindowTitle(kTabBarSpacerName);
+        m_tabBarSpacer->setFeatures(QDockWidget::NoDockWidgetFeatures);
+        m_tabBarSpacer->setTitleBarWidget(new ZeroTitleWidget(m_tabBarSpacer));
+        auto* spacerBody = new QWidget;
+        spacerBody->setMaximumSize(0, 0);
+        m_tabBarSpacer->setWidget(spacerBody);
+        tabifyDockWidget(m_welcomeDock, m_tabBarSpacer);
+        m_welcomeDock->raise();
+
+        auto* centralStub = new QWidget(this);
+        centralStub->setMaximumSize(0, 0);
+        setCentralWidget(centralStub);
+        centralStub->hide();
+
+        m_welcomeWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
         // Forward the QML navigation signals up to consumers.
         if (QObject* rootObj = m_welcomeWidget->rootObject()) {
@@ -246,8 +325,7 @@ void WorkspaceArea::toggleLayoutModeForTesting()
         m_sideBySide = !m_sideBySide;
 
         QMainWindow::DockOptions opts = QMainWindow::AllowNestedDocks
-                                      | QMainWindow::AnimatedDocks
-                                      | QMainWindow::GroupedDragging;
+                                      | QMainWindow::AnimatedDocks;
         if (!m_sideBySide) opts |= QMainWindow::AllowTabbedDocks;
         setDockOptions(opts);
 
@@ -355,58 +433,6 @@ void WorkspaceArea::placeDockInGrid(QDockWidget* dock, int gridIndex)
 // Public API
 // ---------------------------------------------------------------------------
 
-void WorkspaceArea::ensurePhantomTab()
-{
-    if (m_sideBySide) return;      // no tab bar in grid mode
-    if (m_phantomDock) return;     // already present
-    if (!m_firstDock) return;      // no real dock to tabify with
-    // Only meaningful when there's exactly one real dock — otherwise
-    // Qt's real second tab already gives us a tab bar.
-    if (m_dockOrder.size() != 1) return;
-
-    m_phantomDock = new QDockWidget(this);
-    m_phantomDock->setObjectName(QStringLiteral("__phantom_tab_placeholder__"));
-    m_phantomDock->setFeatures(QDockWidget::NoDockWidgetFeatures);
-    m_phantomDock->setTitleBarWidget(new ZeroTitleWidget(m_phantomDock));
-    auto* placeholder = new QWidget;
-    placeholder->setMaximumSize(0, 0);
-    m_phantomDock->setWidget(placeholder);
-
-    tabifyDockWidget(m_firstDock, m_phantomDock);
-    m_firstDock->raise();  // keep the real dock's content shown
-    m_firstDock->setFeatures(QDockWidget::DockWidgetClosable);
-    setDockOptions(dockOptions() & ~QMainWindow::GroupedDragging);
-
-    QTimer::singleShot(0, this, [this]() {
-        if (!m_phantomDock) return;
-        for (QTabBar* bar : findChildren<QTabBar*>()) {
-            for (int i = 0; i < bar->count(); ++i) {
-                if (bar->tabText(i).isEmpty()) {
-                    bar->setTabVisible(i, false);
-                    bar->setTabEnabled(i, false);   // block drag/click
-                    return;
-                }
-            }
-        }
-    });
-}
-
-void WorkspaceArea::removePhantom()
-{
-    if (!m_phantomDock) return;
-    QDockWidget* p = m_phantomDock;
-    m_phantomDock.clear();   // null before destroying, so any concurrent
-                             // deferred callback sees "no phantom".
-    removeDockWidget(p);
-    delete p;
-
-    if (m_firstDock) {
-        m_firstDock->setFeatures(QDockWidget::DockWidgetMovable
-                                 | QDockWidget::DockWidgetClosable);
-    }
-    setDockOptions(dockOptions() | QMainWindow::GroupedDragging);
-}
-
 void WorkspaceArea::addPluginDock(QWidget* pluginWidget,
                                   const QString& moduleName,
                                   const QString& displayLabel)
@@ -422,8 +448,12 @@ void WorkspaceArea::addPluginDock(QWidget* pluginWidget,
     dock->setObjectName(moduleName);
     dock->setWidget(new DockCard(pluginWidget, dock));
     dock->setAllowedAreas(Qt::AllDockWidgetAreas);
-    dock->setFeatures(QDockWidget::DockWidgetMovable
-                      | QDockWidget::DockWidgetClosable);
+    // Closable but NOT movable: dragging a tab out of the bar is Qt's dock-drag,
+    // and it re-docks the plugin into side-by-side behind the app's back. The
+    // tabbed/side-by-side choice belongs to Ctrl+Shift+L and nothing else.
+    // Reordering tabs within the bar is separate (QTabBar::setMovable) and
+    // still works.
+    dock->setFeatures(QDockWidget::DockWidgetClosable);
     if (m_sideBySide) {
         dock->setTitleBarWidget(nullptr);
     } else {
@@ -441,7 +471,6 @@ void WorkspaceArea::addPluginDock(QWidget* pluginWidget,
     } else if (m_sideBySide) {
         placeDockInGrid(dock, m_dockOrder.size());
     } else {
-        removePhantom();
         tabifyDockWidget(m_firstDock, dock);
         dock->raise();
     }
@@ -453,9 +482,8 @@ void WorkspaceArea::addPluginDock(QWidget* pluginWidget,
         styleAllTabBars();
         activatePluginDock(moduleName);
     });
-    ensurePhantomTab();
     updateQmlPluginActiveStates();
-    updateWelcomeVisibility();
+    syncWelcomeVisibility();
     emit dockLayoutChanged();
 }
 
@@ -472,15 +500,20 @@ void WorkspaceArea::removePluginDock(const QString& name)
     dock->deleteLater();
 
     if (m_firstDock == dock) {
-        m_firstDock = m_dockOrder.isEmpty() ? nullptr
-                                            : m_docks.value(m_dockOrder.first());
+        m_firstDock = m_welcomeDock
+            ? m_welcomeDock
+            : (m_dockOrder.isEmpty() ? nullptr : m_docks.value(m_dockOrder.first()));
     }
 
+
     QTimer::singleShot(0, this, [this]() { styleAllTabBars(); });
-    if (m_dockOrder.isEmpty()) removePhantom();
-    else ensurePhantomTab();
     updateQmlPluginActiveStates();
-    updateWelcomeVisibility();
+    if (m_dockOrder.isEmpty() && m_welcomeDock) {
+        m_welcomeDock->show();
+        m_welcomeDock->raise();
+    }
+
+    syncWelcomeVisibility();
     emit dockLayoutChanged();
 }
 
@@ -497,6 +530,7 @@ void WorkspaceArea::activatePluginDock(const QString& moduleName)
 
     dock->show();
     dock->raise();
+    syncWelcomeVisibility();
 
     const QString tabText = dock->windowTitle();
     for (QTabBar* bar : findChildren<QTabBar*>()) {
@@ -589,6 +623,20 @@ void WorkspaceArea::customizeTabBarStyle(QTabBar* tabBar)
             min-width: 120px;
         }
 
+        /* Welcome tab: icon only, same height as the app tabs.
+           The CONTENT box is exactly the icon (15px, see setIconSize below),
+           because Qt left-aligns an icon inside a content box wider than it —
+           any slack here lands entirely on the right and the icon looks
+           left-hugging. Symmetric padding does the centring instead, and sets
+           the visible plate at 5+15+5 = 25px, which is the design's ~1.2x of
+           the 20px tab height. */
+        QTabBar::tab:first, QTabBar::tab:only-one {
+            min-width: 15px;
+            max-width: 15px;
+            height: 20px;
+            padding: 0px 5px 0px 5px;
+        }
+
         QTabBar::tab:!selected {
             background: rgba(38, 38, 38, 0.6);
             color: #626262;
@@ -598,6 +646,21 @@ void WorkspaceArea::customizeTabBarStyle(QTabBar* tabBar)
             background: #262626;
         }
     )"));
+
+    connect(tabBar, &QTabBar::tabMoved, this, [this, tabBar](int from, int to) {
+        Q_UNUSED(from)
+        Q_UNUSED(to)
+        QPointer<QTabBar> guard(tabBar);
+        QTimer::singleShot(0, this, [this, guard]() {
+            if (!guard) return;
+            for (int i = 0; i < guard->count(); ++i) {
+                if (!guard->tabText(i).isEmpty()) continue;
+                if (i != 0) guard->moveTab(i, 0);
+                break;
+            }
+            installTabBarCloseButtons(guard);
+        });
+    });
 
     connect(tabBar, &QTabBar::tabCloseRequested, this,
             [this, tabBar](int index) {
@@ -610,11 +673,17 @@ void WorkspaceArea::customizeTabBarStyle(QTabBar* tabBar)
     // sync the sidebar's active-app highlight (backend.currentVisibleApp).
     connect(tabBar, &QTabBar::currentChanged, this,
             [this, tabBar](int index) {
+                Q_UNUSED(index)
                 updateQmlPluginActiveStates();
-                const QString name = index >= 0
-                    ? moduleNameForTabText(tabBar->tabText(index))
-                    : QString();
-                emit activeAppChanged(name);
+                syncWelcomeVisibility();
+                QPointer<QTabBar> guard(tabBar);
+                QTimer::singleShot(0, this, [this, guard]() {
+                    if (!guard) return;
+                    const int idx = guard->currentIndex();
+                    if (idx < 0) return;
+                    if (guard->tabText(idx) == kTabBarSpacerName) return;
+                    emit activeAppChanged(moduleNameForTabText(guard->tabText(idx)));
+                });
             });
 }
 
@@ -623,12 +692,11 @@ void WorkspaceArea::installTabBarCloseButtons(QTabBar* tabBar)
     if (!tabBar) return;
     const QTabBar::ButtonPosition closeSide = QTabBar::LeftSide;
     for (int i = 0; i < tabBar->count(); ++i) {
-        if (tabBar->tabText(i).isEmpty()) continue;
-        QWidget* oldBtn = tabBar->tabButton(i, closeSide);
-        if (oldBtn) {
-            tabBar->setTabButton(i, closeSide, nullptr);
-            oldBtn->deleteLater();
+        if (tabBar->tabText(i).isEmpty()
+            || tabBar->tabText(i) == kTabBarSpacerName) {
+            continue;
         }
+        if (tabBar->tabButton(i, closeSide)) continue;
         auto* btn = new QToolButton(tabBar);
         btn->setIcon(qApp->style()->standardIcon(QStyle::SP_TitleBarCloseButton));
         btn->setIconSize(QSize(12, 12));
@@ -651,6 +719,18 @@ void WorkspaceArea::installTabBarCloseButtons(QTabBar* tabBar)
         tabBar->setTabButton(i, closeSide, btn);
     }
     tabBar->setMouseTracking(true);
+    hideSpacerTab(tabBar);
+}
+
+void WorkspaceArea::hideSpacerTab(QTabBar* tabBar)
+{
+    if (!tabBar) return;
+    for (int i = 0; i < tabBar->count(); ++i) {
+        if (tabBar->tabText(i) != kTabBarSpacerName) continue;
+        tabBar->setTabVisible(i, false);
+        tabBar->setTabEnabled(i, false);   // block drag and click
+        break;
+    }
 }
 
 void WorkspaceArea::insetTabBarGeometry(QTabBar* tabBar, int insetPx)
@@ -677,8 +757,15 @@ void WorkspaceArea::styleAllTabBars()
         installTabBarCloseButtons(tabBar);
 
         for (int i = 0; i < tabBar->count(); ++i) {
-            const QString moduleName = moduleNameForTabText(tabBar->tabText(i));
-            if (auto* dock = m_docks.value(moduleName)) {
+            const QString tabText = tabBar->tabText(i);
+            if (tabText == kTabBarSpacerName) continue;
+            if (tabText.isEmpty()) {
+                static const QIcon welcomeIcon = welcomeTabIcon();
+                if (!welcomeIcon.isNull()) tabBar->setTabIcon(i, welcomeIcon);
+                continue;
+            }
+
+            if (auto* dock = m_docks.value(moduleNameForTabText(tabText))) {
                 const QIcon icon = dock->windowIcon();
                 if (!icon.isNull()) tabBar->setTabIcon(i, icon);
             }
@@ -692,13 +779,22 @@ void WorkspaceArea::styleAllTabBars()
 // ---------------------------------------------------------------------------
 // Plugin active-state propagation (port of MdiView::updateQmlPluginActiveStates)
 // ---------------------------------------------------------------------------
-
-void WorkspaceArea::updateWelcomeVisibility()
+void WorkspaceArea::syncWelcomeVisibility()
 {
     if (!m_welcomeWidget) return;
-    const bool show = m_docks.isEmpty();
-    m_welcomeWidget->setVisible(show);
-    if (!show) clearWelcomeSearch();
+
+    bool welcomeIsCurrent = true;
+    for (QTabBar* bar : findChildren<QTabBar*>()) {
+        const int idx = bar->currentIndex();
+        if (idx < 0) continue;
+        const QString current = bar->tabText(idx);
+        welcomeIsCurrent = current.isEmpty() || current == kTabBarSpacerName;
+        break;
+    }
+
+    if (m_welcomeWidget->isVisible() != welcomeIsCurrent)
+        m_welcomeWidget->setVisible(welcomeIsCurrent);
+    if (!welcomeIsCurrent) clearWelcomeSearch();
 }
 
 QQuickWidget* WorkspaceArea::activeDockWidget() const
@@ -746,16 +842,34 @@ bool WorkspaceArea::eventFilter(QObject* watched, QEvent* event)
 
     if (auto* tabBar = qobject_cast<QTabBar*>(watched)) {
         switch (event->type()) {
+        case QEvent::LayoutRequest: {
+            installTabBarCloseButtons(tabBar);
+            syncWelcomeVisibility();
+            break;
+        }
         case QEvent::Resize:
         case QEvent::Move: {
             if (tabBar->x() != kTabBarInsetPx)
                 insetTabBarGeometry(tabBar, kTabBarInsetPx);
             break;
         }
+        case QEvent::MouseButtonPress: {
+            const QPoint pos = static_cast<QMouseEvent*>(event)->position().toPoint();
+            const int idx = tabBar->tabAt(pos);
+            m_pressedWelcomeTab = idx >= 0 && tabBar->tabText(idx).isEmpty();
+            break;
+        }
+        case QEvent::MouseButtonRelease: {
+            m_pressedWelcomeTab = false;
+            break;
+        }
         case QEvent::MouseMove: {
+            if (m_pressedWelcomeTab
+                && (static_cast<QMouseEvent*>(event)->buttons() & Qt::LeftButton)) {
+                return true;
+            }
             const QPoint pos = static_cast<QMouseEvent*>(event)->position().toPoint();
             for (int i = 0; i < tabBar->count(); ++i) {
-                if (!tabBar->isTabVisible(i)) continue;  // skip phantom
                 QWidget* closeBtn = tabBar->tabButton(i, QTabBar::LeftSide);
                 if (closeBtn) {
                     const QRect tabRect = tabBar->tabRect(i);
@@ -768,7 +882,6 @@ bool WorkspaceArea::eventFilter(QObject* watched, QEvent* event)
         }
         case QEvent::Leave: {
             for (int i = 0; i < tabBar->count(); ++i) {
-                if (!tabBar->isTabVisible(i)) continue;  // skip phantom
                 QWidget* closeBtn = tabBar->tabButton(i, QTabBar::LeftSide);
                 if (closeBtn) closeBtn->setVisible(false);
             }
@@ -870,4 +983,5 @@ void WorkspaceArea::showEvent(QShowEvent* event)
 {
     QMainWindow::showEvent(event);
     updateQmlPluginActiveStates();
+    QTimer::singleShot(0, this, [this]() { styleAllTabBars(); });
 }

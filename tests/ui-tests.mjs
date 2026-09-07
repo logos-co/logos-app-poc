@@ -402,10 +402,11 @@ test('welcome: "Discover Applications" navigates to Applications', async (app) =
 const FIXTURE_A_TEXT =
   `${FIXTURE_A.displayName} (${FIXTURE_A.name}) v${FIXTURE_A.version}`;
 
-// Welcome visibility lives on the hosting QQuickWidget —
-// WorkspaceArea::updateWelcomeVisibility() hides the widget, not the QML
-// item (the C++ unit tests assert isVisibleTo on the widget for the same
-// reason) — and that widget has no objectName. Locate it by source URL
+// Welcome visibility lives on the hosting QQuickWidget, not the QML item (the
+// C++ unit tests assert isVisibleTo on the widget for the same reason). The
+// welcome page is now a permanent tab, so it is QMainWindow that hides it:
+// tabified docks show only the raised one. The widget has no objectName, so
+// locate it by source URL
 // among QQuickWidget instances; fall back to the item's Window attached
 // property (QQuickWidget mirrors widget show/hide onto its offscreen
 // window).
