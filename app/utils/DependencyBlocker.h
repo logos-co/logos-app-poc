@@ -41,6 +41,10 @@ namespace logos {
 //     liblogos' own resolver, which remains the authority on whether a load
 //     succeeds. Refusing on a word this build does not know would block loads
 //     that work.
+//
+//   `optional: true` — orthogonal to status, and it wins over ALL of them.
+//     The resolver never fails a load over an optional edge, so neither may
+//     this. See dependencyBlocksLoad. Pinned by tests.
 
 enum class DependencyBlockKind {
     // Satisfied, cyclic, a publisher we could not check, or a status this
@@ -56,6 +60,10 @@ enum class DependencyBlockKind {
 
 struct DependencyBlocker {
     DependencyBlockKind kind = DependencyBlockKind::None;
+    // Was the edge declared `optional_dependencies`? Kept beside `kind` rather
+    // than folded into it: the package is still absent, so the GRAPH questions
+    // below must answer exactly as they did — only the load verdict changes.
+    bool optional = false;
     QString name;
     // Declared semver range, e.g. "^2.0.0". Empty for a bare-name dependency.
     QString requiredVersion;
@@ -86,6 +94,8 @@ inline DependencyBlocker readDependencyBlocker(const QVariant& row)
     b.installedVersion = m.value(QStringLiteral("version")).toString();
     b.requiredSigner   = m.value(QStringLiteral("requiredSigner")).toString();
     b.signerDid        = m.value(QStringLiteral("signerDid")).toString();
+    // Emitted by the module only when true, so an absent key means required.
+    b.optional         = m.value(QStringLiteral("optional")).toBool();
 
     // Named, not excluded. The scanner has already resolved which single
     // constraint failed, so these are alternatives, not a priority list to
@@ -114,6 +124,17 @@ inline DependencyBlocker readDependencyBlocker(const QVariant& row)
 inline bool dependencyIsPresent(const DependencyBlocker& b)
 {
     return b.kind != DependencyBlockKind::NotInstalled;
+}
+
+// Whether the row REFUSES the load — the third question, and the only one
+// optionality changes. An optional edge never blocks, whatever its status:
+// this gate predicts liblogos' resolver, and there optional edges are SOFT —
+// they never expand the load set and an absent one is never `missing`. So
+// refusing here denies a load that works, leaving the plugin unlaunchable
+// behind a popup naming a dependency nothing requires.
+inline bool dependencyBlocksLoad(const DependencyBlocker& b)
+{
+    return b.kind != DependencyBlockKind::None && !b.optional;
 }
 
 // The clause telling the user what to DO about this row, without the module's
@@ -241,7 +262,7 @@ inline DependencyRowSplit splitDependencyRows(const QVariantList& rows)
 
         if (dependencyIsPresent(b)) out.present << b.name;
 
-        if (b.kind != DependencyBlockKind::None) {
+        if (dependencyBlocksLoad(b)) {
             out.blocking << b.name;
             out.blockers << dependencyBlockerToMap(b);
         }

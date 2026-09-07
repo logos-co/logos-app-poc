@@ -114,6 +114,26 @@ class DependencyGateTest : public QObject {
             R"("status":"installed","version":"1.0.0"})");
     }
 
+    // Declared `optional_dependencies` and not installed. Byte-for-byte what
+    // the absent row above is, plus the one key package-manager-module emits
+    // only when the edge was optional.
+    static QVariant absentOptionalRow()
+    {
+        return wireRow(
+            R"({"installType":"","name":"depsvc","optional":true,)"
+            R"("status":"not_installed","version":""})");
+    }
+
+    // Optional AND installed at a version the edge rejects. The resolver does
+    // not consult optional edges at all, so this loads too.
+    static QVariant optionalMismatchRow()
+    {
+        return wireRow(
+            R"({"installType":"user","name":"depsvc","optional":true,)"
+            R"("requiredVersion":"^2.0.0","status":"version_mismatch",)"
+            R"("version":"1.0.0"})");
+    }
+
 private slots:
     // What blocks a load.
     void a_satisfied_dependency_does_not_block()
@@ -232,6 +252,53 @@ private slots:
         QCOMPARE(split.present, QStringList{QStringLiteral("depsvc")});
         QVERIFY(split.blocking.isEmpty());
         QVERIFY(split.blockers.isEmpty());
+    }
+
+    // Optionality: the resolver never fails a load over an optional edge, so
+    // neither may this gate. The rows still carry a real blocking KIND — only
+    // the load verdict changes — which is what keeps the graph answers right.
+    void an_absent_optional_dependency_does_not_block_a_load()
+    {
+        const auto b = readDependencyBlocker(absentOptionalRow());
+        QVERIFY(b.optional);
+        // Still absent: the kind is unchanged, so nothing downstream that asks
+        // about the package's presence is misled.
+        QCOMPARE(b.kind, DependencyBlockKind::NotInstalled);
+        QVERIFY(!logos::dependencyBlocksLoad(b));
+        // The required twin is identical but for the flag, and still blocks.
+        QVERIFY(logos::dependencyBlocksLoad(readDependencyBlocker(absentRow())));
+    }
+
+    void an_optional_dependency_at_the_wrong_version_does_not_block_either()
+    {
+        const auto b = readDependencyBlocker(optionalMismatchRow());
+        QCOMPARE(b.kind, DependencyBlockKind::VersionMismatch);
+        QVERIFY(!logos::dependencyBlocksLoad(b));
+        QVERIFY(logos::dependencyBlocksLoad(readDependencyBlocker(mismatchRow())));
+    }
+
+    // The whole point: no blocker means no popup, no red cross, and the plugin
+    // stays launchable.
+    void the_split_leaves_an_absent_optional_dependency_unblocked()
+    {
+        const auto split = logos::splitDependencyRows({absentOptionalRow()});
+        QVERIFY(split.blocking.isEmpty());
+        QVERIFY(split.blockers.isEmpty());
+        // Absent is absent — it is NOT on disk, so it must not appear as a
+        // forward graph edge an uninstall plan would walk.
+        QVERIFY(split.present.isEmpty());
+    }
+
+    // A required blocker alongside an optional one still blocks, and the
+    // summary must name only the required one.
+    void an_optional_row_does_not_dilute_a_real_blocker()
+    {
+        const auto split = logos::splitDependencyRows({absentOptionalRow(),
+                                                       mismatchRow()});
+        QCOMPARE(split.blocking, QStringList{QStringLiteral("depsvc")});
+        QCOMPARE(split.blockers.size(), 1);
+        QCOMPARE(summariseDependencyBlockers(split.blockers),
+                 QStringLiteral("mismatch"));
     }
 
     // A row with no name is not a dependency: nothing to act on.
