@@ -23090,15 +23090,16 @@
         "nixpkgs-windows": "nixpkgs-windows_221"
       },
       "locked": {
-        "lastModified": 1788439860,
-        "narHash": "sha256-RlR4iAlgB3V20/ZwpLGp3uXPqqFKk+ILVsswtwSxJpc=",
-        "owner": "logos-co",
+        "lastModified": 1788797598,
+        "narHash": "sha256-4Su1mM/stIi6yqSmOkNUbHKDYrSr0u7lBh3AOXYhB+I=",
+        "owner": "alexjba",
         "repo": "logos-nix",
-        "rev": "cae28e2cda88cb34fc74bd4f2ecc32d3c1bcd03e",
+        "rev": "92cee2ee5ab4f13285f81ac89fd50ee80a6f9ec6",
         "type": "github"
       },
       "original": {
-        "owner": "logos-co",
+        "owner": "alexjba",
+        "ref": "feat/android-cross-toolchain",
         "repo": "logos-nix",
         "type": "github"
       }
