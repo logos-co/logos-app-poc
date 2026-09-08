@@ -287,6 +287,129 @@ private slots:
                  InstallStatus::DifferentHash);
     }
 
+    // ── A dependency's state propagates to the parent's ACTION ──────────
+    //
+    // recomputeInstallStatus ends by looking at dependencies, and that status
+    // becomes the Add Application dialog's primary button verb. It therefore
+    // has to say WHICH action would fix things, not merely that something is
+    // wrong. The bug these pin: an outdated dependency reported DifferentHash,
+    // so the button offered "Reinstall" — which reinstalls the parent at the
+    // same version and leaves the dependency exactly as it was. Observed with
+    // Radicle: app row v0.2.3 INSTALLED, module row v0.2.3 UPGRADE, footer
+    // "1 out of 2 ... have become outdated", button "Reinstall".
+    //
+    // The parent's OWN state always wins — these only apply once its version
+    // and hash both match the catalog.
+
+    // Dependency on an older build → the fix is an update, not a reinstall.
+    void outdatedDependencyMakesParentUpgradeable()
+    {
+        AppsModel model;
+        model.replaceCatalog({
+            makeCatalogRow("repo1", "radicle", "0.2.3", "H_radicle_023",
+                           { makeDep("radicle_module") }),
+            makeCatalogRow("repo1", "radicle_module", "0.2.3", "H_mod_023"),
+        });
+        model.markInstalled("radicle", "0.2.3", "H_radicle_023");
+        model.markInstalled("radicle_module", "0.2.2", "H_mod_022");
+
+        QCOMPARE(statusOf(model, "radicle_module", "repo1"),
+                 InstallStatus::UpgradeAvailable);
+        QCOMPARE(statusOf(model, "radicle", "repo1"),
+                 InstallStatus::UpgradeAvailable);
+    }
+
+    // Dependency ahead of the catalog → downgrade, mirroring the parent's own
+    // newer-version case.
+    void newerDependencyMakesParentDowngradeable()
+    {
+        AppsModel model;
+        model.replaceCatalog({
+            makeCatalogRow("repo1", "radicle", "0.2.3", "H_radicle_023",
+                           { makeDep("radicle_module") }),
+            makeCatalogRow("repo1", "radicle_module", "0.2.3", "H_mod_023"),
+        });
+        model.markInstalled("radicle", "0.2.3", "H_radicle_023");
+        model.markInstalled("radicle_module", "0.3.0", "H_mod_030");
+
+        QCOMPARE(statusOf(model, "radicle_module", "repo1"),
+                 InstallStatus::DowngradeAvailable);
+        QCOMPARE(statusOf(model, "radicle", "repo1"),
+                 InstallStatus::DowngradeAvailable);
+    }
+
+    // Dependency at the RIGHT version but the wrong payload — corruption, or a
+    // rebuild under the same tag. Reinstall is genuinely the fix here, and this
+    // is the one case the old blanket DifferentHash got right.
+    void corruptDependencyKeepsParentReinstallable()
+    {
+        AppsModel model;
+        model.replaceCatalog({
+            makeCatalogRow("repo1", "radicle", "0.2.3", "H_radicle_023",
+                           { makeDep("radicle_module") }),
+            makeCatalogRow("repo1", "radicle_module", "0.2.3", "H_mod_023"),
+        });
+        model.markInstalled("radicle", "0.2.3", "H_radicle_023");
+        model.markInstalled("radicle_module", "0.2.3", "H_mod_TAMPERED");
+
+        QCOMPARE(statusOf(model, "radicle_module", "repo1"),
+                 InstallStatus::DifferentHash);
+        QCOMPARE(statusOf(model, "radicle", "repo1"),
+                 InstallStatus::DifferentHash);
+    }
+
+    // Everything current → nothing to offer but Launch.
+    void healthyDependencyLeavesParentInstalled()
+    {
+        AppsModel model;
+        model.replaceCatalog({
+            makeCatalogRow("repo1", "radicle", "0.2.3", "H_radicle_023",
+                           { makeDep("radicle_module") }),
+            makeCatalogRow("repo1", "radicle_module", "0.2.3", "H_mod_023"),
+        });
+        model.markInstalled("radicle", "0.2.3", "H_radicle_023");
+        model.markInstalled("radicle_module", "0.2.3", "H_mod_023");
+
+        QCOMPARE(statusOf(model, "radicle", "repo1"), InstallStatus::Installed);
+    }
+
+    // Worst-wins across several dependencies: corruption outranks a version
+    // change, because no version change repairs a bad payload.
+    void worstDependencyStateWins()
+    {
+        AppsModel model;
+        model.replaceCatalog({
+            makeCatalogRow("repo1", "radicle", "0.2.3", "H_radicle_023",
+                           { makeDep("mod_old"), makeDep("mod_broken") }),
+            makeCatalogRow("repo1", "mod_old",    "0.2.3", "H_old_023"),
+            makeCatalogRow("repo1", "mod_broken", "0.2.3", "H_broken_023"),
+        });
+        model.markInstalled("radicle", "0.2.3", "H_radicle_023");
+        model.markInstalled("mod_old",    "0.2.2", "H_old_022");        // upgrade
+        model.markInstalled("mod_broken", "0.2.3", "H_broken_TAMPERED"); // reinstall
+
+        QCOMPARE(statusOf(model, "radicle", "repo1"),
+                 InstallStatus::DifferentHash);
+    }
+
+    // The parent's own state is decided before dependencies are consulted, so
+    // a dependency can never mask a problem with the package itself.
+    void parentOwnStateOutranksItsDependencies()
+    {
+        AppsModel model;
+        model.replaceCatalog({
+            makeCatalogRow("repo1", "radicle", "0.2.3", "H_radicle_023",
+                           { makeDep("radicle_module") }),
+            makeCatalogRow("repo1", "radicle_module", "0.2.3", "H_mod_023"),
+        });
+        // Parent itself is behind; dependency is merely corrupt.
+        model.markInstalled("radicle", "0.2.2", "H_radicle_022");
+        model.markInstalled("radicle_module", "0.2.3", "H_mod_TAMPERED");
+
+        QCOMPARE(statusOf(model, "radicle", "repo1"),
+                 InstallStatus::UpgradeAvailable);
+    }
+
     // ── Partial install (deps missing) ──────────────────────────────────
     void missingDepsForcesNotInstalled()
     {
