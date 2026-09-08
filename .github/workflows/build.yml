@@ -86,6 +86,14 @@ jobs:
     runs-on: ${{ fromJSON(vars.WINDOWS_RUNNER || '["ubuntu-latest"]') }}
 
     steps:
+      # Before checkout, because checkout's own clean is what dies: a workspace
+      # left read-only by an earlier run fails the job at step one with EACCES,
+      # and nothing later in the job ever runs to repair it. The `cp` below no
+      # longer creates such a tree, but the runners already holding one can only
+      # be freed from outside checkout. No-op on a GitHub-hosted runner.
+      - name: Make the persisted workspace writable
+        run: chmod -R u+w . || true
+
       - uses: actions/checkout@v4
 
       - uses: logos-co/setup-nix-cache-action@v1
@@ -120,7 +128,11 @@ jobs:
           staged=$(find -L "$src" -type f | wc -l | tr -d ' ')
           [ "$staged" -gt 0 ] || { echo "::error::the bundle is empty"; exit 1; }
           mkdir -p pkg/logos-basecamp
-          cp -rL "$src"/. pkg/logos-basecamp/
+          # --no-preserve=mode is load-bearing, not tidiness: store directories
+          # are r-xr-xr-x, and propagating that leaves a pkg/ tree whose files
+          # nothing can unlink -- including the NEXT run's checkout, on a runner
+          # whose workspace persists. Same idiom as logos-windows-ci's staging.
+          cp -rL --no-preserve=mode,ownership "$src"/. pkg/logos-basecamp/
           ( cd pkg && zip -qr ../logos-basecamp-x86_64-windows.zip logos-basecamp )
           zipped=$(unzip -l logos-basecamp-x86_64-windows.zip | tail -1 | awk '{print $2}')
           echo "bundle $staged file(s) -> zip $zipped entr(ies)"
