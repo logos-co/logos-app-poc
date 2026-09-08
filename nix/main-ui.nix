@@ -6,6 +6,13 @@
 # leaked across the boundary -- check nix/symbol-gate.nix before adding it.
 { pkgs, common, src, logosDesignSystem, distributed ? false }:
 
+let
+  # Both render to nothing off Android, so the native derivations are unchanged.
+  toolchainFile = pkgs.logosQtCrossToolchainFile or "";
+  crossFlags = (pkgs.logosQtCrossCmakeFlags or [ ])
+    ++ pkgs.lib.optional (toolchainFile != "") "-DCMAKE_TOOLCHAIN_FILE=${toolchainFile}";
+  libPrefix = pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isAndroid "lib";
+in
 pkgs.stdenv.mkDerivation {
   pname = "${common.pname}-main-ui-plugin";
   version = common.version;
@@ -34,7 +41,7 @@ pkgs.stdenv.mkDerivation {
     # host-TOOL package paths. Both are empty on native builds.
     cmake -S src -B build \
       $cmakeFlags \
-      ${pkgs.lib.escapeShellArgs (pkgs.logosQtCrossCmakeFlags or [ ])} \
+      ${pkgs.lib.escapeShellArgs crossFlags} \
       -GNinja \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
@@ -60,9 +67,9 @@ pkgs.stdenv.mkDerivation {
 
     _found=""
     for _ext in dylib dll so; do
-      if [ -f "build/main_ui.$_ext" ]; then
-        cp "build/main_ui.$_ext" "$out/plugins/main_ui/"
-        _found="build/main_ui.$_ext"
+      if [ -f "build/${libPrefix}main_ui.$_ext" ]; then
+        cp "build/${libPrefix}main_ui.$_ext" "$out/plugins/main_ui/"
+        _found="build/${libPrefix}main_ui.$_ext"
         break
       fi
     done

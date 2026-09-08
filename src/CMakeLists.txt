@@ -291,6 +291,13 @@ elseif(WIN32)
         PREFIX ""
         SUFFIX ".dll"
     )
+elseif(ANDROID)
+    # androiddeployqt refuses an extra library whose name does not start with
+    # "lib"; the Shell host looks for libmain_ui.so on Q_OS_ANDROID.
+    set_target_properties(main_ui PROPERTIES
+        PREFIX "lib"
+        SUFFIX ".so"
+    )
 else()
     set_target_properties(main_ui PROPERTIES
         PREFIX ""
