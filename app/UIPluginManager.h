@@ -9,6 +9,8 @@
 #include <QMap>
 #include <QPointer>
 #include <QSet>
+#include <memory>
+#include "RecentlyClosedStore.h"
 #include "logos_api.h"
 #include "logos_api_client.h"
 #include "IComponent.h"
@@ -85,6 +87,9 @@ public:
     // QML-bound getters (surfaced via MainUIBackend's Q_PROPERTYs).
     QVariantList uiModules() const;
     QVariantList launcherApps() const;
+    // Same row shape as launcherApps(), most-recently-closed first, filtered
+    // to apps that are still installed.
+    QVariantList recentlyClosedApps() const;
     QString      currentVisibleApp() const;
     QStringList  loadingModules() const;
 
@@ -119,6 +124,9 @@ public:
     // Manifest schema version of an installed UI plugin. Feeds the full-bleed
     // icon gate on both the sidebar and App Manager paths.
     QString pluginManifestVersion(const QString& moduleName) const;
+
+    // main_ui / package_manager_ui — shell furniture, not launchable apps.
+    static bool isShellInternalApp(const QString& name);
 
     // By value, not by reference: the registry rebuilds by clear-and-refill, so
     // a reference held across a refresh is a use-after-free waiting to happen.
@@ -157,6 +165,7 @@ signals:
     // its own matching signal via a signal-to-signal connect.
     void uiModulesChanged();
     void launcherAppsChanged();
+    void recentlyClosedAppsChanged();
     void loadingModulesChanged();
     void currentVisibleAppChanged();
     void navigateToApps();
@@ -331,6 +340,12 @@ private:
     // App launcher
     QSet<QString> m_loadedApps;
     QString       m_currentVisibleApp;
+
+    // Recently-closed list, persisted under LogosBasecampPaths::baseDirectory().
+    std::unique_ptr<RecentlyClosedStore> m_recentlyClosed;
+
+    // Row shape shared by launcherApps() and recentlyClosedApps().
+    QVariantMap buildAppRow(const QString& pluginName) const;
 
     // Cache of UI plugin name → metadata, fed by PackageCoordinator's
     // uiPluginsFetched signal. Used to dispatch loads (type, path, view,

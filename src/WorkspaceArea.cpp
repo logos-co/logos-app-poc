@@ -204,13 +204,25 @@ WorkspaceArea::WorkspaceArea(QObject* backend, QWidget* parent)
 
         setCentralWidget(m_welcomeWidget);
 
-        // Forward the QML installClicked signal up to consumers.
+        // Forward the QML navigation signals up to consumers.
         if (QObject* rootObj = m_welcomeWidget->rootObject()) {
-            connect(rootObj, SIGNAL(installClicked()),
-                    this,    SIGNAL(installClicked()));
+            connect(rootObj, SIGNAL(discoverApplicationsClicked()),
+                    this,    SIGNAL(discoverApplicationsClicked()));
+            connect(rootObj, SIGNAL(managePackagesClicked()),
+                    this,    SIGNAL(managePackagesClicked()));
+            connect(rootObj, SIGNAL(reopenAppRequested(QString)),
+                    this,    SIGNAL(reopenAppRequested(QString)));
+            connect(rootObj, SIGNAL(appActivated(QString,QString)),
+                    this,    SIGNAL(appActivated(QString,QString)));
+            connect(rootObj, SIGNAL(packageActivated(QString)),
+                    this,    SIGNAL(packageActivated(QString)));
+            connect(rootObj, SIGNAL(packageInstallRequested(QString)),
+                    this,    SIGNAL(packageInstallRequested(QString)));
+            connect(rootObj, SIGNAL(showAllResultsRequested(QString,QString)),
+                    this,    SIGNAL(showAllResultsRequested(QString,QString)));
         } else {
             qWarning() << "WorkspaceArea: WelcomePage.qml loaded but "
-                          "rootObject is null — installClicked not wired.";
+                          "rootObject is null — navigation not wired.";
         }
     } else {
         auto* placeholder = new QWidget(this);
@@ -684,7 +696,9 @@ void WorkspaceArea::styleAllTabBars()
 void WorkspaceArea::updateWelcomeVisibility()
 {
     if (!m_welcomeWidget) return;
-    m_welcomeWidget->setVisible(m_docks.isEmpty());
+    const bool show = m_docks.isEmpty();
+    m_welcomeWidget->setVisible(show);
+    if (!show) clearWelcomeSearch();
 }
 
 QQuickWidget* WorkspaceArea::activeDockWidget() const
@@ -837,6 +851,19 @@ void WorkspaceArea::hideEvent(QHideEvent* event)
 {
     QMainWindow::hideEvent(event);
     updateQmlPluginActiveStates();
+    clearWelcomeSearch();
+}
+
+void WorkspaceArea::clearWelcomeSearch()
+{
+    if (!m_welcomeWidget) return;
+    QObject* root = m_welcomeWidget->rootObject();
+    if (!root) return;
+
+    if (!QMetaObject::invokeMethod(root, "clearSearch")) {
+        qCritical() << "WelcomePage has no clearSearch() — the welcome search "
+                       "will persist after the page is hidden.";
+    }
 }
 
 void WorkspaceArea::showEvent(QShowEvent* event)

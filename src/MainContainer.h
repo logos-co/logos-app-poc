@@ -54,8 +54,11 @@ private slots:
     // content still receive clicks, intercepting when one is.
     void onOverlayActiveChanged(bool active);
     void onSidebarTooltipRequested(const QString& text, qreal y);
+    void onAddApplicationDialogRequested(const QVariantMap& metadata);
 
 private:
+    void applyAppManagerSearch(const QString& query);
+    void invokeOpenApp(const QString& name, const QString& repositoryUrl);
     void setupUi();
 
     QHBoxLayout* m_mainLayout;
