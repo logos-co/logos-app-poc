@@ -8,7 +8,7 @@ intro: |
   **entire lifecycle** inside the real, shippable Basecamp bundle:
 
   1. **Install** a local `.lgx` (v0.1.1) — the Package Manager app inspects the
-     file and raises `logos.packages.confirm_install`; Basecamp services it
+     file and raises `basecamp.packages.confirm_install`; Basecamp services it
      and shows the **install gate**
      dialog (name, version, dependency changes). Confirming lets the Package
      Manager install the file, and after a reload the app appears in the
@@ -29,7 +29,7 @@ intro: |
   does, for both catalog downloads and local `.lgx` picks. The exercised
   machinery is the app-to-app confirmation between the two: PMU's
   `installLocalPackage` → `inspectPackage` → one of the three
-  `logos.packages.confirm_*` intents, `PackageCoordinator` raising the
+  `basecamp.packages.confirm_*` intents, `PackageCoordinator` raising the
   matching dialog (`installGate`, `upgradeCascade`, `uninstallCascade`), and
   the confirm/cancel decision returned as the intent's answer so PMU performs
   (or aborts) the actual file operation. For a removal that answer is also the
@@ -348,7 +348,7 @@ sections:
               find_value: "pmui.BackendStore"
               method: "installLocalPackage"
               args: ["file:///tmp/basecamp-pkglife/test_qml_only-0.1.1.lgx"]
-              text: "PMU inspects the LGX first — nothing touches disk yet. The manifest tells it the package isn't installed, so it raises the `logos.packages.confirm_install` intent. Basecamp services it and opens the install gate dialog; the request stays open until the user decides."
+              text: "PMU inspects the LGX first — nothing touches disk yet. The manifest tells it the package isn't installed, so it raises the `basecamp.packages.confirm_install` intent. Basecamp services it and opens the install gate dialog; the request stays open until the user decides."
 
             # The dialog title + body are exact texts. The name renders as
             # the raw module name (not the display name) because the
@@ -417,7 +417,7 @@ sections:
               find_value: "pmui.BackendStore"
               method: "installLocalPackage"
               args: ["file:///tmp/basecamp-pkglife/test_qml_only-0.2.1.lgx"]
-              text: "Same entry point, different route: `inspectPackage` reports the package as already installed at 0.1.1, so PMU raises `logos.packages.confirm_upgrade` instead and Basecamp raises the upgrade gate."
+              text: "Same entry point, different route: `inspectPackage` reports the package as already installed at 0.1.1, so PMU raises `basecamp.packages.confirm_upgrade` instead and Basecamp raises the upgrade gate."
 
             - name: "The upgrade gate leads with the target version"
               action: wait_for
@@ -514,7 +514,7 @@ sections:
               find_value: "pmui.BackendStore"
               method: "uninstallPackage"
               args: [0]
-              text: "This starts the **confirmed** uninstall: PMU raises `logos.packages.confirm_uninstall` and Basecamp shows the confirmation. No files have been touched — and none will be until Basecamp answers, which it does only after unloading whatever depends on the package."
+              text: "This starts the **confirmed** uninstall: PMU raises `basecamp.packages.confirm_uninstall` and Basecamp shows the confirmation. No files have been touched — and none will be until Basecamp answers, which it does only after unloading whatever depends on the package."
 
             - name: "The gated uninstall confirmation appears"
               action: wait_for

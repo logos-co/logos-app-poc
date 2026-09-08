@@ -293,6 +293,7 @@ set(PROJECT_SOURCES
     ShellHostAdapter.cpp
 
     MainUIBackend.cpp
+    ShellIntents.cpp
     IntentRegistry.cpp
     IntentBroker.cpp
     IntentBridgeAdapter.cpp

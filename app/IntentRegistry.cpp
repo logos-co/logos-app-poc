@@ -14,6 +14,12 @@ namespace {
 
 constexpr const char* kTypeUiQml = "ui_qml";
 
+bool isReservedNamespace(const QString& name)
+{
+    return logos::intent::isReservedName(name)
+        || name.startsWith(QStringLiteral("basecamp."));
+}
+
 // Read <installDir>/metadata.json. Returns an empty map on any failure — a
 // malformed file is a diagnostic, never a crash and never a partial record.
 QVariantMap readMetadataFile(const QString& installDir, QString* errorOut)
@@ -249,13 +255,15 @@ void IntentRegistry::ingestRecord(const QString& moduleName,
                                               moduleName, QStringLiteral("uses"),
                                               /*allowCardinality=*/true, &m_diagnostics);
 
-    // "logos.*" belongs to the shell. Refuse it from anything else, so an app
-    // cannot register a shell capability and intercept requests meant for it.
+    // "logos.*" is the platform's and "basecamp.*" is the shell's. Refuse both
+    // from anything else, so an app cannot register a shell capability and
+    // intercept requests meant for it.
     for (int i = provides.size() - 1; i >= 0; --i) {
-        if (logos::intent::isReservedName(provides.at(i))) {
+        if (isReservedNamespace(provides.at(i))) {
             m_diagnostics.append(
                 QStringLiteral("%1: refused to provide reserved intent '%2' — "
-                               "the 'logos.' namespace belongs to the shell")
+                               "the 'logos.' and 'basecamp.' namespaces are "
+                               "reserved for the platform and the shell")
                     .arg(moduleName, provides.at(i)));
             provides.removeAt(i);
         }

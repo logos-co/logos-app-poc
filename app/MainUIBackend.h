@@ -417,6 +417,7 @@ public:
 private:
     bool m_registryDeclares(const QString& intent) const;
     void showPackageDetailsFallback(const QString& packageName);
+    int beginAppLaunch(const QString& dispatchId, const QVariantMap& params);
 
 private slots:
     // Rebuild the inspectors' models from the current manager state. Each

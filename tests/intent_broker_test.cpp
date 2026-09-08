@@ -310,16 +310,16 @@ void TestIntentBroker::testRestrictedRequesterIsDeniedIndistinguishably()
     // would hand an app an oracle for what the shell can do.
     QTemporaryDir root;
     const QString evil = writeApp(root, QStringLiteral("evil"),
-        R"({"uses":[{"intent":"logos.packages.confirm_uninstall"}]})");
+        R"({"uses":[{"intent":"basecamp.packages.confirm_uninstall"}]})");
     IntentRegistry registry;
     registry.rebuild({ { QStringLiteral("evil_ui"), plugin(evil) } }, nullptr, nullptr);
 
     // The shell really does provide it — so a leak here would be observable.
     registry.registerShellProvider(QStringLiteral("main_ui"),
-        { QStringLiteral("logos.packages.confirm_uninstall") }, {},
+        { QStringLiteral("basecamp.packages.confirm_uninstall") }, {},
         QStringLiteral("Logos"), QString());
     registry.restrictIntentToRequesters(
-        QStringLiteral("logos.packages.confirm_uninstall"),
+        QStringLiteral("basecamp.packages.confirm_uninstall"),
         { QStringLiteral("package_manager_ui") });
 
     FakePresenter presenter;
@@ -331,7 +331,7 @@ void TestIntentBroker::testRestrictedRequesterIsDeniedIndistinguishably()
 
     QElapsedTimer timer; timer.start();
     broker.submit(&evilEndpoint, QStringLiteral("req-1"),
-                  QStringLiteral("logos.packages.confirm_uninstall"), {});
+                  QStringLiteral("basecamp.packages.confirm_uninstall"), {});
     spin(500);
 
     QCOMPARE(evilEndpoint.results.size(), 1);
@@ -945,7 +945,7 @@ void TestIntentBroker::testShellProviderIsNeverLoadedOrPresented()
     IntentRegistry registry;
     const QString requester = writeApp(root, QStringLiteral("chat_ui"), R"({
         "name": "chat_ui", "type": "ui_qml",
-        "uses": [ { "intent": "logos.repositories.manage" } ]
+        "uses": [ { "intent": "basecamp.repositories.manage" } ]
     })");
     QMap<QString, QVariantMap> plugins;
     plugins.insert(QStringLiteral("chat_ui"),
@@ -954,7 +954,7 @@ void TestIntentBroker::testShellProviderIsNeverLoadedOrPresented()
     registry.rebuild(plugins, [](const QString& n) { return n; },
                              [](const QString&) { return QString(); });
     registry.registerShellProvider(QStringLiteral("main_ui"),
-                                   {QStringLiteral("logos.repositories.manage")}, {},
+                                   {QStringLiteral("basecamp.repositories.manage")}, {},
                                    QStringLiteral("Logos"), QString());
 
 
@@ -967,7 +967,7 @@ void TestIntentBroker::testShellProviderIsNeverLoadedOrPresented()
     broker.registerEndpoint(QStringLiteral("main_ui"), &shellEndpoint);
 
     broker.submit(&chatEndpoint, QStringLiteral("req-1"),
-                  QStringLiteral("logos.repositories.manage"), {});
+                  QStringLiteral("basecamp.repositories.manage"), {});
     spin(80);
 
     // The whole point: the host is never loaded and never presented...
@@ -1704,11 +1704,11 @@ void TestIntentBroker::testShellProviderNeverReturns()
     // nothing to undo — its handler did whatever navigating happened.
     QTemporaryDir root;
     const QString chat = writeApp(root, QStringLiteral("chat"),
-        R"({"uses":[{"intent":"logos.repositories.manage"}]})");
+        R"({"uses":[{"intent":"basecamp.repositories.manage"}]})");
     IntentRegistry registry;
     registry.registerShellProvider(QStringLiteral("main_ui"),
-                                   { QStringLiteral("logos.repositories.manage") },
-                                   { QStringLiteral("logos.repositories.manage") },
+                                   { QStringLiteral("basecamp.repositories.manage") },
+                                   { QStringLiteral("basecamp.repositories.manage") },
                                    QStringLiteral("Logos"), QString());
     registry.rebuild({ { QStringLiteral("chat_ui"), plugin(chat) } }, nullptr, nullptr);
 
@@ -1724,7 +1724,7 @@ void TestIntentBroker::testShellProviderNeverReturns()
     broker.registerEndpoint(QStringLiteral("main_ui"), &shellEndpoint);
 
     broker.submit(&chatEndpoint, QStringLiteral("req-1"),
-                  QStringLiteral("logos.repositories.manage"), {});
+                  QStringLiteral("basecamp.repositories.manage"), {});
     spin(120);
     QCOMPARE(shellEndpoint.requests.size(), 1);
 
