@@ -208,6 +208,21 @@ void AppsModel::recomputeInstallStatus(Row& r)
         r.installStatus = InstallStatus::DifferentHash;
         return;
     }
+
+    InstallStatus::Value worstDep = InstallStatus::Installed;
+    const auto isWorse = [](InstallStatus::Value candidate,
+                            InstallStatus::Value current) {
+        const auto rank = [](InstallStatus::Value v) {
+            switch (v) {
+            case InstallStatus::DifferentHash:      return 3;
+            case InstallStatus::DowngradeAvailable: return 2;
+            case InstallStatus::UpgradeAvailable:   return 1;
+            default:                                return 0;
+            }
+        };
+        return rank(candidate) > rank(current);
+    };
+
     for (const QVariant& v : r.dependencies) {
         const QVariantMap dep = v.toMap();
         const QString depName = dep.value("name").toString();
@@ -216,16 +231,35 @@ void AppsModel::recomputeInstallStatus(Row& r)
         if (depIdx < 0) continue;   // dep not in this repo — see comment above
         const Row& depRow = m_rows[depIdx];
         if (depRow.versions.isEmpty()) continue;
+
+        const QString depRelease = depRow.latestVersion;
+        if (!depRelease.isEmpty() && !depRow.installedVersion.isEmpty()) {
+            const int depCmp = versionCmp(depRow.installedVersion, depRelease);
+            if (depCmp < 0) {
+                if (isWorse(InstallStatus::UpgradeAvailable, worstDep))
+                    worstDep = InstallStatus::UpgradeAvailable;
+                continue;
+            }
+            if (depCmp > 0) {
+                if (isWorse(InstallStatus::DowngradeAvailable, worstDep))
+                    worstDep = InstallStatus::DowngradeAvailable;
+                continue;
+            }
+        }
+
+        // Same version (or no version to compare): a hash mismatch is
+        // corruption, and only a reinstall repairs it.
         const QString expectedDepHash =
             depRow.versions.first().toMap().value("rootHash").toString();
         const QString installedDepHash = depRow.installedHash;
         if (expectedDepHash.isEmpty() || installedDepHash.isEmpty()) continue;
-        if (expectedDepHash != installedDepHash) {
-            r.installStatus = InstallStatus::DifferentHash;
-            return;
+        if (expectedDepHash != installedDepHash
+            && isWorse(InstallStatus::DifferentHash, worstDep)) {
+            worstDep = InstallStatus::DifferentHash;
         }
     }
-    r.installStatus = InstallStatus::Installed;
+
+    r.installStatus = worstDep;
 }
 
 void AppsModel::recomputeVersionDerivedFields(Row& r)
