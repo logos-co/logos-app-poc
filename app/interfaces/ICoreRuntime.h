@@ -16,6 +16,15 @@
 //
 // Deliberately the smallest surface that satisfies Basecamp — every method here
 // is something a future core must keep providing.
+// How much of a module's dependency graph a load should pull in. Mirrors the
+// runtime's LogosLoadDeps without naming it: FixtureCoreRuntime implements this
+// interface against Qt alone, and QtLogosCoreRuntime maps the two.
+enum class LoadPolicy {
+    ModuleOnly,          // just this module; resolve nothing
+    RequiredDeps,        // + its required closure; a missing one fails the load
+    RequiredAndOptional, // + optionals that are installed; absence is not failure
+};
+
 class ICoreRuntime {
 public:
     // Everything the runtime needs before start(). Mirrors the ordering
@@ -48,7 +57,8 @@ public:
     // "Ensure loaded", not "load fresh": returns true when the module ends up
     // loaded, INCLUDING when it already was. Callers use it as an idempotent
     // guard, so a strict "did I load it just now" reading breaks them.
-    virtual bool loadModule(const QString& name, bool withDependencies = true) = 0;
+    virtual bool loadModule(const QString& name,
+                            LoadPolicy policy = LoadPolicy::RequiredDeps) = 0;
 
     // withDependents=true takes down everything that transitively depends on
     // `name` first, leaves-first, so nothing is briefly left pointing at a

@@ -131,14 +131,16 @@ QStringList FixtureCoreRuntime::transitiveDependents(const QString& name) const
     return ordered;
 }
 
-bool FixtureCoreRuntime::loadModule(const QString& name, bool withDependencies)
+bool FixtureCoreRuntime::loadModule(const QString& name, LoadPolicy policy)
 {
     if (!isKnown(name)) {
         qWarning() << "FixtureCoreRuntime: unknown module" << name
                    << "- not in the fixture's `modules` array";
         return false;
     }
-    if (withDependencies) {
+    // The fixture models required dependencies only, so both non-ModuleOnly
+    // policies behave alike here; an absent one is still a failure.
+    if (policy != LoadPolicy::ModuleOnly) {
         for (const QString& dep : transitiveDependencies(name)) {
             if (!isKnown(dep)) {
                 qWarning() << "FixtureCoreRuntime: dependency" << dep << "of" << name

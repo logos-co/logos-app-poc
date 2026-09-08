@@ -278,7 +278,10 @@ int main(int argc, char *argv[])
     core->start();
     std::cout << "Logos Core started successfully!" << std::endl;
 
-    bool loaded = core->loadModule(QStringLiteral("package_manager"));
+    // Explicit, not the interface default: this path bypasses
+    // CoreModuleManager, so nothing else would widen it.
+    bool loaded = core->loadModule(QStringLiteral("package_manager"),
+                                   LoadPolicy::RequiredAndOptional);
 
     if (loaded) {
         qInfo() << "package_manager module loaded by default.";
@@ -286,7 +289,8 @@ int main(int argc, char *argv[])
         qWarning() << "Failed to load package_manager module by default.";
     }
 
-    bool downloaderLoaded = core->loadModule(QStringLiteral("package_downloader"));
+    bool downloaderLoaded = core->loadModule(QStringLiteral("package_downloader"),
+                                             LoadPolicy::RequiredAndOptional);
     if (downloaderLoaded) {
         qInfo() << "package_downloader module loaded by default.";
     } else {
