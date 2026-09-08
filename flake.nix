@@ -4,7 +4,7 @@
   inputs = {
     # Fork branch carrying the mobile toolchains until logos-co/logos-nix#7 and
     # #8 merge; switch back to github:logos-co/logos-nix then.
-    logos-nix.url = "github:alexjba/logos-nix/feat/android-cross-toolchain";
+    logos-nix.url = "github:alexjba/logos-nix/feat/mobile-cross-toolchains";
     # Follow the same nixpkgs as logos-nix
     nixpkgs.follows = "logos-nix/nixpkgs";
     logos-cpp-sdk.url = "github:logos-co/logos-cpp-sdk";
