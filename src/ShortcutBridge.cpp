@@ -85,6 +85,7 @@ bool ShortcutBridge::scanPane(QQuickWidget* pane)
         const QString cls = QString::fromUtf8(obj->metaObject()->className());
         if (!cls.contains(QLatin1String(kShortcutClass))) continue;
         mirrorOneShortcut(obj);
+        m_qmlToPane.insert(obj, pane);
     }
 
     if (!m_mirrors.isEmpty()) {
@@ -180,6 +181,7 @@ void ShortcutBridge::clearMirrors()
     m_mirrors.clear();
     m_mirrorToQml.clear();
     m_qmlToMirrors.clear();
+    m_qmlToPane.clear();
 
     // Drop pending statusChanged hooks so the old pane's late-Ready
     // signal doesn't retrigger a rebind after we've moved on.
@@ -199,6 +201,8 @@ void ShortcutBridge::onWiredShortcut()
 
     // Check enabled at fire time so `enabled: someBinding` still works.
     if (!qml->property("enabled").toBool()) return;
+    if (QQuickWidget* pane = m_qmlToPane.value(qml.data()))
+        pane->setFocus(Qt::ShortcutFocusReason);
 
     QMetaObject::invokeMethod(qml.data(), "activated",
                               Qt::DirectConnection);

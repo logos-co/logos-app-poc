@@ -13,12 +13,22 @@
     logos-module-loader-qt.url = "github:logos-co/logos-module-loader-qt";
     logos-liblogos.url = "github:logos-co/logos-liblogos";
     logos-package-manager.url = "github:logos-co/logos-package-manager";
+    # liblogos_core links libpackage_manager_lib, so liblogos otherwise puts
+    # its OWN older liblgx in the bundle's flat lib/ — where the module's
+    # newer copy can never win on macOS, and package_manager crashes.
+    logos-liblogos.inputs.logos-package-manager.follows = "logos-package-manager";
     logos-package-manager-module.url = "github:logos-co/logos-package-manager-module";
     logos-package-downloader-module.url = "github:logos-co/logos-package-downloader-module";
     logos-capability-module.url = "github:logos-co/logos-capability-module";
     logos-modules-state-module.url = "github:logos-co/logos-modules-state-module";
     logos-package.url = "github:logos-co/logos-package";
     logos-package-manager-ui.url = "github:logos-co/logos-package-manager-ui";
+    # The UI otherwise brings its own package_manager and package_downloader,
+    # so the closure carries two of each and the UI that drives installs sits
+    # on the older one — the one with no VersionMismatch, and without the
+    # signer-binding fix.
+    logos-package-manager-ui.inputs.package_manager.follows = "logos-package-manager-module";
+    logos-package-manager-ui.inputs.package_downloader.follows = "logos-package-downloader-module";
     logos-design-system.url = "github:logos-co/logos-design-system";
     logos-view-module-runtime.url = "github:logos-co/logos-view-module-runtime";
     nix-bundle-logos-module-install.url = "github:logos-co/nix-bundle-logos-module-install";
@@ -208,6 +218,25 @@
             installedModules = installedDev;
           };
 
+          mockTests = import ./nix/mock-tests.nix { inherit pkgs src; };
+
+          # The UI shell alone, against a fixture, with no Logos code linked.
+          # Lowest-coupling way to run the UI -- and the first thing worth
+          # standing up on a platform the runtime has not been ported to.
+          shellPreview = import ./nix/shell-preview.nix {
+            inherit pkgs common src mainUIPlugin;
+          };
+          appMock = import ./nix/app.nix {
+            inherit pkgs common src logosModule logosLiblogos logosSdk logosProtocolPkg logosQtHost logosQtSdk logosDesignSystem logosViewModuleRuntime logosPackageManagerModule logosPackageDownloaderModule logosPackageHeaders buildInfo logosSdkBuild;
+            inherit mainUIPlugin;
+            # The SAME plugins the real dev build stages. PMUI is real code
+            # loaded from disk here — only the modules it talks to are faked —
+            # so it has to actually be in the bundle.
+            installedModules = installedDev;
+            enableInspector = false;
+            useMockBackend = true;
+          };
+
           # App package (distributed build for DMG/AppImage)
           # Uses portable-compiled liblogos for portable variant selection
           appDistributed = import ./nix/app.nix {
@@ -217,6 +246,19 @@
             installedModules = installedDistributed;
             portable = true;
             enableInspector = false;
+          };
+
+          # PORTABLE mock: the same fixture-backed backend, built the way the
+          # shipped bundles are (portable liblogos, portable module variants,
+          # no /nix/store references after bundling).
+          appMockPortable = import ./nix/app.nix {
+            inherit pkgs common src logosModule logosSdk logosProtocolPkg logosQtHost logosQtSdk logosDesignSystem logosViewModuleRuntime logosPackageManagerModule logosPackageDownloaderModule logosPackageHeaders buildInfo logosSdkBuild;
+            inherit mainUIPlugin;
+            logosLiblogos = logosLiblogosPortable;
+            installedModules = installedDistributed;
+            portable = true;
+            enableInspector = false;
+            useMockBackend = true;
           };
 
           # Distributed build with inspector enabled (for macOS integration tests)
@@ -363,6 +405,7 @@
           #    is an x86_64-linux derivation, so it cannot run on an
           #    aarch64-darwin host without one.)
           binBundleDir = withMainProgram (dirBundler appDistributed);
+          binBundleDirMock = withMainProgram (dirBundler appMockPortable);
           binBundleDirInspector = withMainProgram (dirBundler appDistributedWithInspector);
 
           # Hoisted so shutdown-test can read the elapsed time for the combined PR-gate budget.
@@ -379,6 +422,27 @@
           main-ui-plugin = mainUIPlugin;
           package-manager-ui-plugin = packageManagerUIPlugin;
           app = app;
+
+          # Basecamp against the fixture-backed mock — no Logos runtime at all.
+          # Run: nix run .#app-mock        (see mock/README.md)
+          app-mock = appMock;
+
+          # The same, bundled portable: a self-contained directory with no
+          # /nix/store references, no Logos runtime and no network. This is the
+          # one to hand to someone who just wants to run the UI.
+          #   nix build .#bin-bundle-dir-mock && ./result/bin/LogosBasecamp
+          bin-bundle-dir-mock = binBundleDirMock;
+
+          # Correctness gate for the mock itself. Cheap (no app build), and the
+          # thing that stops mock/ from rotting: it compiles against Basecamp's
+          # own sources and against MockStore from logos-protocol, so an SDK bump
+          # can break it silently otherwise. Like symbol-gate, this needs an
+          # explicit `nix build .#mock-tests -L` step in CI — the checks entry
+          # below does not run on its own.
+          mock-tests = mockTests;
+
+          # nix run .#shell-preview   (see shell-preview/README.md)
+          shell-preview = shellPreview;
 
           # Self-contained flat directory (bin/ + lib/ with Qt).
           # Run: nix run .#bin-bundle-dir
@@ -430,6 +494,20 @@
             inherit pkgs; appPkg = app; negativeControl = true;
           };
 
+          # One library name staged twice -- lib/ and beside a module -- must
+          # mean the same build: macOS binds to lib/, Linux to the sibling.
+          # Over the BUNDLE, since the duplication is the bundler's doing.
+          # Build: nix build .#link-gate  (CI: build-appimage, build-macos-app)
+          link-gate = import ./nix/link-gate.nix {
+            inherit pkgs; bundlePkg = binBundleDir;
+          };
+
+          # Negative control for the above. Ship both or neither.
+          # Build: nix build .#link-gate-negative
+          link-gate-negative = import ./nix/link-gate.nix {
+            inherit pkgs; bundlePkg = binBundleDir; negativeControl = true;
+          };
+
           # ui_qml sandbox-escape regression test (F-008). Focused C++ unit test:
           # builds a real malicious QML plugin and asserts the production sandbox
           # refuses to load it. Build: nix build .#sandbox-test
@@ -440,10 +518,13 @@
           # no IPC. Build: nix build .#unit-tests
           unit-tests = import ./nix/unit-tests.nix {
             inherit pkgs src logosPackageHeaders;
+            logosViewModuleRuntimeSrc = logos-view-module-runtime;
           };
 
           # QML component tests (Qt Quick Test)
-          qml-tests = import ./nix/qml-tests.nix { inherit pkgs src logosPackageHeaders; };
+          qml-tests = import ./nix/qml-tests.nix {
+            inherit pkgs src logosPackageHeaders logosDesignSystem;
+          };
 
           # Coverage report for the unit-test suite: same targets as
           # .#unit-tests, compiled with --coverage and reported via gcovr.
@@ -452,6 +533,7 @@
           # Build: nix build .#coverage -L && open result/coverage.html
           coverage = import ./nix/coverage.nix {
             inherit pkgs src logosPackageHeaders;
+            logosViewModuleRuntimeSrc = logos-view-module-runtime;
             failUnderLine = 0;
           };
 
@@ -532,6 +614,10 @@
         host-services-test = self.packages.${system}.host-services-test;
         symbol-gate = self.packages.${system}.symbol-gate;
         symbol-gate-negative = self.packages.${system}.symbol-gate-negative;
+        mock-tests = self.packages.${system}.mock-tests;
+      } // pkgs.lib.optionalAttrs (!pkgs.stdenv.hostPlatform.isWindows) {
+        link-gate = self.packages.${system}.link-gate;
+        link-gate-negative = self.packages.${system}.link-gate-negative;
       });
 
       devShells = forAllSystems ({ pkgs, logosSdk, logosProtocolPkg, logosQtHost, logosModule, logosLiblogos, logosPackageManagerLibrary, logosPackageManagerModule, logosCapabilityModule, logosPackageLib, logosDesignSystem, logosCppSdkSrc, logosLiblogosSrc, logosPackageManagerModuleSrc, logosCapabilityModuleSrc, ... }: {

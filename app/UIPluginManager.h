@@ -9,6 +9,8 @@
 #include <QMap>
 #include <QPointer>
 #include <QSet>
+#include <memory>
+#include "RecentlyClosedStore.h"
 #include "logos_api.h"
 #include "logos_api_client.h"
 #include "IComponent.h"
@@ -19,6 +21,7 @@ class PluginLoader;
 class ViewModuleHost;
 class CoreModuleManager;
 class PackageCoordinator;
+class IntentBridgeAdapter;
 enum class UIPluginType;
 
 // UIPluginManager — owns UI plugin widget lifecycle in this process.
@@ -71,6 +74,10 @@ public:
     // m_uiPluginMetadata without this class having to talk to the module.
     void setPackageCoordinator(PackageCoordinator* packageCoordinator);
 
+    // Forwarded to PluginLoader, which attaches each ui_qml app's bridge as it
+    // loads. Pass-through, so this class never has to know what an intent is.
+    void setIntentAdapter(IntentBridgeAdapter* adapter);
+
     // Unmounts every in-process UI plugin widget. Must run WHILE the shell's
     // widget tree is still alive — the widgets are docked inside it — which is
     // why Window drives this explicitly before destroying the shell rather
@@ -80,6 +87,9 @@ public:
     // QML-bound getters (surfaced via MainUIBackend's Q_PROPERTYs).
     QVariantList uiModules() const;
     QVariantList launcherApps() const;
+    // Same row shape as launcherApps(), most-recently-closed first, filtered
+    // to apps that are still installed.
+    QVariantList recentlyClosedApps() const;
     QString      currentVisibleApp() const;
     QStringList  loadingModules() const;
 
@@ -111,6 +121,21 @@ public:
     //   forWidgetIcon=true  → raw "qrc:…" path (for QWidget::setWindowIcon)
     QString pluginIconUrl(const QString& moduleName, bool forWidgetIcon = false) const;
 
+    // Manifest schema version of an installed UI plugin. Feeds the full-bleed
+    // icon gate on both the sidebar and App Manager paths.
+    QString pluginManifestVersion(const QString& moduleName) const;
+
+    // main_ui / package_manager_ui — shell furniture, not launchable apps.
+    static bool isShellInternalApp(const QString& name);
+
+    // By value, not by reference: the registry rebuilds by clear-and-refill, so
+    // a reference held across a refresh is a use-after-free waiting to happen.
+    QMap<QString, QVariantMap> uiPluginMetadataSnapshot() const;
+
+    // Mounted in-process right now — distinct from "installed" and from "its
+    // core module is loaded". An intent provider needs a live view.
+    bool isUiAppLoaded(const QString& moduleName) const;
+
 public slots:
     // UI module lifecycle
     void loadUiModule(const QString& moduleName);
@@ -140,6 +165,7 @@ signals:
     // its own matching signal via a signal-to-signal connect.
     void uiModulesChanged();
     void launcherAppsChanged();
+    void recentlyClosedAppsChanged();
     void loadingModulesChanged();
     void currentVisibleAppChanged();
     void navigateToApps();
@@ -150,10 +176,17 @@ signals:
     void coreModulesChanged();
 
     // Dependency-aware UX. missingDepsPopup fires when the user clicks a
-    // UI plugin that can't load because its core deps aren't installed;
-    // unloadCascade fires when they try to unload a module other running
-    // things depend on.
-    void missingDepsPopupRequested(const QString& name, const QStringList& missing);
+    // UI plugin whose core dependencies don't let it load; unloadCascade
+    // fires when they try to unload a module other running things depend on.
+    //
+    // `blockers` is one map per blocking dependency (see
+    // PackageCoordinator::blockingDepsOf); `summary` is one word for the set
+    // ("absent" | "mismatch" | "signer" | "mixed"). Both, because the dialog
+    // says a different sentence per kind and a bare name list cannot tell an
+    // absent dependency from an installed one at the wrong version.
+    void missingDepsPopupRequested(const QString& name,
+                                   const QVariantList& blockers,
+                                   const QString& summary);
     void unloadCascadeConfirmationRequested(const QString& name,
                                             const QStringList& loadedDependents);
 
@@ -161,10 +194,6 @@ signals:
     // failure to the QML overlay instead of only logging it.
     void pluginLoadFailedNotice(const QString& name, const QString& error);
 
-    // Forwarded from the package_manager_ui replica's navigateToRepositoriesRequested
-    // signal. MainUIBackend re-emits it so ContentViews.qml can route to
-    // Settings → Repositories without touching the QtRO replica directly.
-    void navigateToRepositoriesRequested();
 
     // Failures filtered out of package_manager_ui's installationProgressUpdated.
     void packageInstallFailedNotice(const QString& packageName, const QString& errorMessage);
@@ -173,7 +202,18 @@ signals:
     // MainUIBackend's forwarders.
     void pluginWindowRequested(QWidget* widget, const QString& title);
     void pluginWindowRemoveRequested(QWidget* widget);
-    void pluginWindowActivateRequested(QWidget* widget);
+
+    // Presentation seam — see IShellHost::onPresentAppRequested for why the
+    // shell, not this class, decides what "the front" means.
+    void presentAppRequested(QWidget* widget);
+
+    // The view finished loading and can receive. IntentBroker's activation
+    // queue drains on this.
+    void appReady(const QString& name);
+
+    // The UI-plugin metadata cache was refilled — installs, uninstalls and
+    // catalog refreshes all land here. IntentRegistry rebuilds on it.
+    void uiPluginMetadataChanged();
 
 private slots:
     void onPluginLoaded(const QString& name, QWidget* widget,
@@ -280,6 +320,11 @@ private:
     LogosAPI*          m_logosAPI;          // not owned
     CoreModuleManager* m_coreModuleManager; // not owned (sibling Qt child)
     PackageCoordinator*    m_packageCoordinator;    // not owned (sibling Qt child); nullable until setPackageCoordinator
+
+    // Load parked on dependencyDataReadyChanged; empty when idle. Mirrors
+    // PackageCoordinator::uninstallApp's deferral — last click wins.
+    QString                 m_pendingGatedLoadName;
+    QMetaObject::Connection m_pendingGatedLoadConn;
     PluginLoader*      m_pluginLoader;      // owned (parent=this)
 
     // Loaded-plugin state
@@ -295,6 +340,12 @@ private:
     // App launcher
     QSet<QString> m_loadedApps;
     QString       m_currentVisibleApp;
+
+    // Recently-closed list, persisted under LogosBasecampPaths::baseDirectory().
+    std::unique_ptr<RecentlyClosedStore> m_recentlyClosed;
+
+    // Row shape shared by launcherApps() and recentlyClosedApps().
+    QVariantMap buildAppRow(const QString& pluginName) const;
 
     // Cache of UI plugin name → metadata, fed by PackageCoordinator's
     // uiPluginsFetched signal. Used to dispatch loads (type, path, view,

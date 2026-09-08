@@ -64,6 +64,8 @@ set_source_files_properties(Basecamp/Icons/BasecampIcons.qml
     PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 set_source_files_properties(Basecamp/AppManager/AppColors.qml
     PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(Basecamp/AppManager/DownloadFormat.qml
+    PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt_add_qml_module(basecamp_backend_qml
     URI Basecamp.Backend
@@ -72,6 +74,7 @@ qt_add_qml_module(basecamp_backend_qml
     RESOURCE_PREFIX /qt/qml
     OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Basecamp/Backend
     SOURCES
+        ../app/interfaces/ShellSections.h
         ../app/interfaces/InstallEnums.h
         InstallEnums.cpp
         AppsFilterProxy.h
@@ -121,6 +124,7 @@ qt_add_qml_module(basecamp_appmanager_qml
         Basecamp/AppManager/PackageRowDelegate.qml
         Basecamp/AppManager/AddApplicationDialog.qml
         Basecamp/AppManager/AppColors.qml
+        Basecamp/AppManager/DownloadFormat.qml
 )
 
 qt_add_qml_module(basecamp_settings_qml
@@ -151,6 +155,9 @@ qt_add_qml_module(basecamp_shell_qml
         Basecamp/Shell/ContentViews.qml
         Basecamp/Shell/OverlayDialogs.qml
         Basecamp/Shell/ConfirmationDialog.qml
+        Basecamp/Shell/IntentDialog.qml
+        Basecamp/Shell/IntentChooserDialog.qml
+        Basecamp/Shell/IntentInstallDialog.qml
         Basecamp/Shell/UninstallDialog.qml
         Basecamp/Shell/WelcomePage.qml
 )
