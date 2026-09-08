@@ -1,4 +1,5 @@
 #include "FixtureBackend.h"
+#include "ShellSections.h"
 
 #include <QDebug>
 #include <QJsonArray>
@@ -13,6 +14,11 @@ FixtureBackend::FixtureBackend(const QJsonObject& fixture, QObject* parent)
     m_uiModules.setRows(m_fixture.value("uiModules").toArray().toVariantList());
     m_coreModules.setRows(m_fixture.value("coreModules").toArray().toVariantList());
     m_apps.setRows(m_fixture.value("apps").toArray().toVariantList());
+    const int section = m_fixture.value("currentActiveSectionIndex").toInt(m_sectionIndex);
+    if (ShellSection::isValid(section))
+        m_sectionIndex = section;
+    else
+        qWarning() << "fixture: ignoring invalid currentActiveSectionIndex" << section;
 }
 
 int FixtureBackend::currentActiveSectionIndex() const { return m_sectionIndex; }

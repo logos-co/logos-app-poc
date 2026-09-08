@@ -196,7 +196,22 @@
       packages = forAllMobileTargets ({ pkgs, system, buildSystem, logosDesignSystem }: {
         # Slices 04/06 add main-ui-plugin, shell-preview-android/ios here.
         design-system = logosDesignSystem;
-      }) // forAllSystems ({ pkgs, system, logosSdk, logosSdkBuild, logosProtocolPkg, logosQtHost, logosQtSdk, logosModule, logosLiblogos, logosLiblogosPortable, logosPackageManagerLibrary, logosPackageManagerModule, logosPackageManagerModuleLib, logosPackageManagerModuleLibPortable, logosPackageDownloaderModule, logosPackageDownloaderModuleLib, logosPackageLib, logosPackageHeaders, logosPackageManagerUI, logosCapabilityModule, logosModulesStateModule, logosDesignSystem, logosViewModuleRuntime, logosQtMcp, installDev, installPortable, dirBundler, ... }:
+      } // nixpkgs.lib.optionalAttrs (nixpkgs.lib.hasPrefix "aarch64-ios" system) (
+        # iOS replaces design-system too: its stages must compile on Xcode's
+        # clang, which the nixpkgs iOS stdenv behind
+        # logosDesignSystem does not.
+        import ./nix/shell-preview-ios.nix {
+          inherit pkgs;
+          src = ./.;
+          # Only .version is read; the logos inputs never reach these stages.
+          version = (import ./nix/default.nix {
+            inherit pkgs;
+            logosSdk = null; logosProtocolPkg = null; logosQtHost = null;
+            logosModule = null; logosLiblogos = null;
+          }).version;
+          designSystemSrc = logos-design-system;
+        }
+      )) // forAllSystems ({ pkgs, system, logosSdk, logosSdkBuild, logosProtocolPkg, logosQtHost, logosQtSdk, logosModule, logosLiblogos, logosLiblogosPortable, logosPackageManagerLibrary, logosPackageManagerModule, logosPackageManagerModuleLib, logosPackageManagerModuleLibPortable, logosPackageDownloaderModule, logosPackageDownloaderModuleLib, logosPackageLib, logosPackageHeaders, logosPackageManagerUI, logosCapabilityModule, logosModulesStateModule, logosDesignSystem, logosViewModuleRuntime, logosQtMcp, installDev, installPortable, dirBundler, ... }:
         let
           # Common configuration
           common = import ./nix/default.nix {
@@ -634,6 +649,13 @@
         bin-bundle-dir = {
           type = "app";
           program = "${self.packages.${system}.bin-bundle-dir}/bin/LogosBasecamp";
+        };
+      } // nixpkgs.lib.optionalAttrs (system == "aarch64-darwin") {
+        # nix run .#run-ios-sim -- the impure half of shell-preview-ios:
+        # Xcode-generator configure, unsigned xcodebuild, simctl.
+        run-ios-sim = {
+          type = "app";
+          program = "${self.packages.aarch64-ios-simulator.run-ios-sim}/bin/run-ios-sim";
         };
       });
 

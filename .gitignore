@@ -21,3 +21,7 @@ doctests/result*
 
 # user-dirs staged by doctest run: blocks when executed from the repo root
 testdata/
+
+# agent build logs and simulator screenshots (a dirty tree copies untracked files into src = ./.)
+*.log
+shell-ios-sim*.png
