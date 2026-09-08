@@ -134,6 +134,7 @@ Control {
                             iconSource: modelData.iconPath
                             fullBleedIcon: modelData.supportsFullBleedIcon === true
                             hasMissingDeps: modelData.hasMissingDeps === true
+                            depBlockKind: modelData.depBlockKind || ""
                             onClicked: root.launchUIModule(modelData.name)
                             onTooltipRequested: (text, y) => root.tooltipRequested(text, y)
                         }
@@ -159,6 +160,7 @@ Control {
                             iconSource: modelData.iconPath
                             fullBleedIcon: modelData.supportsFullBleedIcon === true
                             hasMissingDeps: modelData.hasMissingDeps === true
+                            depBlockKind: modelData.depBlockKind || ""
                             onClicked: root.launchUIModule(modelData.name)
                             onTooltipRequested: (text, y) => root.tooltipRequested(text, y)
                         }
@@ -193,9 +195,15 @@ Control {
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignHCenter
             horizontalAlignment: TextEdit.AlignHCenter
-            text: (backend.buildVersion.length > 0 ? backend.buildVersion + " · " : "")
-                + (backend.isPortableBuild ? qsTr("Portable") : qsTr("Dev"))
-            color: Theme.palette.textSecondary
+            text: {
+                const base = (backend.buildVersion.length > 0 ? backend.buildVersion + " · " : "")
+                    + (backend.isPortableBuild ? qsTr("Portable") : qsTr("Dev"))
+                return backend.isMockBackend
+                    ? base + " " + qsTr("(Mocked)")
+                    : base
+            }
+            color: backend.isMockBackend ? Theme.palette.warning
+                                         : Theme.palette.textSecondary
             font.pixelSize: Theme.typography.badgeText
             wrapMode: TextEdit.WrapAnywhere
         }

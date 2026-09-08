@@ -1,9 +1,13 @@
 #pragma once
 
+#include <memory>
+
 #include "InstallEnums.h"
 #include "ModuleInstanceModel.h"
 
 #include <QAbstractItemModel>
+#include "ICoreRuntime.h"
+
 #include <QObject>
 #include <QVariantList>
 #include <QVariantMap>
@@ -15,10 +19,14 @@ class CoreModuleManager;
 class PackageCoordinator;
 class QWidget;
 class UIPluginManager;
+class IntentRegistry;
+class IntentBroker;
+class IntentBridgeAdapter;
+class UIPluginPresenter;
+class ShellIntentEndpoint;
+class ShellIntentChooser;
+class ShellIntentInstaller;
 
-// The process-wide core facade, created and owned by main(). Threaded down to
-// CoreModuleManager, which is the only thing here that calls it.
-namespace logos { namespace qt { class QtLogosCore; } }
 
 
 // MainUIBackend — thin QML-facing facade.
@@ -84,6 +92,8 @@ class MainUIBackend : public QObject {
 
     // App Launcher
     Q_PROPERTY(QVariantList launcherApps READ launcherApps NOTIFY launcherAppsChanged)
+    // Most-recently-closed apps, persisted across restarts.
+    Q_PROPERTY(QVariantList recentlyClosedApps READ recentlyClosedApps NOTIFY recentlyClosedAppsChanged)
     Q_PROPERTY(QString currentVisibleApp READ currentVisibleApp NOTIFY currentVisibleAppChanged)
     Q_PROPERTY(QStringList loadingModules READ loadingModules NOTIFY loadingModulesChanged)
 
@@ -93,6 +103,18 @@ class MainUIBackend : public QObject {
     //   * buildCommits: list of { name, commit } for basecamp + each flake input.
     Q_PROPERTY(QString buildVersion READ buildVersion CONSTANT)
     Q_PROPERTY(bool isPortableBuild READ isPortableBuild CONSTANT)
+
+    //   * isMockBackend: this Basecamp is serving FIXTURE DATA. No module is
+    //     running, nothing is installed or downloaded, and every list on screen
+    //     came out of a JSON file.
+    //
+    // Surfaced in the UI deliberately. A mock-backed build is indistinguishable
+    // from a working one at a glance — modules listed, catalog populated, stats
+    // ticking — which is exactly what makes it dangerous to mistake for the real
+    // thing. The sidebar badge is the cheapest possible guard against someone
+    // filing a bug, or shipping a screenshot, from a build that was never
+    // talking to anything.
+    Q_PROPERTY(bool isMockBackend READ isMockBackend CONSTANT)
     Q_PROPERTY(QVariantList buildCommits READ buildCommits CONSTANT)
 
     // Package repositories
@@ -114,7 +136,7 @@ class MainUIBackend : public QObject {
 
 public:
     explicit MainUIBackend(LogosAPI* logosAPI = nullptr,
-                           logos::qt::QtLogosCore* core = nullptr,
+                           ICoreRuntime* core = nullptr,
                            QObject* parent = nullptr);
 
     // Tears down the UI-plugin layer while the shell that hosts those widgets
@@ -128,12 +150,14 @@ public:
 
     // Delegations to UIPluginManager.
     QVariantList launcherApps() const;
+    QVariantList recentlyClosedApps() const;
     QString      currentVisibleApp() const;
     QStringList  loadingModules() const;
 
     // Build info accessors (see Q_PROPERTY declarations above).
     QString buildVersion() const;
     bool isPortableBuild() const;
+    bool isMockBackend() const;
     QVariantList buildCommits() const;
 
     QVariantList repositories() const;
@@ -170,6 +194,34 @@ public slots:
 
     // Friendly module label, resolved from the catalog with fallback to `name`.
     Q_INVOKABLE QString displayNameFor(const QString& moduleName) const;
+
+    // ── Intents ─────────────────────────────────────────────────────────
+    //
+    // Delegating one-liners, like the rest of this facade. The broker is
+    // deliberately NOT exposed to the QML context: that would let any view
+    // reach policy directly and break the single-surface contract.
+    // Returns whether the broker accepted the response — false means the
+    // dispatch already ended and nobody heard it.
+    Q_INVOKABLE bool respondToShellIntent(const QString& requestId, bool ok,
+                                          const QVariant& data = QVariant(),
+                                          const QString& error = QString());
+    Q_INVOKABLE void resolveIntentChooser(const QString& dispatchId,
+                                          const QString& providerName);
+    Q_INVOKABLE void cancelIntentChooser(const QString& dispatchId);
+
+    // Install suggestion. The request that prompted it is already finished, so
+    // there is no dispatch id and nothing to answer — just an ordinary install.
+    Q_INVOKABLE void beginIntentInstall(const QString& providerName);
+
+    // "Who is this?" from the chooser — opens the App Manager's own detail
+    // view for a package rather than summarising it in a dialog.
+    Q_INVOKABLE void showPackageDetails(const QString& packageName);
+
+    // "Install this package" from outside the Package Manager — the welcome
+    // page's result tiles. Hands off to whoever provides `packages.install`,
+    // so the user lands in the Package Manager on that package, in front of
+    // the same gate dialog its own rows raise.
+    Q_INVOKABLE void requestPackageInstall(const QString& packageName);
 
     // Uninstall flow — delegated to PackageCoordinator. uninstallApp is the
     // App-Manager entry point: it composes a batch (app + orphaned deps) and
@@ -228,6 +280,12 @@ public slots:
     void onAppLauncherClicked(const QString& appName);
     void setCurrentVisibleApp(const QString& pluginName);
 
+    // Pushed from OverlayDialogs.qml's anyDialogOpen binding. Read by the
+    // intent presenter, which declines to auto-return while a dialog owns the
+    // screen. Not a Q_PROPERTY: nothing binds to it, and a property would
+    // invite QML to start driving navigation policy.
+    Q_INVOKABLE void setOverlayActive(bool active);
+
     Q_INVOKABLE void refreshRepositories();
     Q_INVOKABLE void refreshAppCatalog();
     Q_INVOKABLE void addRepository(const QString& url);
@@ -251,10 +309,35 @@ signals:
     void catalogInstallFinished(const QString& name);
     void catalogInstallFailed(const QString& name, const QString& error);
     void launcherAppsChanged();
+    void recentlyClosedAppsChanged();
     void currentVisibleAppChanged();
     void loadingModulesChanged();
     void navigateToApps();
-    void navigateToRepositoriesRequested();
+
+    // ── Intents ─────────────────────────────────────────────────────────
+    // An app asked for a capability the shell provides. Answer with
+    // respondToShellIntent(requestId, …). Exactly one handler should connect;
+    // the receiver count is what tells the broker anyone is listening at all.
+    void shellIntentRequested(const QString& requestId, const QString& intent,
+                              const QVariantMap& params, const QString& requesterName);
+
+    // Two or more apps provide the requested capability. `providers` is a sorted
+    // list of {moduleName, displayName, iconSource} that the requester never
+    // sees and cannot influence.
+    void intentChooserRequested(const QString& dispatchId, const QString& intent,
+                                const QString& requesterName,
+                                const QVariantList& providers);
+    void intentChooserDismissed(const QString& dispatchId);
+
+    // Nothing installed provides the requested capability, but the catalog
+    // knows packages that would. `candidates` is sorted. The REQUESTER is never
+    // told any of this — see ShellIntentInstaller for why.
+    // `candidates` is the sorted module names; `details` is the same list with
+    // displayName and repositoryUrl attached, so the dialog can show where each
+    // package would come from without looking anything up itself.
+    void intentInstallOffered(const QString& intent,
+                              const QStringList& candidates,
+                              const QVariantList& details);
 
     // `packageName` falls back to the file name if the manifest was unreadable.
     void installFailureNoticeRequested(const QString& packageName,
@@ -263,7 +346,9 @@ signals:
     // Dependency-aware UX. missingDepsPopup + unloadCascade come from
     // UIPluginManager; installGate + uninstallPlan come from
     // PackageCoordinator.
-    void missingDepsPopupRequested(const QString& name, const QStringList& missing);
+    void missingDepsPopupRequested(const QString& name,
+                                   const QVariantList& blockers,
+                                   const QString& summary);
     void unloadCascadeConfirmationRequested(const QString& name, const QStringList& loadedDependents);
     // Single uninstall-confirmation trigger for all four initiators — pure
     // re-emit of PackageCoordinator::uninstallPlanRequested, whose comment
@@ -287,14 +372,22 @@ signals:
     // of PackageCoordinator::installGateConfirmationRequested. releaseTag is the
     // target version; depChanges is the resolved transitive set the single
     // basecamp dialog lists.
+    // Carries every argument PackageCoordinator emits. It used to declare
+    // only the first three, and Qt truncates silently on connect — so the QML
+    // handler's requesterName / requesterBundled arrived undefined and the
+    // "who asked" line never rendered.
     void installGateConfirmationRequested(const QString& name,
                                           const QString& releaseTag,
-                                          const QVariantList& depChanges);
+                                          const QVariantList& depChanges,
+                                          const QString& requesterName,
+                                          bool requesterBundled,
+                                          bool depChangesResolved);
 
     // MDI coordination (re-emitted from UIPluginManager).
     void pluginWindowRequested(QWidget* widget, const QString& title);
     void pluginWindowRemoveRequested(QWidget* widget);
-    void pluginWindowActivateRequested(QWidget* widget);
+    // Presentation seam — see IShellHost::onPresentAppRequested.
+    void presentAppRequested(QWidget* widget);
 
     void repositoriesChanged();
     void repositoriesLoadingChanged();
@@ -304,6 +397,26 @@ signals:
                                       const QString& url,
                                       bool success,
                                       const QString& error);
+
+private:
+    // Wires the intent signal graph and registers the shell's own provided
+    // capabilities. Called once, after UIPluginManager exists.
+    void wireIntents();
+    void rebuildIntentRegistry();
+    void rebuildInstallableProviders();
+    QString repositoryUrlFor(const QString& packageName) const;
+
+public:
+    // What the chooser shows when a user expands a provider row. Resolved
+    // ENTIRELY shell-side from the package record, so a provider cannot dress
+    // itself up — and deliberately NOT the requester's params, which would put
+    // attacker-chosen text in the one dialog whose premise is that the shell
+    // drew it.
+    Q_INVOKABLE QVariantMap providerDetailsFor(const QString& packageName) const;
+
+private:
+    bool m_registryDeclares(const QString& intent) const;
+    void showPackageDetailsFallback(const QString& packageName);
 
 private slots:
     // Rebuild the inspectors' models from the current manager state. Each
@@ -326,10 +439,25 @@ private:
 
     // Navigation state — the only state this facade class holds.
     int m_currentActiveSectionIndex;
+    bool m_overlayActive = false;
+
+    // Intents. Construction order in the ctor is what decides destruction
+    // order — see the comment there.
+    IntentRegistry*      m_intentRegistry  = nullptr;
+    IntentBroker*        m_intentBroker    = nullptr;
+    IntentBridgeAdapter* m_intentAdapter   = nullptr;
+    UIPluginPresenter*   m_intentPresenter = nullptr;
+    std::unique_ptr<ShellIntentEndpoint> m_shellEndpoint;
+    std::unique_ptr<ShellIntentChooser>  m_intentChooser;
+    std::unique_ptr<ShellIntentInstaller> m_intentInstaller;
+
+    // providerName -> dispatchId, for installs started to satisfy an intent.
+    // Keyed by package because that is what the install-completion signals
+    // carry; a package installed for any other reason simply is not in here.
 
     // LogosAPI — shared with all three managers.
     LogosAPI* m_logosAPI;
-    logos::qt::QtLogosCore* m_core; // not owned; owned by main()
+    ICoreRuntime* m_core; // not owned; owned by main()
     bool m_ownsLogosAPI;
 
     // Owned children (parent=this). Order matters: coreModuleManager first,

@@ -69,6 +69,7 @@ QVariant AppsModel::data(const QModelIndex& index, int role) const
     case SupportsFullBleedIconRole: return r.supportsFullBleedIcon;
     case VersionsRole:         return r.versions;
     case DependenciesRole:     return r.dependencies;
+    case ProvidesRole:         return r.provides;
     case InstalledVersionRole: return r.installedVersion;
     case LatestVersionRole:    return r.latestVersion;
     case HasUpdateRole:
@@ -97,6 +98,21 @@ QVariant AppsModel::data(const QModelIndex& index, int role) const
                             : static_cast<int>(InstallStage::None);
     case InstallErrorRole:
         return m_installRegistry ? m_installRegistry->error(r.name) : QString();
+    case DownloadReceivedRole:
+        return QVariant::fromValue(
+            m_installRegistry ? m_installRegistry->downloadReceived(r.name) : quint64(0));
+    case DownloadTotalRole:
+        return QVariant::fromValue(
+            m_installRegistry ? m_installRegistry->downloadTotal(r.name) : quint64(0));
+    case PlanDownloadReceivedRole:
+        return QVariant::fromValue(
+            m_installRegistry ? m_installRegistry->planDownloadReceived(r.name) : quint64(0));
+    case PlanDownloadTotalRole:
+        return QVariant::fromValue(
+            m_installRegistry ? m_installRegistry->planDownloadTotal(r.name) : quint64(0));
+    case PlanInstallStageRole:
+        return m_installRegistry ? m_installRegistry->planStage(r.name)
+                                 : static_cast<int>(InstallStage::None);
     }
     return {};
 }
@@ -114,6 +130,7 @@ QHash<int, QByteArray> AppsModel::roleNames() const
         {SupportsFullBleedIconRole, "supportsFullBleedIcon"},
         {VersionsRole,         "versions"},
         {DependenciesRole,     "dependencies"},
+        {ProvidesRole,         "provides"},
         {InstalledVersionRole, "installedVersion"},
         {LatestVersionRole,    "latestVersion"},
         {HasUpdateRole,        "hasUpdate"},
@@ -127,6 +144,11 @@ QHash<int, QByteArray> AppsModel::roleNames() const
         {ResolverErrorRole,    "resolverError"},
         {InstallStageRole,     "installStage"},
         {InstallErrorRole,     "installError"},
+        {DownloadReceivedRole,     "downloadReceived"},
+        {DownloadTotalRole,        "downloadTotal"},
+        {PlanDownloadReceivedRole, "planDownloadReceived"},
+        {PlanDownloadTotalRole,    "planDownloadTotal"},
+        {PlanInstallStageRole,     "planInstallStage"},
     };
 }
 
@@ -231,6 +253,17 @@ void AppsModel::recomputeVersionDerivedFields(Row& r)
             r.dependencies.append(entry);
         }
     }
+
+    // Intents the package advertises (names only)
+    r.provides.clear();
+    for (const QVariant& v : firstManifest.value("provides").toList()) {
+        const QString intent = v.typeId() == QMetaType::QString
+            ? v.toString()
+            : v.toMap().value(QStringLiteral("intent")).toString();
+        if (!intent.isEmpty() && !r.provides.contains(intent))
+            r.provides.append(intent);
+    }
+
     recomputeInstallStatus(r);
 }
 
@@ -398,6 +431,8 @@ void AppsModel::mergeLocalOnlyInstalled(const QVariantList& installedPackages)
         r.installedVersion = pkg.value("version").toString();
         r.installedHash    = pkg.value("hashes").toMap().value("root").toString();
         r.installType      = pkg.value("installType").toString();
+        r.supportsFullBleedIcon = AppsModel::supportsFullBleedIcon(
+            pkg.value("manifestVersion").toString());
         // versions{} + empty latestVersion → recomputeInstallStatus lands on
         // InstallStatus::Installed (installedVersion set + no release to
         // compare against). HasUpdate stays false. Local-only rows expose no
@@ -502,14 +537,23 @@ void AppsModel::setInstallType(const QString& name, const QString& installType)
     }
 }
 
-void AppsModel::setIconUrl(const QString& name, const QString& iconUrl)
+void AppsModel::setIconUrl(const QString& name,
+                           const QString& iconUrl,
+                           const QString& manifestVersion)
 {
+    const bool fullBleed = AppsModel::supportsFullBleedIcon(manifestVersion);
     for (int idx : m_indicesByName.values(name)) {
         Row& r = m_rows[idx];
-        if (r.iconUrl == iconUrl) continue;
+        const bool iconChanged     = r.iconUrl != iconUrl;
+        const bool fullBleedChanged = r.supportsFullBleedIcon != fullBleed;
+        if (!iconChanged && !fullBleedChanged) continue;
         r.iconUrl = iconUrl;
+        r.supportsFullBleedIcon = fullBleed;
+        QList<int> roles;
+        if (iconChanged)      roles.append(IconUrlRole);
+        if (fullBleedChanged) roles.append(SupportsFullBleedIconRole);
         const QModelIndex mi = index(idx);
-        emit dataChanged(mi, mi, {IconUrlRole});
+        emit dataChanged(mi, mi, roles);
     }
 }
 
@@ -535,7 +579,8 @@ void AppsModel::setInstallRegistry(InstallRegistry* installRegistry)
     if (!m_installRegistry) return;
 
     auto refresh = [this](const QString& name) {
-        const QList<int> roles{InstallStageRole, InstallErrorRole, ActionRole};
+        const QList<int> roles{InstallStageRole, InstallErrorRole, ActionRole,
+                               PlanInstallStageRole};
         for (int idx : m_indicesByName.values(name)) {
             const QModelIndex mi = index(idx);
             emit dataChanged(mi, mi, roles);
@@ -545,6 +590,27 @@ void AppsModel::setInstallRegistry(InstallRegistry* installRegistry)
             [refresh](const QString& name, InstallStage::Value) { refresh(name); });
     connect(m_installRegistry, &InstallRegistry::errorChanged, this,
             [refresh](const QString& name, const QString&) { refresh(name); });
+    // Narrower role set than `refresh`: this fires several times a second
+    // per download, and re-evaluating ActionRole with it would churn every
+    // binding on the row for no reason.
+    connect(m_installRegistry, &InstallRegistry::planStageChanged, this,
+            [this](const QString& topLevel) {
+                const QList<int> roles{PlanInstallStageRole};
+                for (int idx : m_indicesByName.values(topLevel)) {
+                    const QModelIndex mi = index(idx);
+                    emit dataChanged(mi, mi, roles);
+                }
+            });
+    connect(m_installRegistry, &InstallRegistry::downloadProgressChanged, this,
+            [this](const QString& name) {
+                const QList<int> roles{DownloadReceivedRole, DownloadTotalRole,
+                                       PlanDownloadReceivedRole, PlanDownloadTotalRole,
+                                       PlanInstallStageRole};
+                for (int idx : m_indicesByName.values(name)) {
+                    const QModelIndex mi = index(idx);
+                    emit dataChanged(mi, mi, roles);
+                }
+            });
 }
 
 // ── Mutation: resolver overlay ─────────────────────────────────────────────

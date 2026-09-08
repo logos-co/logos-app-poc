@@ -103,7 +103,7 @@ test("welcome: first launch shows the welcome page", async (app) => {
       throw new Error(
         `backend.launcherApps.length=${JSON.stringify(lenRes.result)} (expected number)`);
     }
-    const expected = lenRes.result === 0 ? "Welcome to Basecamp!" : "Welcome back";
+    const expected = lenRes.result === 0 ? "Welcome to Basecamp!" : "Welcome Back,";
     await app.expectTexts([expected]);
   }, { timeout: 10000, interval: 500, description: "greeting to match backend.launcherApps" });
 
@@ -122,7 +122,7 @@ test("welcome: first launch shows the welcome page", async (app) => {
       // The inspector serializes object results as "<QJSValue>" — return JSON.
       return JSON.stringify({
         hasFirstLaunch: hasText(this, "Welcome to Basecamp!"),
-        hasWelcomeBack: hasText(this, "Welcome back"),
+        hasWelcomeBack: hasText(this, "Welcome Back,"),
       });
     })()`,
   });
@@ -135,26 +135,175 @@ test("welcome: first launch shows the welcome page", async (app) => {
   if (hasFirstLaunch === hasWelcomeBack) {
     throw new Error(
       `greeting texts present: "Welcome to Basecamp!"=${hasFirstLaunch}, ` +
-      `"Welcome back"=${hasWelcomeBack} (expected exactly one)`);
+      `"Welcome Back,"=${hasWelcomeBack} (expected exactly one)`);
+  }
+});
+
+// --- Welcome page: search, filters and Recently Closed -------------------
+// Placed before the navigation tests below, which click the welcome page away.
+// All of these drive the page through the inspector rather than synthesised
+// keystrokes, because the QML lives in an offscreen QQuickWindow.
+
+// Set a QML property through the inspector. `evaluate` runs in the object's
+// scope, so an assignment is the portable way to poke one.
+async function setQmlProperty(app, objectName, expression) {
+  const obj = await findByObjectName(app.inspector, objectName);
+  if (!obj) throw new Error(`no object named "${objectName}"`);
+  const res = await app.inspector.send("evaluate", { objectId: obj.id, expression });
+  if (res.error) throw new Error(`evaluate("${expression}") failed: ${res.error}`);
+  return obj;
+}
+
+async function visibilityOf(app, objectName) {
+  const obj = await findByObjectName(app.inspector, objectName);
+  if (!obj) return null;
+  const res = await app.inspector.send("evaluate", {
+    objectId: obj.id, expression: "visible",
+  });
+  if (res.error) throw new Error(`evaluate(visible) on ${objectName}: ${res.error}`);
+  return res.result;
+}
+
+test("welcome: Recently Closed is hidden until an app has been closed", async (app) => {
+  const page = await findWelcomePage(app);
+  if (!page) throw new Error("no WelcomePage instance in the QML tree");
+
+  const countRes = await app.inspector.send("evaluate", {
+    objectId: page.id, expression: "backend.recentlyClosedApps.length",
+  });
+  if (countRes.error) {
+    throw new Error(`evaluate(recentlyClosedApps.length) failed: ${countRes.error}`);
+  }
+  const count = countRes.result;
+  if (typeof count !== "number") {
+    throw new Error(`recentlyClosedApps.length=${JSON.stringify(count)} (expected number)`);
+  }
+
+  // The section is bound to the list being non-empty, both ways round: an
+  // empty heading over blank space is as wrong as a populated list not showing.
+  const visible = await visibilityOf(app, "welcomePage.recentlyClosed");
+  if (count === 0 && visible === true) {
+    throw new Error("Recently Closed is visible with an empty list");
+  }
+  if (count > 0 && visible !== true) {
+    throw new Error(`Recently Closed hidden with ${count} entries — the list is `
+                  + "restored from disk, so this is the startup-race regression");
+  }
+});
+
+test("welcome: a query swaps Recently Closed for results", async (app) => {
+  await setQmlProperty(app, "welcomePage.search", 'text = "a"');
+
+  await app.waitFor(async () => {
+    if (await visibilityOf(app, "welcomePage.searchResults") !== true) {
+      throw new Error("results section did not appear");
+    }
+    if (await visibilityOf(app, "welcomePage.recentlyClosed") === true) {
+      throw new Error("Recently Closed still visible while searching");
+    }
+  }, { timeout: 5000, interval: 200, description: "results to replace Recently Closed" });
+
+  // Clearing restores the resting state.
+  await setQmlProperty(app, "welcomePage.search", 'text = ""');
+  await app.waitFor(async () => {
+    if (await visibilityOf(app, "welcomePage.searchResults") === true) {
+      throw new Error("results still visible after clearing the query");
+    }
+  }, { timeout: 5000, interval: 200, description: "results to clear" });
+});
+
+test("welcome: a query with no matches explains itself", async (app) => {
+  await setQmlProperty(app, "welcomePage.search", 'text = "zzzzz-no-such-package"');
+
+  await app.waitFor(async () => {
+    if (await visibilityOf(app, "welcomePage.noResults") !== true) {
+      throw new Error("no-results notice did not appear");
+    }
+  }, { timeout: 5000, interval: 200, description: "no-results notice" });
+
+  await setQmlProperty(app, "welcomePage.search", 'text = ""');
+});
+
+test("welcome: the filter chips scope which result rows show", async (app) => {
+  await setQmlProperty(app, "welcomePage.search", 'text = "a"');
+  await sleep(300);
+
+  const chip = await findByObjectName(app.inspector, "welcomePage.filterPackages");
+  if (!chip) throw new Error("packages filter chip not found");
+  const clicked = await app.inspector.send("callMethod", {
+    objectId: chip.id, method: "clicked",
+  });
+  if (clicked.error) throw new Error(`callMethod(clicked) failed: ${clicked.error}`);
+
+  // The apps row must yield to the active chip. The packages row may still be
+  // empty on a bare install, so only the exclusion is asserted.
+  await app.waitFor(async () => {
+    if (await visibilityOf(app, "welcomePage.results.apps") === true) {
+      throw new Error("applications row still visible under the packages filter");
+    }
+  }, { timeout: 5000, interval: 200, description: "apps row to hide" });
+
+  await app.inspector.send("callMethod", { objectId: chip.id, method: "clicked" });
+  await setQmlProperty(app, "welcomePage.search", 'text = ""');
+});
+
+// ⌘K cannot be driven end-to-end here: the inspector cannot synthesise a key
+// event into the offscreen QQuickWindow, and that window is never "active", so
+// activeFocus is false for every item no matter what has focus. What IS
+// assertable is the half that regressed before — that the page still declares
+// the shortcut for ShortcutBridge to mirror onto the host. The bridge logs
+// "bound N QML shortcut(s)" for the welcome pane when it picks it up.
+test("welcome: the page declares a ⌘K shortcut for the bridge to mirror", async (app) => {
+  const res = await app.inspector.send("findByType", { typeName: "QQuickShortcut" });
+  const shortcuts = res.matches ?? [];
+  if (shortcuts.length === 0) throw new Error("no Shortcut declared on the welcome page");
+
+  let found = false;
+  for (const sc of shortcuts) {
+    const seq = await app.inspector.send("evaluate", {
+      objectId: sc.id, expression: "JSON.stringify({ s: nativeText, on: enabled })",
+    });
+    if (seq.error) continue;
+    const info = JSON.parse(seq.result);
+    if (typeof info.s === "string" && /K$/i.test(info.s)) {
+      if (info.on !== true) throw new Error(`⌘K shortcut present but enabled=${info.on}`);
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
+    throw new Error("no enabled ⌘K shortcut among "
+                  + `${shortcuts.length} declared shortcut(s)`);
   }
 });
 
 const CI_MODE = process.argv.includes("--ci");
 // --- Welcome page (A2) — must run right after A1: navigating clicks the
 // welcome page away ---
-test('welcome: "Install now" navigates to Applications', async (app) => {
-  // Prefer the spec objectName; fall back to the button text until
-  // "welcomePage.installNow" exists in WelcomePage.qml.
+test('welcome: "Discover Applications" navigates to Applications', async (app) => {
+  // Typed before navigating, asserted after: the welcome search is INVOCATION
+  // search — summoned, used, left — so it must not survive the page going
+  // away. Checked here rather than in its own test because navigation is
+  // one-way; by the time a later test ran, the welcome page would be gone.
+  //
+  // This is the one regression only a real app can catch. WorkspaceArea drives
+  // the clear from hideEvent, because the QML cannot see it happen: the root
+  // Item's `visible` stays true inside the offscreen QQuickWidget host (see the
+  // "workspace" assertion at the end of this test). A QML onVisibleChanged
+  // handler is silently dead, and the unit suite cannot tell — rootObject() is
+  // null there, since the QML module is not linked into that binary.
+  await setQmlProperty(app, "welcomePage.search", 'text = "waku"');
+
   let button = null;
   await app.waitFor(async () => {
-    const byName = await app.findByProperty("objectName", "welcomePage.installNow");
+    const byName = await app.findByProperty(
+      "objectName", "welcomePage.discoverApplications");
     button = (byName.matches ?? [])[0] || null;
     if (!button) {
-      const byText = await app.findByProperty("text", "Install now");
-      button = (byText.matches ?? []).find((m) => (m.type ?? "").includes("Button")) || null;
+      throw new Error('"Discover Applications" block not found on the welcome page');
     }
-    if (!button) throw new Error('"Install now" button not found on the welcome page');
-  }, { timeout: 10000, interval: 500, description: '"Install now" button to exist' });
+  }, { timeout: 10000, interval: 500,
+       description: '"Discover Applications" block to exist' });
 
   // Signal-level click — coordinate hit-testing on offscreen is fragile
   // (see installViaPmu); the onClicked handler chain is identical.
@@ -217,6 +366,151 @@ test('welcome: "Install now" navigates to Applications', async (app) => {
       `welcome page still visible: workspace visible=` +
       `${JSON.stringify(visible)} (expected false)`);
   }
+
+  // ...and the query typed at the top of this test died with the page.
+  const field = await findByObjectName(app.inspector, "welcomePage.search");
+  if (!field) throw new Error("welcome search field not found after navigating");
+  const text = await app.inspector.send("evaluate", {
+    objectId: field.id, expression: "text",
+  });
+  if (text.error) throw new Error(`evaluate(text) failed: ${text.error}`);
+  if (text.result !== "") {
+    throw new Error(
+      `welcome search still holds ${JSON.stringify(text.result)} after ` +
+      "navigating away — WorkspaceArea::clearWelcomeSearch did not run");
+  }
+});
+
+// --- Workspace (A3) — opening an app replaces the welcome page with a dock ---
+// Runs after A2: it hides the welcome host and leaves a dock open, so it must
+// not sit between A1 and A2 (A2 asserts the pre-navigation welcome state).
+//
+// Fixture A (test_qml_only, spec §0.A) is pre-seeded into <user-dir>/plugins/
+// by nix/integration-test.nix, so in --ci mode its sidebar tile is guaranteed
+// to appear once launcherApps populates. When attached to a locally running
+// app without the fixture, spec §0.A says skip, not fail — --ci in argv is
+// how the two cases are told apart (see the integration-test invocation).
+//
+// The dock check uses WorkspaceArea's dockCount test hook rather than the
+// spec's workspace.dock.<name> objectName: DockCard's objectName is the
+// constant "dockCard" on this branch (src/WorkspaceArea.cpp:96).
+
+// Payload text rendered by fixture A's Main.qml (see qmlViewFor in
+// tests/fixtures/lgx.mjs) — derived from FIXTURE_A so it can't drift.
+const FIXTURE_A_TEXT =
+  `${FIXTURE_A.displayName} (${FIXTURE_A.name}) v${FIXTURE_A.version}`;
+
+// Welcome visibility lives on the hosting QQuickWidget —
+// WorkspaceArea::updateWelcomeVisibility() hides the widget, not the QML
+// item (the C++ unit tests assert isVisibleTo on the widget for the same
+// reason) — and that widget has no objectName. Locate it by source URL
+// among QQuickWidget instances; fall back to the item's Window attached
+// property (QQuickWidget mirrors widget show/hide onto its offscreen
+// window).
+async function welcomePageHidden(app, welcomeItemId) {
+  const byType = await app.inspector.send("findByType", { typeName: "QQuickWidget" });
+  for (const m of byType.matches ?? []) {
+    const props = await app.inspector.send("getProperties", { objectId: m.id });
+    const source = props.properties?.find((p) => p.name === "source")?.value;
+    if (typeof source === "string" && source.includes("WelcomePage.qml")) {
+      const visible = props.properties?.find((p) => p.name === "visible")?.value;
+      if (typeof visible === "boolean") return !visible;
+    }
+  }
+  const winRes = await app.inspector.send("evaluate", {
+    objectId: welcomeItemId, expression: "Window.visible",
+  });
+  if (typeof winRes.result === "boolean") return !winRes.result;
+  throw new Error(
+    "cannot determine welcome-page visibility: no QQuickWidget with a " +
+    "WelcomePage.qml source found, and Window.visible did not evaluate " +
+    "to a boolean");
+}
+
+test("workspace: opening an app replaces the welcome page with a dock", async (app) => {
+  // Stable evaluate anchor with `backend` in context. The sidebar tile
+  // cannot anchor the post-click waits: launching moves the app from the
+  // unloaded to the loaded Repeater, destroying the clicked delegate.
+  let welcome = null;
+  await app.waitFor(async () => {
+    welcome = await findWelcomePage(app);
+    if (!welcome) throw new Error("no WelcomePage instance in the QML tree");
+  }, { timeout: 10000, interval: 500, description: "WelcomePage instance to exist" });
+
+  // App tiles render icon-only (name is a tooltip), so click by the
+  // §4.1 automation objectName, not by text.
+  let tile = null;
+  try {
+    await app.waitFor(async () => {
+      tile = await findByObjectName(app.inspector, `sidebar.app.${FIXTURE_A.name}`);
+      if (!tile) throw new Error(`sidebar.app.${FIXTURE_A.name} not in the tree`);
+    }, { timeout: 10000, interval: 500, description: "fixture A sidebar tile to appear" });
+  } catch (e) {
+    if (!CI_MODE) {
+      console.log(
+        `    SKIP: fixture A (${FIXTURE_A.name}) is not installed in this ` +
+        `app instance (spec §0.A: skip, not fail, outside --ci)`);
+      return;
+    }
+    throw new Error(
+      `fixture A sidebar tile never appeared — integration-test pre-seeds ` +
+      `${FIXTURE_A.name} at boot, so this is a real failure: ${e.message}`);
+  }
+
+  const workspace = await findByObjectName(app.inspector, "workspace");
+  if (!workspace) {
+    throw new Error('WorkspaceArea (objectName "workspace") not found');
+  }
+
+  const clicked = await app.inspector.send("callMethod", {
+    objectId: tile.id, method: "clicked",
+  });
+  if (clicked.error) {
+    throw new Error(`clicking sidebar.app.${FIXTURE_A.name} failed: ${clicked.error}`);
+  }
+
+  // Gate: the backend reports the app front-most within 10 s.
+  await app.waitFor(async () => {
+    const res = await app.inspector.send("evaluate", {
+      objectId: welcome.id, expression: "backend.currentVisibleApp",
+    });
+    if (res.error) {
+      throw new Error(`evaluate(backend.currentVisibleApp) failed: ${res.error}`);
+    }
+    if (res.result !== FIXTURE_A.name) {
+      throw new Error(
+        `backend.currentVisibleApp=${JSON.stringify(res.result)} ` +
+        `(expected "${FIXTURE_A.name}")`);
+    }
+  }, { timeout: 10000, interval: 500,
+       description: `currentVisibleApp to become "${FIXTURE_A.name}"` });
+
+  // A dock for it exists.
+  await app.waitFor(async () => {
+    const res = await app.inspector.send("evaluate", {
+      objectId: workspace.id, expression: "dockCount",
+    });
+    if (res.error) throw new Error(`evaluate(dockCount) failed: ${res.error}`);
+    if (res.result !== 1) {
+      throw new Error(`WorkspaceArea.dockCount=${res.result} (expected 1)`);
+    }
+  }, { timeout: 10000, interval: 500, description: "workspace dockCount to reach 1" });
+
+  // The welcome page is no longer visible…
+  await app.waitFor(async () => {
+    if ((await welcomePageHidden(app, welcome.id)) !== true) {
+      throw new Error("welcome page is still visible after the dock opened");
+    }
+  }, { timeout: 5000, interval: 250, description: "welcome page to hide" });
+
+  // …and fixture A's payload text renders — the app actually loaded.
+  await app.waitFor(
+    async () => { await app.expectTexts([FIXTURE_A_TEXT]); },
+    { timeout: 10000, interval: 500, description: "fixture A payload text to render" }
+  );
+
+  // Leave the dock open: the A4 follow-up owns close-the-dock coverage
+  // (workspace.closeDock), and no later test asserts welcome-page state.
 });
 
 // --- Workspace (A3) — opening an app replaces the welcome page with a dock ---
@@ -483,10 +777,10 @@ test("workspace: closing the last dock brings the welcome page back", async (app
 
   // …with the installed-apps greeting — closing unloads fixture A but does
   // not uninstall it, so launcherApps stays non-empty and the greeting is
-  // "Welcome back", not the first-launch text.
+  // "Welcome Back,", not the first-launch text.
   await app.waitFor(
-    async () => { await app.expectTexts(["Welcome back"]); },
-    { timeout: 5000, interval: 250, description: '"Welcome back" greeting to render' }
+    async () => { await app.expectTexts(["Welcome Back,"]); },
+    { timeout: 5000, interval: 250, description: '"Welcome Back," greeting to render' }
   );
 
   // Gate: the backend no longer reports a front-most app.
@@ -738,33 +1032,18 @@ test("sidebar: footer shows the build type, with the version when present", asyn
     throw new Error(`footer text=${JSON.stringify(text)} (expected string)`);
   }
 
-  // Gate: the footer carries the matching build-type token and never the
-  // other one ("Dev" is not a substring of "Portable" or vice versa, so
-  // plain containment on the single element is unambiguous).
+  // Gate: the footer is a pure function of (buildVersion, isPortableBuild) —
+  // see SidebarPanel.qml's buildLabel binding — so compare against the
+  // exact expected string. This pins the " · " separator and rejects
+  // stray suffixes, which token-containment checks would let through.
   const expectedToken = isPortable ? "Portable" : "Dev";
-  const otherToken = isPortable ? "Dev" : "Portable";
-  if (!text.includes(expectedToken)) {
+  const expectedText = buildVersion.length > 0
+    ? `${buildVersion} · ${expectedToken}`
+    : expectedToken;
+  if (text !== expectedText) {
     throw new Error(
-      `footer text=${JSON.stringify(text)} does not contain ` +
-      `"${expectedToken}" (isPortableBuild=${isPortable})`);
-  }
-  if (text.includes(otherToken)) {
-    throw new Error(
-      `footer text=${JSON.stringify(text)} contains "${otherToken}" ` +
-      `(isPortableBuild=${isPortable} — must never show both tokens)`);
-  }
-
-  // Gate: version prefix iff buildVersion is set.
-  if (buildVersion.length > 0) {
-    if (!text.startsWith(buildVersion)) {
-      throw new Error(
-        `footer text=${JSON.stringify(text)} does not start with ` +
-        `buildVersion=${JSON.stringify(buildVersion)}`);
-    }
-  } else if (text !== expectedToken) {
-    throw new Error(
-      `buildVersion is empty but footer text=${JSON.stringify(text)} ` +
-      `(expected the build-type token "${expectedToken}" alone)`);
+      `footer text=${JSON.stringify(text)} (expected ${JSON.stringify(expectedText)}; ` +
+      `buildVersion=${JSON.stringify(buildVersion)}, isPortableBuild=${isPortable})`);
   }
 });
 
@@ -1005,8 +1284,13 @@ test("sidebar: active tile follows currentVisibleApp across section switches", a
 // description embeds that underscored form, so neither contains the spaced
 // display name.
 //
-// Offline the grid has no catalog rows, so fixture A's local row is the only
-// one; appManager.localAppsProxy chains matchLocalOnly on top of the OUTER
+// Offline the grid has no catalog rows, so every row is a local install:
+// fixture A plus whatever else the harness staged into <user-dir>/plugins/
+// (integration-test.nix also stages the four intent fixtures from
+// tests/fixtures/intents/stage.sh, each with a manifest.json, so they list as
+// installed user apps too). The only assumption is that fixture A is the sole
+// row whose display name matches the query, which the narrowing legs prove.
+// appManager.localAppsProxy chains matchLocalOnly on top of the OUTER
 // searched proxy (AppManagerView.qml:69-75), so its visibleCount tracks the
 // search. The spec's non-match gate "backend.uiAppsProxy.rowCount() === 0"
 // reads that outer proxy — uiAppsProxy is a ContentViews.qml id, not a
@@ -1061,31 +1345,36 @@ test("app manager: search narrows the grid to matching apps", async (app) => {
   }
   if (initialText !== "") await setSearch("");
 
-  // PRECONDITION (spec gate): fixture A's local row is the one grid row.
-  // If it never shows, the seeding produced no user-install row — that is a
-  // hard failure in --ci (integration-test pre-seeds fixture A at boot) and
-  // a spec-§0.A skip against a local app without the fixture.
+  // PRECONDITION (spec gate): fixture A is installed and at least one local
+  // row is in the grid. The tile check matters outside --ci: a developer
+  // instance with some other local app but no fixture A would otherwise pass
+  // this gate and then time out in step 1's exact-one assertion instead of
+  // taking the spec-§0.A skip. In --ci both are hard failures (integration-test
+  // pre-seeds fixture A at boot).
   try {
     await app.waitFor(async () => {
+      const fixtureTile = await findByObjectName(
+        app.inspector, `sidebar.app.${FIXTURE_A.name}`);
+      if (!fixtureTile) {
+        throw new Error(`fixture A (${FIXTURE_A.name}) is not installed`);
+      }
       const count = await evalOn(app, proxyId, "visibleCount");
-      if (count !== 1) {
+      if (typeof count !== "number" || count < 1) {
         throw new Error(
-          `localAppsProxy.visibleCount=${count} ` +
-          `(expected exactly 1: fixture A's local row)`);
+          `localAppsProxy.visibleCount=${count} (expected at least 1 local row)`);
       }
     }, { timeout: 10000, interval: 500,
-         description: "fixture A's local row to be the one grid row" });
+         description: "fixture A and at least one local row to be present" });
   } catch (e) {
     if (!CI_MODE) {
       console.log(
-        `    SKIP: A8 precondition localAppsProxy.visibleCount === 1 not met ` +
-        `— fixture A (${FIXTURE_A.name}) is not the sole local row in this ` +
-        `app instance (spec §0.A: skip, not fail, outside --ci)`);
+        `    SKIP: A8 precondition not met — ${e.message} ` +
+        `(spec §0.A: skip, not fail, outside --ci)`);
       return;
     }
     throw new Error(
-      `A8 precondition failed — the seeding produced no user-install row ` +
-      `(fixture A's local row never became the one grid row): ${e.message}`);
+      `A8 precondition failed — fixture A missing or no user-install row: ` +
+      `${e.message}`);
   }
 
   // Record the pre-search values; the post-clear gate compares against these.
@@ -1096,10 +1385,12 @@ test("app manager: search narrows the grid to matching apps", async (app) => {
       `outer proxy rowCount()=${JSON.stringify(preOuterRows)} (expected number)`);
   }
 
-  // Step 1 — the display name in deliberately wrong case: count stays put and
-  // the text round-trips (match is case-insensitive over name/displayName/
-  // description). Guard that upper-casing actually changed the case — an
-  // already-uppercase display name would make this leg assert nothing.
+  // Step 1 — the display name in deliberately wrong case: the grid narrows to
+  // exactly fixture A (the other staged fixtures' names, display names and
+  // descriptions do not contain it) and the text round-trips (match is
+  // case-insensitive over name/displayName/description). Guard that
+  // upper-casing actually changed the case — an already-uppercase display
+  // name would make this leg assert nothing.
   const matchQuery = FIXTURE_A.displayName.toUpperCase();
   if (matchQuery === FIXTURE_A.displayName) {
     throw new Error(
@@ -1115,14 +1406,21 @@ test("app manager: search narrows the grid to matching apps", async (app) => {
         `(expected ${JSON.stringify(matchQuery)})`);
     }
     const count = await evalOn(app, proxyId, "visibleCount");
-    if (count !== preLocal) {
+    if (count !== 1) {
       throw new Error(
         `localAppsProxy.visibleCount=${count} with wrong-case display-name ` +
-        `search (expected it to stay ${preLocal} — search must be ` +
-        `case-insensitive)`);
+        `search (expected exactly 1: fixture A — search must be ` +
+        `case-insensitive and narrow away the other ${preLocal - 1} local ` +
+        `row(s))`);
+    }
+    const outerRows = await evalOn(app, proxyId, "sourceModel.rowCount()");
+    if (outerRows !== 1) {
+      throw new Error(
+        `outer apps proxy rowCount()=${outerRows} with wrong-case ` +
+        `display-name search (expected exactly 1: fixture A)`);
     }
   }, { timeout: 5000, interval: 250,
-       description: "wrong-case display-name search to keep fixture A visible" });
+       description: "wrong-case display-name search to narrow to fixture A" });
 
   // Step 2 — append a non-matching suffix: the grid empties, all the way down
   // to the outer proxy (the spec's uiAppsProxy — localAppsProxy.sourceModel).
@@ -2138,6 +2436,430 @@ test("window: tray toggle hides a shown window", async (app) => {
     }
   } finally {
     await invoke(app, win, "show");
+  }
+});
+
+// --- App-to-app intents -----------------------------------------------------
+//
+// These need the fixtures in tests/fixtures/intents staged into the app's
+// --user-dir (see stage.sh). They are skipped when the fixtures are absent so a
+// plain `node tests/ui-tests.mjs` against a normal install still runs green.
+
+// ALWAYS resolve an objectId from the requester's own view before evaluating.
+// The inspector falls back to the FIRST QQuickWidget's root when no objectId is
+// given, and with several apps loaded that is very likely the wrong app — the
+// assertion would then read a property that does not exist and pass vacuously.
+//
+// THROWS rather than returning null when the fixture is missing. An earlier
+// version returned null and every caller did `if (!anchor) return;`, which meant
+// that staging the fixtures but never LAUNCHING them produced three green ticks
+// that had asserted nothing. A fixture that is not there is a broken test run,
+// not a reason to skip.
+async function requesterAnchor(app) {
+  const found = await app.inspector.send("findByProperty", {
+    property: "objectName", value: "requesterRoot",
+  });
+  if (!found.matches || !found.matches.length) {
+    throw new Error(
+      "intent fixture not loaded — expected an item with objectName " +
+      "'requesterRoot'. Stage tests/fixtures/intents via stage.sh into the " +
+      "--user-dir, and make sure the test opened the app first.");
+  }
+  return found.matches[0].id;
+}
+
+// The fixtures are staged on disk but not loaded until something opens them.
+//
+// Deliberately NOT openPlugin(): its expectTexts gate searches the shell's own
+// QML tree and does not traverse into a plugin's separate engine, so it times
+// out even after the app has loaded successfully. findByProperty does cross
+// that boundary, so wait on the anchor itself.
+async function openIntentRequester(app) {
+  await app.click("Intent Requester");
+  let anchor = null;
+  await app.waitFor(async () => {
+    const found = await app.inspector.send("findByProperty", {
+      property: "objectName", value: "requesterRoot",
+    });
+    if (!found.matches || !found.matches.length)
+      throw new Error("requester view not up yet");
+    anchor = found.matches[0].id;
+  }, { timeout: 20000, interval: 500, description: "intent requester view" });
+  return anchor;
+}
+
+// Returns null when that provider has no view up at all, and its lastHandled
+// (possibly "") when it does. The distinction matters: "not loaded" and "loaded
+// but silent" are different failures, and the old version conflated them by
+// returning the first match's value regardless of which provider it belonged to.
+async function providerMarker(app, which) {
+  // Each provider root carries a UNIQUE objectName (providerRootA / …B) so
+  // both harnesses can address one directly. Returns null when that provider
+  // has no view up at all, and its lastHandled (possibly "") when it does —
+  // "not loaded" and "loaded but silent" are different failures.
+  const suffix = which.replace("intent_provider_", "").toUpperCase();
+  const found = await app.inspector.send("findByProperty", {
+    property: "objectName", value: `providerRoot${suffix}`,
+  });
+  if (!found.matches || !found.matches.length) return null;
+  const r = await app.inspector.send("evaluate", {
+    objectId: found.matches[0].id, expression: "root.lastHandled",
+  });
+  return typeof r.result === "string" ? r.result : "";
+}
+
+// backend.currentVisibleApp — "which app is the user actually looking at".
+//
+// Read through the overlay root because it lives in the SHELL's engine, where
+// `backend` is a context property; a fixture's anchor is in the plugin's own
+// engine and has no `backend` at all. This is the observable auto-return moves,
+// so every assertion below turns on it.
+async function currentVisibleApp(app) {
+  const overlay = await app.inspector.send("findByProperty", {
+    property: "objectName", value: "overlayDialogs",
+  });
+  if (!overlay.matches || !overlay.matches.length)
+    throw new Error("shell overlay not found — cannot read backend state");
+  const r = await app.inspector.send("evaluate", {
+    objectId: overlay.matches[0].id, expression: "backend.currentVisibleApp",
+  });
+  return typeof r.result === "string" ? r.result : "";
+}
+
+// Ask for `intent`, then answer the confirmation with intent_provider_manual.
+// Returns once the provider's view is up and the shell has actually moved
+// there — the precondition every auto-return assertion needs, and the one that
+// makes "it never returned" distinguishable from "it never left".
+async function dispatchToManualProvider(app, anchor, intent) {
+  await app.inspector.send("evaluate", {
+    objectId: anchor, expression: `root.request("${intent}")`,
+  });
+
+  let delegateId = null;
+  await app.waitFor(async () => {
+    const d = await app.inspector.send("findByProperty", {
+      property: "objectName", value: "intentProvider_intent_provider_manual",
+    });
+    if (!d.matches || !d.matches.length)
+      throw new Error("chooser has no delegate for intent_provider_manual");
+    delegateId = d.matches[0].id;
+  }, { timeout: 8000, interval: 250, description: "confirmation dialog" });
+
+  await app.inspector.send("click", { objectId: delegateId });
+
+  await app.waitFor(async () => {
+    const visible = await currentVisibleApp(app);
+    if (visible !== "intent_provider_manual")
+      throw new Error(`shell is on "${visible}", not the provider`);
+  }, { timeout: 45000, interval: 500, description: "dispatch moved the user" });
+}
+
+// Wait until the manual provider is actually HOLDING a request.
+//
+// dispatchTo() presents the provider BEFORE delivering to it, so the shell
+// arriving is not evidence the QML handler has run. The fixture's buttons are
+// disabled until it has, so clicking on the strength of the navigation alone
+// silently does nothing and the test fails much later, somewhere else.
+async function waitForManualProviderHolding(app) {
+  await app.waitFor(async () => {
+    const found = await app.inspector.send("findByProperty", {
+      property: "objectName", value: "providerRootManual",
+    });
+    if (!found.matches || !found.matches.length)
+      throw new Error("manual provider view not up");
+    const handled = await app.inspector.send("evaluate", {
+      objectId: found.matches[0].id, expression: "root.lastHandled",
+    });
+    if (handled.result !== "waiting")
+      throw new Error(`provider is "${handled.result}", not holding a request`);
+  }, { timeout: 20000, interval: 500, description: "provider holding the request" });
+}
+
+// Click a button inside the manual provider's view.
+async function clickInManualProvider(app, objectName) {
+  const found = await app.inspector.send("findByProperty", {
+    property: "objectName", value: objectName,
+  });
+  if (!found.matches || !found.matches.length)
+    throw new Error(`manual provider has no ${objectName}`);
+  await app.inspector.send("click", { objectId: found.matches[0].id });
+}
+
+async function lastResult(app, anchorId) {
+  return (await app.inspector.send("evaluate", {
+    objectId: anchorId, expression: "root.lastResult",
+  })).result;
+}
+
+test("intents: an undeclared intent is refused without asking anyone", async (app) => {
+  const anchor = await openIntentRequester(app);
+
+  await app.inspector.send("evaluate", {
+    objectId: anchor, expression: 'root.request("test.undeclared")',
+  });
+  await app.waitFor(async () => {
+    const r = await lastResult(app, anchor);
+    if (r !== "not_declared") throw new Error(`got "${r}", expected not_declared`);
+  }, { timeout: 5000, interval: 200, description: "not_declared" });
+});
+
+test("intents: two providers raise the chooser, and only the chosen one hears", async (app) => {
+  const anchor = await openIntentRequester(app);
+
+  await app.inspector.send("evaluate", {
+    objectId: anchor, expression: 'root.request("test.echo")',
+  });
+
+  // The chooser must appear — with no chooser mounted the broker fails closed,
+  // so this also covers the guard that used to be defeated by the shell's
+  // signal re-emit.
+  await app.waitFor(async () => {
+    const d = await app.inspector.send("findByProperty", {
+      property: "objectName", value: "intentChooserDialog",
+    });
+    if (!d.matches || !d.matches.length) throw new Error("chooser did not appear");
+  }, { timeout: 8000, interval: 250, description: "intent chooser" });
+
+  // Click the delegate BY OBJECT ID, never by text.
+  //
+  // app.click() is a breadth-first substring walk that stops at the first
+  // clickable match, and "Provider B" also labels the app's SIDEBAR launcher.
+  // Clicking that launches the app directly and leaves the request unresolved —
+  // which looked exactly like a broken dispatch, and is the same trap this file
+  // already documents for "Package Manager".
+  const delegate = await app.inspector.send("findByProperty", {
+    property: "objectName", value: "intentProvider_intent_provider_b",
+  });
+  if (!delegate.matches || !delegate.matches.length)
+    throw new Error("chooser has no delegate for intent_provider_b");
+  await app.inspector.send("click", { objectId: delegate.matches[0].id });
+
+  // POSITIVE CONTROL AND ISOLATION IN ONE BODY. Asserting only that B stayed
+  // empty passes trivially when nothing works at all — the requester's success
+  // is what proves the path ran.
+  //
+  // The failure message names the STAGE the flow stalled at, because "got \"\""
+  // is indistinguishable between "B never loaded", "B loaded but was never
+  // dispatched to", and "B answered but the reply never arrived" — three very
+  // different bugs. Offscreen runs are also slower than a real GUI, where this
+  // path is known to work, so the budget is generous.
+  await app.waitFor(async () => {
+    const r = await lastResult(app, anchor);
+    if (r === "ok:intent_provider_b") return;
+
+    const bHandled = await providerMarker(app, "intent_provider_b");
+    if (bHandled === null)
+      throw new Error("provider_b view not up yet (still loading?)");
+    if (!bHandled)
+      throw new Error("provider_b loaded but never received the request");
+    throw new Error(`provider_b is "${bHandled}" but requester still has "${r}"`);
+  }, { timeout: 45000, interval: 500, description: "provider_b answered" });
+
+  const aMarker = await providerMarker(app, "intent_provider_a");
+  if (aMarker) throw new Error(`provider_a saw a request meant for b: "${aMarker}"`);
+});
+
+test("intents: a single provider still asks before dispatching", async (app) => {
+  const anchor = await openIntentRequester(app);
+
+  // test.solo is provided by intent_provider_a alone. One provider used to
+  // dispatch straight through, which made it the SILENT case — an app that was
+  // the only declarer of a capability got the request with no interaction at
+  // all. Now it confirms like any other.
+  await app.inspector.send("evaluate", {
+    objectId: anchor, expression: 'root.request("test.solo")',
+  });
+
+  await app.waitFor(async () => {
+    const d = await app.inspector.send("findByProperty", {
+      property: "objectName", value: "intentChooserDialog",
+    });
+    if (!d.matches || !d.matches.length)
+      throw new Error("single provider dispatched without asking");
+  }, { timeout: 8000, interval: 250, description: "confirmation for one provider" });
+
+  const delegate = await app.inspector.send("findByProperty", {
+    property: "objectName", value: "intentProvider_intent_provider_a",
+  });
+  if (!delegate.matches || !delegate.matches.length)
+    throw new Error("the sole provider is not offered in the dialog");
+  await app.inspector.send("click", { objectId: delegate.matches[0].id });
+
+  await app.waitFor(async () => {
+    const r = await lastResult(app, anchor);
+    if (r !== "ok:intent_provider_a") throw new Error(`got "${r}"`);
+  }, { timeout: 45000, interval: 500, description: "provider_a answered" });
+});
+
+test("intents: answering a request returns the user to the caller", async (app) => {
+  // The round trip. Dispatch already moves the user to the provider; this is
+  // about the move BACK, which nothing did before — you approved something in
+  // another app and were left standing there.
+  //
+  // The provider answers only when a button is pressed, so the return is
+  // triggered by a real user action rather than by a timer, which is the whole
+  // reason this fixture exists.
+  const anchor = await openIntentRequester(app);
+  await dispatchToManualProvider(app, anchor, "test.manual");
+
+  await waitForManualProviderHolding(app);
+  await clickInManualProvider(app, "btnComplete");
+
+  await app.waitFor(async () => {
+    const visible = await currentVisibleApp(app);
+    if (visible !== "intent_requester_demo")
+      throw new Error(`still on "${visible}" — the user was never brought back`);
+  }, { timeout: 20000, interval: 250, description: "returned to the requester" });
+
+  // Navigation only. The result must still have been delivered — a return that
+  // swallowed the answer would be worse than no return.
+  const r = await lastResult(app, anchor);
+  if (r !== "ok:intent_provider_manual")
+    throw new Error(`returned, but the requester got "${r}"`);
+});
+
+test("intents: cancelling also returns the user to the caller", async (app) => {
+  // Backing out is the outcome that most wants a ride home — the user decided
+  // not to do the thing, and being parked in the provider afterwards is the
+  // worst of both.
+  const anchor = await openIntentRequester(app);
+  await dispatchToManualProvider(app, anchor, "test.manual");
+
+  await waitForManualProviderHolding(app);
+  await clickInManualProvider(app, "btnCancel");
+
+  await app.waitFor(async () => {
+    const visible = await currentVisibleApp(app);
+    if (visible !== "intent_requester_demo")
+      throw new Error(`still on "${visible}" after a cancel`);
+  }, { timeout: 20000, interval: 250, description: "returned after cancel" });
+
+  const r = await lastResult(app, anchor);
+  if (r !== "cancelled") throw new Error(`expected cancelled, got "${r}"`);
+});
+
+test("intents: a hand-off leaves the user where it took them", async (app) => {
+  // THE PAIR IS THE POINT. Identical provider, identical button, identical
+  // ok:true — differing only by "handoff": true in metadata.json. If the shell
+  // returns here, the declaration is not being read.
+  const anchor = await openIntentRequester(app);
+  await dispatchToManualProvider(app, anchor, "test.handoff");
+
+  // Same button, same moment in the flow as the transaction above. WHEN a
+  // provider answers is its own business; `handoff` governs only what the
+  // shell does next, and holding both constant is what isolates that.
+  await waitForManualProviderHolding(app);
+  await clickInManualProvider(app, "btnComplete");
+
+  await app.waitFor(async () => {
+    const r = await lastResult(app, anchor);
+    if (r !== "ok:intent_provider_manual")
+      throw new Error(`hand-off not answered yet, requester has "${r}"`);
+  }, { timeout: 20000, interval: 250, description: "hand-off answered" });
+
+  // The answer has landed. Give the dwell floor room to fire a return if the
+  // guard is broken — asserting immediately would pass even with the feature
+  // misbehaving, because the wrong behaviour is merely late, not absent.
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+
+  const visible = await currentVisibleApp(app);
+  if (visible !== "intent_provider_manual")
+    throw new Error(
+      `a hand-off bounced the user to "${visible}" — the whole point is that ` +
+      "they were sent somewhere to stay");
+});
+
+test("intents: a payload the provider declared unusable never reaches it", async (app) => {
+  const anchor = await openIntentRequester(app);
+
+  // intent_provider_a's metadata.json says test.solo takes `text` as a string.
+  // This sends a number. Nothing about it is malformed as data — only the
+  // provider's own declaration makes it wrong, which is the whole point of
+  // declaring params at all.
+  await app.inspector.send("evaluate", {
+    objectId: anchor, expression: 'root.requestBadParams("test.solo")',
+  });
+
+  // The user is still asked. Validation happens after a provider is settled,
+  // never at submit: at submit several providers may describe one intent
+  // differently, and testing all their specs would answer "how many providers
+  // are there".
+  await app.waitFor(async () => {
+    const d = await app.inspector.send("findByProperty", {
+      property: "objectName", value: "intentChooserDialog",
+    });
+    if (!d.matches || !d.matches.length) throw new Error("no confirmation shown");
+  }, { timeout: 8000, interval: 250, description: "confirmation for one provider" });
+
+  const delegate = await app.inspector.send("findByProperty", {
+    property: "objectName", value: "intentProvider_intent_provider_a",
+  });
+  if (!delegate.matches || !delegate.matches.length)
+    throw new Error("the sole provider is not offered in the dialog");
+  await app.inspector.send("click", { objectId: delegate.matches[0].id });
+
+  await app.waitFor(async () => {
+    const r = await lastResult(app, anchor);
+    if (r !== "bad_request") throw new Error(`got "${r}"`);
+  }, { timeout: 20000, interval: 500, description: "bad_request reached the caller" });
+
+  // And the provider never saw it. A payload it declared unusable must not
+  // reach its handler — otherwise the declaration is documentation, not a gate.
+  const provider = await app.inspector.send("findByProperty", {
+    property: "objectName", value: "providerRootA",
+  });
+  if (provider.matches && provider.matches.length) {
+    const handled = await app.inspector.send("evaluate", {
+      objectId: provider.matches[0].id, expression: "root.pendingParams",
+    });
+    const seen = JSON.stringify(handled && handled.result);
+    if (seen && seen.includes("42"))
+      throw new Error("the provider received a payload it declared unusable");
+  }
+});
+
+test("intents: every permitted data shape survives the round trip", async (app) => {
+  const anchor = await openIntentRequester(app);
+
+  // The transport, not the mechanism. `params` crosses from the requester's QML
+  // engine into C++, through the broker, into the PROVIDER's separate engine —
+  // and the reply makes the same trip back through `respond`'s untyped
+  // QVariant, which is where engine-bound values were previously lost silently
+  // (res.data arrived null with no error anywhere).
+  //
+  // The fixture compares structurally and reports the first differing path, so
+  // a failure names the field rather than just saying "not equal".
+  await app.inspector.send("evaluate", {
+    objectId: anchor, expression: "root.requestRoundTrip()",
+  });
+
+  // test.roundtrip has one provider, and one provider still confirms.
+  await app.waitFor(async () => {
+    const d = await app.inspector.send("findByProperty", {
+      property: "objectName", value: "intentChooserDialog",
+    });
+    if (!d.matches || !d.matches.length) throw new Error("no confirmation shown");
+  }, { timeout: 8000, interval: 250, description: "chooser for test.roundtrip" });
+
+  const delegate = await app.inspector.send("findByProperty", {
+    property: "objectName", value: "intentProvider_intent_provider_a",
+  });
+  if (!delegate.matches || !delegate.matches.length)
+    throw new Error("provider_a not offered");
+  await app.inspector.send("click", { objectId: delegate.matches[0].id });
+
+  await app.waitFor(async () => {
+    const r = await lastResult(app, anchor);
+    if (r === "") throw new Error("still waiting");
+    if (r !== "roundtrip:ok") throw new Error(r);   // carries the differing path
+  }, { timeout: 30000, interval: 500, description: "payload returned intact" });
+});
+
+test("intents: the word ambiguous never reaches a requester", async (app) => {
+  const anchor = await openIntentRequester(app);
+  const r = await lastResult(app, anchor);
+  if (typeof r === "string" && r.includes("ambiguous")) {
+    throw new Error("internal resolution state leaked into an envelope");
   }
 });
 

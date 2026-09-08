@@ -51,6 +51,7 @@ private:
 
     QList<QPointer<QShortcut>>           m_mirrors;
     QHash<QObject*, QPointer<QObject>>   m_mirrorToQml;
+    QHash<QObject*, QPointer<QQuickWidget>> m_qmlToPane;
     QMultiHash<QObject*, QPointer<QShortcut>> m_qmlToMirrors;
     QList<QMetaObject::Connection>       m_transientConns;
 };

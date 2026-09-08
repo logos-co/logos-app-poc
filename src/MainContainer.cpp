@@ -1,4 +1,5 @@
 #include "MainContainer.h"
+#include "ShellSections.h"
 #include "AppsFilterProxy.h"
 #include "InstallEnums.h"
 #include "ShortcutBridge.h"
@@ -16,6 +17,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QQuickItem>
+#include <QVariantMap>
 #include <QColor>
 #include <QPalette>
 #include <QEvent>
@@ -98,9 +100,10 @@ MainContainer::MainContainer(IShellHost* host, QWidget* parent)
 
     // Provider lets the bridge scan the front-most dock's shortcuts
     // when Workspace is the current section.
-    m_shortcutBridge = new ShortcutBridge(this, m_contentStack, [this]() {
-        return m_workspaceArea ? m_workspaceArea->activeDockWidget()
-                               : nullptr;
+    m_shortcutBridge = new ShortcutBridge(this, m_contentStack, [this]() -> QQuickWidget* {
+        if (!m_workspaceArea) return nullptr;
+        if (QQuickWidget* dock = m_workspaceArea->activeDockWidget()) return dock;
+        return m_workspaceArea->welcomePageWidget();
     });
     // Tab-switching inside the workspace changes the dock without
     // touching m_contentStack — force a rebind so the new dock's
@@ -131,9 +134,43 @@ MainContainer::MainContainer(IShellHost* host, QWidget* parent)
         m_host->setCurrentVisibleApp(moduleName);
     });
 
-    // WelcomePage "Install now" CTA → jump to Applications view.
-    connect(m_workspaceArea, &WorkspaceArea::installClicked, this, [this]() {
-        m_host->setCurrentSectionIndex(1);
+    // WelcomePage's two navigation blocks → the views that own those flows.
+    connect(m_workspaceArea, &WorkspaceArea::discoverApplicationsClicked, this, [this]() {
+        m_host->setCurrentSectionIndex(ShellSection::AppManager);
+    });
+    connect(m_workspaceArea, &WorkspaceArea::managePackagesClicked, this, [this]() {
+        m_host->setCurrentSectionIndex(ShellSection::PackageManager);
+    });
+    connect(m_workspaceArea, SIGNAL(reopenAppRequested(QString)),
+            m_host->backendObject(), SLOT(onAppLauncherClicked(QString)),
+            Qt::QueuedConnection);
+
+    connect(m_workspaceArea, &WorkspaceArea::appActivated, this,
+            [this](const QString& name, const QString& repositoryUrl) {
+        invokeOpenApp(name, repositoryUrl);
+    });
+    connect(m_workspaceArea, &WorkspaceArea::packageActivated, this,
+            [this](const QString& name) {
+        QMetaObject::invokeMethod(m_host->backendObject(),
+                                  "showPackageDetails",
+                                  Q_ARG(QString, name));
+    });
+    connect(m_workspaceArea, &WorkspaceArea::packageInstallRequested, this,
+            [this](const QString& name) {
+        QMetaObject::invokeMethod(m_host->backendObject(),
+                                  "requestPackageInstall",
+                                  Q_ARG(QString, name));
+    });
+    connect(m_host->backendObject(),
+            SIGNAL(requestOpenAddApplicationDialog(QVariantMap)),
+            this, SLOT(onAddApplicationDialogRequested(QVariantMap)));
+    connect(m_workspaceArea, &WorkspaceArea::showAllResultsRequested, this,
+            [this](const QString& typeValue, const QString& query) {
+        m_host->setCurrentSectionIndex(typeValue == QStringLiteral("core")
+                                           ? ShellSection::PackageManager
+                                           : ShellSection::AppManager);
+        if (typeValue != QStringLiteral("core"))
+            applyAppManagerSearch(query);
     });
 
     // Connect to QML signals from SidebarPanel.
@@ -162,6 +199,38 @@ MainContainer::MainContainer(IShellHost* host, QWidget* parent)
     }
 
     qDebug() << "MainContainer created";
+}
+
+void MainContainer::onAddApplicationDialogRequested(const QVariantMap& metadata)
+{
+    if (m_host->currentSectionIndex() == ShellSection::AppManager) return;
+
+    m_host->setCurrentSectionIndex(ShellSection::AppManager);
+    applyAppManagerSearch(metadata.value(QStringLiteral("name")).toString());
+}
+
+void MainContainer::invokeOpenApp(const QString& name,
+                                  const QString& repositoryUrl)
+{
+    if (!QMetaObject::invokeMethod(m_host->backendObject(), "openApp",
+                                   Q_ARG(QString, name),
+                                   Q_ARG(QString, repositoryUrl),
+                                   Q_ARG(QVariantMap, QVariantMap()),
+                                   // allowFastLaunch: launch when installed,
+                                   // fall through to the install dialog if not.
+                                   Q_ARG(bool, true))) {
+        qCritical() << "openApp(QString,QString,QVariantMap,bool) not found on"
+                    << "the backend — welcome-page app tiles will do nothing.";
+    }
+}
+
+void MainContainer::applyAppManagerSearch(const QString& query)
+{
+    if (!m_contentWidget) return;
+    if (QObject* contentRoot = m_contentWidget->rootObject()) {
+        QMetaObject::invokeMethod(contentRoot, "applyAppSearch",
+                                  Q_ARG(QVariant, QVariant(query)));
+    }
 }
 
 MainContainer::~MainContainer()
@@ -348,15 +417,21 @@ void MainContainer::onSectionIndexChanged(int index)
     //   2 (Package Manager)  → package_manager_ui (preloaded in background)
     //   3 (Settings)         → ContentViews.qml (StackLayout picks the page)
     switch (sectionIndex) {
-    case 0: m_contentStack->setCurrentIndex(kAppsStackIndex);    break;
-    case 1: m_contentStack->setCurrentIndex(kContentStackIndex); break;
-    case 2:
+    case ShellSection::Workspace:
+        m_contentStack->setCurrentIndex(kAppsStackIndex);
+        break;
+    case ShellSection::AppManager:
+        m_contentStack->setCurrentIndex(kContentStackIndex);
+        break;
+    case ShellSection::PackageManager:
         if (!m_pmuiWidget) {
             m_host->loadUiModule(QStringLiteral("package_manager_ui"));
         }
         m_contentStack->setCurrentIndex(kModulesStackIndex);
         break;
-    case 3: m_contentStack->setCurrentIndex(kContentStackIndex); break;
+    case ShellSection::Settings:
+        m_contentStack->setCurrentIndex(kContentStackIndex);
+        break;
     default: break;
     }
 }
@@ -372,7 +447,7 @@ void MainContainer::onNavigateToApps()
     }
 
     // This is called when an app is loaded and we need to switch to Apps view
-    m_host->setCurrentSectionIndex(0);
+    m_host->setCurrentSectionIndex(ShellSection::Workspace);
 }
 
 void MainContainer::onPluginWindowRequested(QWidget* widget, const QString& title)
@@ -424,10 +499,23 @@ void MainContainer::onPluginWindowRemoveRequested(QWidget* widget)
         m_workspaceArea->removePluginDock(widget);
 }
 
-void MainContainer::onPluginWindowActivateRequested(QWidget* widget)
+void MainContainer::onPresentAppRequested(QWidget* widget)
 {
-    if (widget && widget == m_pmuiWidget) return;
-    if (m_workspaceArea && widget)
-        m_workspaceArea->activatePluginDock(widget);
+    if (!widget) return;
+
+    // Hoisted into the content stack, not docked, so "to the front" means
+    // selecting its section rather than raising a tab.
+    if (widget == m_pmuiWidget) {
+        m_host->setCurrentSectionIndex(ShellSection::PackageManager);
+        return;
+    }
+
+    if (!m_workspaceArea) return;
+
+    // Switch section before raising the tab, or the tab becomes current behind
+    // whatever the user is actually looking at.
+    onNavigateToApps();
+    m_workspaceArea->activatePluginDock(widget);
 }
+
 
