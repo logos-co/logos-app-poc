@@ -127,14 +127,14 @@ All `logos_core_*` calls are made from two locations: `app/main.cpp` (startup/sh
 | `logos_core_add_modules_dir(embeddedDir)` | Add the embedded modules directory (read-only, pre-installed at build time) |
 | `logos_core_add_modules_dir(userDir)` | Add the user-writable modules directory for runtime installs |
 | `logos_core_start()` | Scan module directories, initialize the capability module, start the remote object registry |
-| `logos_core_load_module("package_manager", true)` | Auto-load the package manager module (with dependencies) at startup |
+| `logos_core_load_module("package_manager", LOGOS_LOAD_REQUIRED_AND_OPTIONAL)` | Auto-load the package manager module at startup, with its required dependencies and any installed optional ones |
 | `logos_core_get_loaded_modules()` | Query loaded module names for initial status display |
 
 **Runtime Logos Module management** (`app/MainUIBackend.cpp`):
 
 | Call | Purpose |
 |------|---------|
-| `logos_core_load_module(name, true)` | Load a Logos Module and all its declared dependencies (topological sort). Also called when loading a UI App that depends on Logos Modules. |
+| `logos_core_load_module(name, LOGOS_LOAD_REQUIRED_AND_OPTIONAL)` | Load a Logos Module and all its declared dependencies (topological sort), plus any optional ones that are installed. Also called when loading a UI App that depends on Logos Modules. |
 | `logos_core_unload_module(name, false)` | Terminate a Logos Module's host process and clean up |
 | `logos_core_refresh_modules()` | Re-scan module directories after a package install |
 | `logos_core_get_loaded_modules()` | Query which Logos Modules are currently running (for Modules view status) |
@@ -207,9 +207,9 @@ The shell's entire contract is `IShellHost`: a `QWidget*` out, eight named opera
 
 | Method | Description |
 |--------|-------------|
-| `loadUiModule(name)` | Load a UI App (QML or C++ plugin) — resolve Logos Module dependencies via `logos_core_load_module(name, true)`, then load the Qt plugin and create a tab in MDI |
+| `loadUiModule(name)` | Load a UI App (QML or C++ plugin) — resolve Logos Module dependencies via `logos_core_load_module(name, LOGOS_LOAD_REQUIRED_AND_OPTIONAL)`, then load the Qt plugin and create a tab in MDI |
 | `unloadUiModule(name)` | Remove tab from MDI, destroy widget, clean up tracking state. Logos Module dependencies are left running. |
-| `loadCoreModule(name)` | Load a Logos Module via `logos_core_load_module(name, true)`, spawning a `logos_host` process |
+| `loadCoreModule(name)` | Load a Logos Module via `logos_core_load_module(name, LOGOS_LOAD_REQUIRED_AND_OPTIONAL)`, spawning a `logos_host` process |
 | `unloadCoreModule(name)` | Unload a Logos Module via `logos_core_unload_module(name, false)`, terminating its host process |
 | `refreshCoreModules()` | Call `logos_core_refresh_modules()` then `logos_core_get_known_modules()` to refresh the Logos Module list |
 | `updateModuleStats()` | Call `logos_core_get_module_stats()`, parse JSON, update `m_moduleStats` map for Logos Modules |
@@ -299,7 +299,7 @@ main()
  ├─ logos_core_add_modules_dir(<app>/../modules)       # Embedded modules (read-only)
  ├─ logos_core_add_modules_dir(~/.local/share/.../modules)  # User modules (writable)
  ├─ logos_core_start()                                 # Scan dirs, init capability module, start registry
- ├─ logos_core_load_module("package_manager", true)    # Auto-load package manager
+ ├─ logos_core_load_module("package_manager", REQUIRED_AND_OPTIONAL)  # Auto-load package manager
  ├─ logos_core_get_loaded_modules()                    # Log loaded modules
  ├─ LogosAPI("core", nullptr)                          # Create SDK instance
  ├─ Window(&logosAPI)
@@ -329,7 +329,7 @@ User clicks "Load" in UI Apps tab (or clicks app icon in sidebar)
  └─ MainUIBackend::loadUiModule(name)
      ├─ Look up app metadata from m_uiPluginMetadata cache
      ├─ Load Logos Module dependencies (if any)
-     │   └─ logos_core_load_module(dep, true) for each dependency
+     │   └─ logos_core_load_module(dep, REQUIRED_AND_OPTIONAL) for each dependency
      ├─ Create QQuickWidget (loaded in Basecamp process, NOT via liblogos)
      ├─ Configure QML engine:
      │   ├─ Set import/plugin paths
@@ -374,7 +374,7 @@ User clicks close on tab or "Unload" in UI Apps tab
 ```
 User clicks "Load" in Logos Modules tab
  └─ MainUIBackend::loadCoreModule(name)
-     ├─ logos_core_load_module(name, true)              # liblogos spawns logos_host process
+     ├─ logos_core_load_module(name, REQUIRED_AND_OPTIONAL)   # liblogos spawns logos_host process
      └─ emit coreModulesChanged()
 
 User clicks "Unload" in Logos Modules tab

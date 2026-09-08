@@ -19,7 +19,7 @@ public:
     void         start() override;
     QStringList  knownModules() const override;
     QStringList  loadedModules() const override;
-    bool         loadModule(const QString& name, bool withDependencies) override;
+    bool         loadModule(const QString& name, LoadPolicy policy) override;
     bool         unloadModule(const QString& name, bool withDependents) override;
     void         refreshModules() override;
     QVariantList allStats() const override;

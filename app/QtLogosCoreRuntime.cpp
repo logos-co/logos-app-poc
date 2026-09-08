@@ -27,9 +27,15 @@ QStringList  QtLogosCoreRuntime::loadedModules() const    { return m_core->loade
 void         QtLogosCoreRuntime::refreshModules()         { m_core->refreshModules(); }
 QVariantList QtLogosCoreRuntime::allStats() const         { return m_core->allStats(); }
 
-bool QtLogosCoreRuntime::loadModule(const QString& name, bool withDependencies)
+bool QtLogosCoreRuntime::loadModule(const QString& name, LoadPolicy policy)
 {
-    return m_core->loadModule(name, withDependencies);
+    LogosLoadDeps deps = LOGOS_LOAD_REQUIRED_AND_OPTIONAL;
+    switch (policy) {
+    case LoadPolicy::ModuleOnly:          deps = LOGOS_LOAD_MODULE_ONLY; break;
+    case LoadPolicy::RequiredDeps:        deps = LOGOS_LOAD_REQUIRED_DEPS; break;
+    case LoadPolicy::RequiredAndOptional: deps = LOGOS_LOAD_REQUIRED_AND_OPTIONAL; break;
+    }
+    return m_core->loadModule(name, deps);
 }
 
 bool QtLogosCoreRuntime::unloadModule(const QString& name, bool withDependents)

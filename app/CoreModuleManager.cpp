@@ -91,7 +91,10 @@ QStringList CoreModuleManager::loadedModules() const
 
 bool CoreModuleManager::loadModule(const QString& name)
 {
-    return m_core->loadModule(name, /*withDependencies=*/true);
+    // Widened deliberately, and stated here rather than left to the interface
+    // default: Basecamp wants the optional collaborators an operator installed,
+    // and none of them can fail this call.
+    return m_core->loadModule(name, LoadPolicy::RequiredAndOptional);
 }
 
 bool CoreModuleManager::unloadModule(const QString& name)
