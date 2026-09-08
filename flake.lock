@@ -34601,11 +34601,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1788345837,
-        "narHash": "sha256-nInsi0fMiivkB+Bs88IkpA7+l7pt6ft6Dsy5SQH9tX8=",
+        "lastModified": 1788902518,
+        "narHash": "sha256-XR7K6WB0NTKm9zZcecXOOAI/jac2B0quQKcQA673JcE=",
         "owner": "logos-co",
         "repo": "logos-package-downloader",
-        "rev": "0f4c2300757f1ffa4b09f07cb1e4451b0a380688",
+        "rev": "c8b22faba75c38629f9c7e928298f15b720df7fa",
         "type": "github"
       },
       "original": {
@@ -34620,11 +34620,11 @@
         "logos-package-downloader": "logos-package-downloader"
       },
       "locked": {
-        "lastModified": 1788346723,
-        "narHash": "sha256-/2WUNoBkdCoZZ0CKXQ7rSjJFJYclg1xMnHLEob/dPjk=",
+        "lastModified": 1788903889,
+        "narHash": "sha256-iAYmDNf5zfjkC3c3fMoAKQLJBqF2Yr0b8xcc0MixV1E=",
         "owner": "logos-co",
         "repo": "logos-package-downloader-module",
-        "rev": "5e1b27fdebf4e64bdc34c6d8dcfdc79c553c3be2",
+        "rev": "917cf3cb12a2b0b9f04ecfcb81fdc3402519f1e4",
         "type": "github"
       },
       "original": {
