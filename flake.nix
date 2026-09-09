@@ -12,6 +12,21 @@
     logos-module.url = "github:logos-co/logos-module";
     logos-module-loader-qt.url = "github:logos-co/logos-module-loader-qt";
     logos-liblogos.url = "github:logos-co/logos-liblogos";
+    # ONE logos-protocol, and ONE logos-qt-host, in what the app stages.
+    # logos-qt-host bakes sizeof(LogosAPIClient) into its own `operator new`
+    # while logos-protocol DEFINES that constructor, so a second protocol is an
+    # 8-byte heap overrun on every getClient() -- silent on macOS, where it
+    # rounds up into the next malloc size class, and fatal on glibc. Without
+    # these the app linked one protocol and qt-host was built against another.
+    logos-cpp-sdk.inputs.logos-protocol.follows = "logos-protocol";
+    logos-plugin-qt.inputs.logos-protocol.follows = "logos-protocol";
+    logos-qt-sdk.inputs.logos-protocol.follows = "logos-protocol";
+    logos-qt-sdk.inputs.logos-plugin-qt.follows = "logos-plugin-qt";
+    logos-qt-sdk.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
+    logos-liblogos.inputs.logos-protocol.follows = "logos-protocol";
+    logos-liblogos.inputs.logos-plugin-qt.follows = "logos-plugin-qt";
+    logos-liblogos.inputs.logos-qt-sdk.follows = "logos-qt-sdk";
+    logos-liblogos.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     logos-package-manager.url = "github:logos-co/logos-package-manager";
     # liblogos_core links libpackage_manager_lib, so liblogos otherwise puts
     # its OWN older liblgx in the bundle's flat lib/ — where the module's
@@ -31,6 +46,10 @@
     logos-package-manager-ui.inputs.package_downloader.follows = "logos-package-downloader-module";
     logos-design-system.url = "github:logos-co/logos-design-system";
     logos-view-module-runtime.url = "github:logos-co/logos-view-module-runtime";
+    # ui-host links the same qt-host and protocol the app does.
+    logos-view-module-runtime.inputs.logos-protocol.follows = "logos-protocol";
+    logos-view-module-runtime.inputs.logos-plugin-qt.follows = "logos-plugin-qt";
+    logos-view-module-runtime.inputs.logos-cpp-sdk.follows = "logos-cpp-sdk";
     nix-bundle-logos-module-install.url = "github:logos-co/nix-bundle-logos-module-install";
     nix-bundle-dir.url = "github:logos-co/nix-bundle-dir";
     logos-qt-mcp.url = "github:logos-co/logos-qt-mcp";
