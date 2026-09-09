@@ -67,9 +67,16 @@ inline QString moduleDataDirectory()
 }
 
 // Directory for app log files (stdout/stderr capture, rotated per session).
+// The "In" form takes the session directory explicitly, so the logging config
+// reader can resolve a default without going through the environment.
+inline QString logsDirectoryIn(const QString& sessionDir)
+{
+    return sessionDir + "/logs";
+}
+
 inline QString logsDirectory()
 {
-    return baseDirectory() + "/logs";
+    return logsDirectoryIn(baseDirectory());
 }
 
 // Embedded directories — read-only, pre-installed at build time alongside the binary.

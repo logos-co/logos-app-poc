@@ -595,6 +595,21 @@ cmake --build . -j$(nproc)
 | `LOGOS_USER_DIR` | Override application base directory as-is (also settable via `--user-dir`) |
 | `QML_INSPECTOR_PORT` | QML inspector server port (default: 3768) |
 
+### Session Configuration
+
+**File:** `<session>/config.yaml` — read by `app/utils/LoggingConfig.*`
+
+The session directory (see `LOGOS_USER_DIR` above) holds an optional YAML
+document. It currently carries one block, `logging:`, which configures the
+rotating capture of stdout/stderr set up in `app/utils/LogSink.*` before
+anything else in `main()` runs. Keys, defaults and behaviour are documented in
+the README under "Session logging"; the schema is the same one `logosctl` reads
+for its daemon.
+
+Absent, empty, or unreadable, the built-in defaults apply and the app starts
+normally — a logging document can report a problem but can never stop Basecamp
+from launching.
+
 ## Testing
 
 ### Smoke Test

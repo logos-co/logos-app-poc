@@ -2,7 +2,8 @@
 #include "logos_api.h"
 #include "logos_mode.h"
 #include "LogosBasecampPaths.h"
-#include "LogRedirector.h"
+#include "LogSink.h"
+#include "LoggingConfig.h"
 #include "AccessPolicyOption.h"
 #ifdef ENABLE_QML_INSPECTOR
 #include "inspectorserver.h"
@@ -173,15 +174,32 @@ int main(int argc, char *argv[])
         }
     }
 
-    // Redirect stdout/stderr to a rotating per-session log file under
-    // <baseDirectory>/logs. Must happen after setOrganizationName/setApplicationName
-    // and after the --user-dir override is applied so baseDirectory() resolves
-    // to the right location. Terminal output is preserved by mirroring to the
-    // original stdout.
-    const QString logsDir = LogosBasecampPaths::logsDirectory();
-    if (!LogosBasecampLog::LogRedirector::instance().start(logsDir)) {
-        qWarning() << "Failed to start log redirection; continuing without file logs."
-                   << "Logs directory:" << logsDir;
+    // Capture stdout/stderr — this process's and its module hosts' — into a
+    // rotating per-session log file, configured by <session>/config.yaml. Must
+    // happen after setOrganizationName/setApplicationName and after the
+    // --user-dir override is applied, so the session directory resolves to the
+    // right place. Terminal output is preserved by mirroring to the original
+    // stdout.
+    const QString sessionDir = LogosBasecampPaths::baseDirectory();
+    const LogosBasecampLog::ConfigLoad config = LogosBasecampLog::loadConfig(sessionDir);
+
+    LogosBasecampLog::LogSink::Options logOptions;
+    logOptions.enabled   = config.logging.enabled;
+    logOptions.dir       = config.logging.dir;
+    logOptions.file      = config.logging.file;
+    logOptions.maxSizeMb = config.logging.maxSizeMb;
+    logOptions.maxFiles  = config.logging.maxFiles;
+    logOptions.console   = config.logging.console;
+    const bool logStarted = LogosBasecampLog::LogSink::instance().start(logOptions);
+
+    // Reported only now, so anything wrong with the document lands in the log
+    // file it configures rather than only on a terminal nobody attached.
+    for (const QString& diagnostic : config.diagnostics)
+        qWarning().noquote() << "Logging config:" << diagnostic;
+    if (!logStarted) {
+        qWarning().noquote() << "Could not open a log file under"
+                             << config.logging.dir
+                             << "— continuing without file logs.";
     }
 
     // Print build metadata (version, dev/portable, commit hashes) so the
@@ -384,7 +402,7 @@ int main(int argc, char *argv[])
     core.reset();
 
     // Flush final output, restore original stdout/stderr, and close the log file.
-    LogosBasecampLog::LogRedirector::instance().stop();
+    LogosBasecampLog::LogSink::instance().stop();
 
     return result;
 }

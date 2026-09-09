@@ -7,6 +7,13 @@ set(CMAKE_AUTOMOC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Qml Test Widgets Quick QuickWidgets)
 
+# Third-party libraries a test may declare with `// libdeps: <cmake targets>`.
+# Probed rather than REQUIRED so the tests that need neither still configure
+# without them; a test that DECLARES one and cannot get it is a hard error
+# below, never a silent skip.
+find_package(spdlog QUIET)
+find_package(yaml-cpp QUIET)
+
 enable_testing()
 
 # Two source roots: the host in ../app, the main_ui shell in ../src. The unit
@@ -68,6 +75,23 @@ foreach(test_src IN LISTS TEST_SOURCES)
         endforeach()
     endif()
 
+    # Third-party links, same header-comment convention as srcdeps.
+    set(_extra_libs "")
+    if(_head MATCHES "//[ \t]*libdeps:[ \t]*([^\n]*)")
+        string(STRIP "${CMAKE_MATCH_1}" _libs_line)
+        string(REGEX REPLACE "[ \t]+" ";" _lib_list "${_libs_line}")
+        foreach(lib IN LISTS _lib_list)
+            if(lib)
+                if(NOT TARGET ${lib})
+                    message(FATAL_ERROR
+                        "libdep '${lib}' for ${test_name} is not available. "
+                        "Run the suite through nix build .#unit-tests, or install it.")
+                endif()
+                list(APPEND _extra_libs ${lib})
+            endif()
+        endforeach()
+    endif()
+
     # AUTOMOC pairs a header with a .cpp of the same basename in the SAME
     # directory, and InstallEnums.cpp (src/) and its header (app/interfaces/)
     # are in different ones -- so the header rides along on every target to get
@@ -88,6 +112,7 @@ foreach(test_src IN LISTS TEST_SOURCES)
         Qt6::Quick
         Qt6::QuickWidgets
         Qt6::Test
+        ${_extra_libs}
     )
     add_test(NAME ${test_name} COMMAND ${test_name})
 endforeach()

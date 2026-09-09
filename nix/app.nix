@@ -69,6 +69,12 @@ let
       logosSdk
       logosDesignSystem
       logosViewModuleRuntime
+      # Named here as well as in buildInputs, because these roots are what the
+      # PE import sweep below resolves DLL names against and it gives up in
+      # SILENCE on a name it cannot place. spdlog would arrive transitively via
+      # liblogos; yaml-cpp is new to this tree and has no other way in.
+      pkgs.spdlog
+      pkgs.yaml-cpp
     ] ++ installedModules;
   };
 in
@@ -86,6 +92,12 @@ pkgs.stdenv.mkDerivation rec {
     logosQtHost
     # app/CMakeLists.txt does find_package(LogosDesignSystem CONFIG REQUIRED).
     logosDesignSystem
+    # The session log sink (app/utils/LogSink.cpp) and its YAML configuration
+    # (app/utils/LoggingConfig.cpp). spdlog is already in the closure via
+    # liblogos, which pins the same nixpkgs -- naming it here is what puts its
+    # headers and CMake package on this build's search path, not a second copy.
+    pkgs.spdlog
+    pkgs.yaml-cpp
   ] ++ (
     if pkgs.stdenv.isLinux then
       # Linux: WebKitGTK as backend + Wayland platform plugin
@@ -116,6 +128,11 @@ pkgs.stdenv.mkDerivation rec {
       # binary's RPATH is stripped for bundling.
       pkgs.boost
       pkgs.openssl
+      # The log sink's own dependencies, for the same reason: the dev build's
+      # RPATH is $out/lib, which holds neither. fmt is spdlog's.
+      pkgs.spdlog
+      pkgs.yaml-cpp
+      pkgs.fmt
     ]
     # See common.buildInputs: krb5 carries a host-platform bash and does not
     # cross-evaluate to mingw. makeLibraryPath is an ELF/Mach-O notion anyway.
