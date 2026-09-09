@@ -2292,58 +2292,31 @@ test("app manager: reload shows the loading state then settles", async (app) => 
 
 // --- App Manager (A13) — the context menu offers actions by install state ---
 //
-// Spec §2.A A13 (amended 2026-08-28, operator-confirmed): open the context
-// menu for test_qml_only (fixture A, installed), then for a catalog-only
-// (not installed) row if one exists. The menu expresses install state via
-// item VISIBILITY, not enabled (AppContextMenu.qml:57-103): open/details are
-// visible iff the row is installed; install is visible iff it is NOT (its
-// enabled stays true and is never asserted); uninstall is visible iff
-// installed && installType !== "embedded" && name !== "main_ui", enabled iff
-// no install is in flight. Gates, installed row: menu visible ·
-// appContextMenu.open visible · appContextMenu.details visible ·
-// appContextMenu.install NOT visible · appContextMenu.uninstall visible and
-// enabled · close() hides the menu again. Catalog-only row: install visible
-// · open/details/uninstall not visible. The catalog-only half is expected in
-// the hermetic build (package_downloader's default catalog holds
-// not-installed rows — see A10); if genuinely absent it is skipped with a
-// log line, per the amended spec.
+// Spec §2.A A13: open the context menu for fixture A (installed), then for
+// a catalog-only row if one has a live delegate. The menu expresses install
+// state via item VISIBILITY (AppContextMenu.qml): open/details iff
+// installed; install iff not installed (its enabled is never asserted);
+// uninstall iff installed && installType !== "embedded" && name !== "main_ui",
+// enabled iff no install is in flight.
 //
-// The menu is opened through the ROW'S OWN DELEGATE, not a test-built
-// appData: the expression evaluated is `openFor(d.snapshot())` — verbatim
-// the delegate TapHandler's handler (AppGridDelegate.qml:73-76,
-// AppListDelegate.qml:79-82) — scoped to the AppContextMenu instance that
-// delegate owns. Scoping matters: the inspector's evaluate resolves ids via
-// QQmlEngine::contextForObject, i.e. the object's OUTER context. For a
-// delegate root that is AppGrid.qml's Component context, whose `d` is
-// AppGrid's own QtObject; for the menu it is the delegate's file context,
-// where `d` is the delegate's private state and `snapshot()` is its
-// function. So the menu's scope is the one place both the delegate's
-// snapshot and its menu resolve at once. Each delegate is identified by
-// evaluating `d.nameText` / `d.isInstalled` in that same scope. callMethod
-// is never used here: it mis-converts arguments.
+// The menu is opened through the row's own delegate by evaluating
+// `openFor(d.snapshot())` — the delegate TapHandler's handler verbatim —
+// scoped to the AppContextMenu that delegate owns. The inspector resolves
+// ids via the object's OUTER context, so in the menu's scope `d` is the
+// delegate's private state and `root` the delegate itself; a delegate root
+// would resolve `d` to AppGrid's. WelcomePage.qml also builds tiles out of
+// AppGridDelegate with a hand-assembled appData and contextMenuEnabled:
+// false, so candidates are filtered on that flag. callMethod is never used:
+// it mis-converts arguments.
 //
-// After openFor, the menu's appData is read back and compared field-by-field
-// with a pre-menu snapshot of the outer model's rows (the proven A8/A10
-// anchor path; role numbers from BasecampModelRoles.h, one primitive per
-// evaluate call). That is the delegate-mapping assertion: `model` roles →
-// delegate d.* → snapshot() → menu appData must round-trip unchanged.
+// The menu's appData is then compared field-by-field with a pre-menu
+// snapshot of the outer model's rows: `model` roles → d.* → snapshot() →
+// appData must round-trip unchanged. Item state is read through the same
+// menu instance over its own count/itemAt; a tree-wide objectName find
+// would be ambiguous since every delegate owns an unopened menu.
 //
-// NOT covered: the right-button TapHandler binding itself. The inspector's
-// click command synthesizes Qt::LeftButton press/release only
-// (logos-qt-mcp inspectorserver.cpp cmdClick) and has no button parameter,
-// so a genuine right-click cannot be delivered from this harness. Adding
-// one is a framework change, not a test change.
-//
-// Item state is read through the SAME menu instance with a menu-scoped
-// evaluate over its own count/itemAt (returned as one JSON string — the A1
-// IIFE technique; evaluate returns primitives only), keyed by the items'
-// objectNames. A tree-wide objectName find would be ambiguous: every
-// delegate instantiates its own AppContextMenu, and on all the unopened
-// ones (appData {}) the install item IS visible, so a global
-// "appContextMenu.install" lookup could land on the wrong instance. Hidden
-// items also collapse to height 0, but visible is the spec's assertion.
-// Each half closes its menu via evaluate close() and asserts it hidden, so
-// no menu is left open.
+// NOT covered: the right-button binding itself — the inspector's click
+// synthesizes Qt::LeftButton only.
 
 test("app manager: context menu offers actions by install state", async (app) => {
   await app.click("Applications");
@@ -2360,9 +2333,8 @@ test("app manager: context menu offers actions by install state", async (app) =>
     }
   }, { timeout: 10000, interval: 500, description: "localAppsProxy to exist" });
 
-  // SNAPSHOT every outer row's menu-relevant fields — the exact appData
-  // contract — before any menu opens. Role numbers follow
-  // BasecampModelRoles.h's AppsModelRoles.
+  // Every outer row's menu-relevant fields, before any menu opens. Role
+  // numbers follow BasecampModelRoles.h's AppsModelRoles.
   const ROW_FIELDS = [
     ["name",          "Qt.UserRole + 1",  "string"], // NameRole
     ["repositoryUrl", "Qt.UserRole + 2",  "string"], // RepositoryUrlRole
@@ -2370,7 +2342,7 @@ test("app manager: context menu offers actions by install state", async (app) =>
     ["isInstalled",   "Qt.UserRole + 14", "bool"],   // IsInstalledRole
     ["installStatus", "Qt.UserRole + 16", "number"], // InstallStatusRole
     ["installType",   "Qt.UserRole + 17", "string"], // InstallTypeRole
-    ["installStage",  "Qt.UserRole + 22", "number"], // InstallStageRole
+    ["installStage",  "Qt.UserRole + 29", "number"], // PlanInstallStageRole — what the delegates snapshot
   ];
   const snapshotRows = async () => {
     const rowCount = await evalOn(app, proxyId, "sourceModel.rowCount()");
@@ -2393,9 +2365,8 @@ test("app manager: context menu offers actions by install state", async (app) =>
     return rows;
   };
 
-  // PRECONDITION (spec gate): fixture A's installed row is in the model —
-  // hard failure in --ci (integration-test pre-seeds it at boot), spec-§0.A
-  // skip otherwise.
+  // Precondition: fixture A's installed row is in the model — hard failure
+  // in --ci (pre-seeded at boot), spec-§0.A skip otherwise.
   let rows = [];
   try {
     await app.waitFor(async () => {
@@ -2411,7 +2382,7 @@ test("app manager: context menu offers actions by install state", async (app) =>
     if (!CI_MODE) {
       console.log(
         `    SKIP: fixture A (${FIXTURE_A.name}) has no installed row in ` +
-        `this app instance (spec §0.A: skip, not fail, outside --ci)`);
+        `this app instance (spec §0.A: skip outside --ci)`);
       return;
     }
     throw new Error(
@@ -2422,12 +2393,10 @@ test("app manager: context menu offers actions by install state", async (app) =>
     rows.find((r) => r.name === FIXTURE_A.name && r.isInstalled === true);
   const catalogRows = rows.filter((r) => r.isInstalled === false);
 
-  // The AppContextMenu owned by the delegate that renders `row`, or null if
-  // no live delegate renders it (GridView instantiates only rows within its
-  // viewport + cacheBuffer). Identification runs in the menu's scope, where
-  // `d` is the OWNING DELEGATE's private state — see the header comment.
-  // A scope in which `d.nameText` does not resolve is a wiring regression,
-  // not "no match", so it is reported rather than skipped.
+  // The AppContextMenu owned by the App Manager delegate rendering `row`, or
+  // null if none is live (GridView instantiates viewport + cacheBuffer only).
+  // Delegates with their menu disabled are skipped. A scope where `d.nameText`
+  // does not resolve is a wiring regression, so it is reported, not skipped.
   const findDelegateMenu = async (row) => {
     const res = typeof app.findByType === "function"
       ? await app.findByType("AppContextMenu")
@@ -2441,7 +2410,9 @@ test("app manager: context menu offers actions by install state", async (app) =>
       const probe = await app.inspector.send("evaluate", {
         objectId: m.id,
         expression:
-          "JSON.stringify({ name: String(d.nameText), installed: d.isInstalled === true })",
+          "JSON.stringify({ name: String(d.nameText), " +
+          "installed: d.isInstalled === true, " +
+          "menuEnabled: root.contextMenuEnabled !== false })",
       });
       if (probe.error) {
         throw new Error(
@@ -2449,12 +2420,12 @@ test("app manager: context menu offers actions by install state", async (app) =>
           `AppContextMenu ${m.id}'s scope: ${probe.error}`);
       }
       const got = JSON.parse(probe.result);
+      if (!got.menuEnabled) continue;
       if (got.name === row.name && got.installed === row.isInstalled) return m.id;
     }
     return null;
   };
 
-  // The delegate TapHandler's handler, verbatim, in the delegate's scope.
   const openMenuFor = async (menuId, label) => {
     const res = await app.inspector.send("evaluate", {
       objectId: menuId, expression: "openFor(d.snapshot())",
@@ -2464,8 +2435,7 @@ test("app manager: context menu offers actions by install state", async (app) =>
     }
   };
 
-  // Delegate-mapping gate: the appData the delegate handed the menu must
-  // equal the model row it renders, field for field.
+  // The appData the delegate handed the menu must equal its model row.
   const assertMenuAppData = async (menuId, row, label) => {
     const res = await app.inspector.send("evaluate", {
       objectId: menuId, expression: "JSON.stringify(appData)",
@@ -2545,9 +2515,8 @@ test("app manager: context menu offers actions by install state", async (app) =>
          description: `the menu to close after the ${label} row` });
   };
 
-  // Half 1 — fixture A's installed row: open/details/uninstall offered,
-  // install hidden. Its delegate must be live: the row is in the model and
-  // the installed section renders first, so absence is a real failure.
+  // Installed row: open/details/uninstall offered, install hidden. The
+  // installed section renders first, so a missing delegate is a failure.
   let installedMenuId = null;
   await app.waitFor(async () => {
     installedMenuId = await findDelegateMenu(installedRow);
@@ -2576,10 +2545,8 @@ test("app manager: context menu offers actions by install state", async (app) =>
        description: "the installed row's menu to offer open/details/uninstall" });
   await closeMenu(installedMenuId, "installed");
 
-  // Half 2 — a catalog-only (not installed) row: only install offered. Its
-  // enabled is not asserted (it stays true regardless of state). Any
-  // not-installed row with a live delegate will do; rows scrolled out of
-  // the viewport have none, so scan them in model order.
+  // Catalog-only row: only install offered. Any not-installed row with a
+  // live delegate will do; scan in model order.
   let catalogRow = null;
   let catalogMenuId = null;
   for (const row of catalogRows) {
@@ -2590,8 +2557,7 @@ test("app manager: context menu offers actions by install state", async (app) =>
     console.log(
       `    SKIP: A13 catalog-only half — ${catalogRows.length} of ` +
       `${rows.length} outer-model row(s) are not installed, but none has a ` +
-      `live delegate to open the menu from (amended spec: log and skip when ` +
-      `genuinely absent)`);
+      `live delegate to open the menu from`);
     return;
   }
   await openMenuFor(catalogMenuId, "catalog-only");
