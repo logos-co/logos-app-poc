@@ -13,6 +13,11 @@ ItemDelegate {
     // ─── Public API ───
     property var appRow: ({})
     property bool installing: false
+    // Shared across the list so the columns line up: the dialog folds the
+    // maximum versionContentWidth of its rows and hands it back here.
+    property real versionColumnWidth: 110
+    // What this row's picker needs to show its longest version uncut.
+    readonly property real versionContentWidth: d.measuredVersionWidth
     signal versionPicked(string name, string newVersion)
 
     QtObject {
@@ -33,6 +38,31 @@ ItemDelegate {
 
         readonly property var usableVersions:
             root.appRow ? (root.appRow.versions || []) : []
+
+        // Longest by character count — version strings share one alphabet.
+        readonly property string widestVersionLabel: {
+            var best = ""
+            const list = d.usableVersions
+            for (var i = 0; i < list.length; ++i) {
+                const v = (list[i] && list[i].manifest)
+                              ? (list[i].manifest.version || "") : ""
+                if (v.length > best.length) best = v
+            }
+            if (best.length === 0) best = d.toVersion
+            return best.length > 0 ? "v." + best : ""
+        }
+
+        // LogosComboBox reserves the chevron in the label's own padding.
+        readonly property real versionChrome:
+            versionCombo.leftPadding + versionCombo.rightPadding
+            + versionCombo.contentLabel.leftPadding
+            + versionCombo.contentLabel.rightPadding
+
+        readonly property real measuredVersionWidth: {
+            const w = Math.max(widestVersionProbe.implicitWidth,
+                               currentVersionProbe.implicitWidth)
+            return w > 0 ? Math.ceil(w + d.versionChrome) : 0
+        }
 
         // Live download bytes. `downloadTotal` is 0 when nobody knows the
         // size, so guard every division on `hasProgress`.
@@ -86,10 +116,25 @@ ItemDelegate {
         // versionPicked signal that the dialog folds into its pin map.
         Item {
             Layout.alignment: Qt.AlignVCenter
-            Layout.preferredWidth: 110
+            Layout.preferredWidth: root.versionColumnWidth
             Layout.preferredHeight: 32
 
+            // Text.implicitWidth is the unelided width the picker needs.
+            Text {
+                id: widestVersionProbe
+                visible: false
+                font: versionCombo.contentLabel.font
+                text: d.widestVersionLabel
+            }
+            Text {
+                id: currentVersionProbe
+                visible: false
+                font: versionCombo.contentLabel.font
+                text: versionCombo.displayText
+            }
+
             LogosComboBox {
+                id: versionCombo
                 anchors.fill: parent
                 visible: d.usableVersions.length > 0
                 enabled: !root.installing && !d.isError
@@ -113,6 +158,10 @@ ItemDelegate {
                     if (!picked || picked === d.toVersion) return
                     root.versionPicked(d.rowName, picked)
                 }
+
+                hoverEnabled: true
+                ToolTip.visible: hovered && contentLabel.truncated
+                ToolTip.text: displayText
             }
 
             LogosText {
