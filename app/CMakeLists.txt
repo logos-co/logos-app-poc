@@ -24,6 +24,12 @@ endif()
 
 find_package(Qt6 COMPONENTS Widgets RemoteObjects Quick Qml QuickWidgets QuickControls2 Network REQUIRED)
 
+# The session log sink and its YAML configuration (app/utils/LogSink.*,
+# app/utils/LoggingConfig.*). spdlog supplies the rotating file sink — the same
+# one liblogos already logs through, so this adds no second copy to the closure.
+find_package(spdlog REQUIRED)
+find_package(yaml-cpp REQUIRED)
+
 # QML Inspector (Qt DevTools-like inspection over TCP)
 # Enabled by default in Debug builds, disabled in Release.
 # Override with -DENABLE_QML_INSPECTOR=ON/OFF
@@ -271,8 +277,10 @@ set(PROJECT_SOURCES
     # it sits with IShellHost/IShellView, the other boundaries this app
     # defines rather than inherits.
     interfaces/ICoreRuntime.h
-    utils/LogRedirector.h
-    utils/LogRedirector.cpp
+    utils/LogSink.h
+    utils/LogSink.cpp
+    utils/LoggingConfig.h
+    utils/LoggingConfig.cpp
     utils/AccessPolicyOption.h
     utils/AccessPolicyOption.cpp
     utils/DependencyBlocker.h
@@ -376,6 +384,8 @@ endif()
 # are linked for the out-of-process UI plugins, and so the portable bundler
 # picks them up.
 target_link_libraries(LogosBasecamp PRIVATE
+    spdlog::spdlog
+    yaml-cpp::yaml-cpp
     Qt6::Widgets
     Qt6::RemoteObjects
     Qt6::Quick

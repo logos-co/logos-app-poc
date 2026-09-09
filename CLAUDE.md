@@ -66,6 +66,7 @@ nix build .#integration-test -L
 - **Sidebar** (left): Contains app plugin icons (top/middle) and system buttons at the bottom (Dashboard, Modules, Settings)
 - **Plugins** appear as sidebar icons: `package_manager_ui`
 - Plugins are loaded from `~/Library/Application Support/Logos/LogosBasecampDev/plugins/`
+- Session logging (stdout/stderr capture into `logs/`) is configured by an optional `config.yaml` in the session root — see the README's "Session logging" section; the code is `app/utils/LogSink.*` + `app/utils/LoggingConfig.*`
 - Main UI is in `src/Basecamp/` (the main_ui plugin), organised by feature: `Sidebar/`, `AppManager/`, `Settings/`, `Shell/`, `Icons/`
 
 ## C++ Architecture

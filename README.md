@@ -103,6 +103,68 @@ Unlike the mock build it ships no `liblogos_protocol`, spawns no `ui-host` and l
 
 Equivalent to setting the `LOGOS_USER_DIR` env var.
 
+#### Session logging (`config.yaml`)
+
+Everything Basecamp and its module hosts write to stdout/stderr goes to a
+rotating file under `logs/` in the session directory. Nothing needs configuring
+for that to happen; a `config.yaml` in the root of the session directory changes
+how it behaves:
+
+```
+~/Library/Application Support/Logos/LogosBasecamp/     # macOS ("…Dev" for a dev build)
+~/.local/share/Logos/LogosBasecamp/                    # Linux
+├── config.yaml
+├── logs/
+├── modules/
+├── module_data/
+└── plugins/
+```
+
+```yaml
+logging:
+  enabled: true          # false -> no log file at all
+  file: basecamp.log     # the log's name, inside dir
+  dir: logs              # relative -> inside the session; also ~/x or /var/log/x
+  max_size_mb: 10        # rotate past this; 0 = never rotate
+  max_files: 5           # keep this many in total, oldest dropped
+  console: true          # also mirror to the terminal that launched the app
+```
+
+`--user-dir` moves the session, and the document with it, so parallel instances
+configure their logging independently.
+
+Each launch writes a **new, timestamped file**, and the name in `file` survives
+as a symlink to whichever one is current — so `tail -F logs/basecamp.log` follows
+across restarts without anyone working out a stamp:
+
+```
+logs/
+├── basecamp.log -> basecamp_20260909_180411.log   # always the current session
+├── basecamp_20260909_180404.log
+└── basecamp_20260909_180411.log
+```
+
+`max_files` bounds the **directory**, not just one launch's rotations: the oldest
+files are pruned at each start, so an app started a hundred times does not leave
+a hundred logs behind. Earlier builds kept every file forever, so the first
+launch after upgrading prunes whatever those left behind — raise `max_files`
+first if you want to keep them.
+
+Capture is pipe-based rather than a file redirect, which is what lets a module
+host's output land in the log: those are separate processes holding inherited
+descriptors, and renaming a file out from under a child that still has it open
+just keeps filling the old inode.
+
+A document that cannot be read is reported and then **ignored entirely** —
+logging falls back to the defaults rather than to some half-applied mixture of
+the two. The reason is written into the log file itself as well as to the
+terminal, so `logging.max_size_mb: expected a whole number, but got a string.`
+is there to find either way. Unknown keys are named too, since a `max_size` that
+was silently dropped looks exactly like one that was honoured.
+
+This is the same mechanism, spelling and file layout as `logosctl`'s daemon
+logging; see that tool's `docs/logosctl.md` for the daemon-side view.
+
 #### Inter-module access enforcement (`--access-policy`)
 
 **Default: off.** Without this flag, any loaded module may call any other —

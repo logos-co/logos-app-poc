@@ -69,6 +69,12 @@ let
       logosSdk
       logosDesignSystem
       logosViewModuleRuntime
+      # Named here as well as in buildInputs, because these roots are what the
+      # PE import sweep below resolves DLL names against and it gives up in
+      # SILENCE on a name it cannot place. spdlog would arrive transitively via
+      # liblogos; yaml-cpp is new to this tree and has no other way in.
+      pkgs.spdlog
+      pkgs.yaml-cpp
     ] ++ installedModules;
   };
 in
@@ -86,6 +92,12 @@ pkgs.stdenv.mkDerivation rec {
     logosQtHost
     # app/CMakeLists.txt does find_package(LogosDesignSystem CONFIG REQUIRED).
     logosDesignSystem
+    # The session log sink (app/utils/LogSink.cpp) and its YAML configuration
+    # (app/utils/LoggingConfig.cpp). spdlog is already in the closure via
+    # liblogos, which pins the same nixpkgs -- naming it here is what puts its
+    # headers and CMake package on this build's search path, not a second copy.
+    pkgs.spdlog
+    pkgs.yaml-cpp
   ] ++ (
     if pkgs.stdenv.isLinux then
       # Linux: WebKitGTK as backend + Wayland platform plugin
@@ -116,6 +128,11 @@ pkgs.stdenv.mkDerivation rec {
       # binary's RPATH is stripped for bundling.
       pkgs.boost
       pkgs.openssl
+      # The log sink's own dependencies, for the same reason: the dev build's
+      # RPATH is $out/lib, which holds neither. fmt is spdlog's.
+      pkgs.spdlog
+      pkgs.yaml-cpp
+      pkgs.fmt
     ]
     # See common.buildInputs: krb5 carries a host-platform bash and does not
     # cross-evaluate to mingw. makeLibraryPath is an ELF/Mach-O notion anyway.
@@ -304,7 +321,12 @@ pkgs.stdenv.mkDerivation rec {
           echo "Cleaning RPATH for $1"
           patchelf --remove-rpath "$1" 2>/dev/null || true
         fi
-        # Set proper RPATH for the main binary
+        # Set proper RPATH for the main binary.
+        #
+        # $out/lib is the ONLY search path the binary keeps: the branch above
+        # has already wiped the CMake-built RPATH (it names the build tree), so
+        # every library this binary needs directly has to be staged into
+        # $out/lib by installPhase. See the yaml-cpp staging there.
         if echo "$1" | grep -qE "/\.?LogosBasecamp$"; then
           echo "Setting RPATH for $1"
           patchelf --set-rpath "$out/lib" "$1" 2>/dev/null || true
@@ -771,6 +793,44 @@ WRAPPER_EOF
       fi
     done
     echo "Installed $_copied shared librar(y|ies) from liblogos into $_libdest"
+
+    # yaml-cpp, which app/utils/LoggingConfig.cpp links DIRECTLY.
+    #
+    # LOAD-BEARING ON LINUX ONLY, and measured: an ELF records a bare soname and
+    # the preFixup above leaves $out/lib as the binary's ONLY search path, so a
+    # direct dependency that no other bundled library happens to need has no way
+    # in. libspdlog and libfmt arrive regardless because liblogos_core.so needs
+    # them too; yaml-cpp is needed by nothing else, and the portable bundle
+    # therefore built cleanly and died at launch with "libyaml-cpp.so.0.8:
+    # cannot open shared object file". Only the doctests caught it -- the dev
+    # build's wrapper sets LD_LIBRARY_PATH, and every other CI job builds a
+    # bundle without ever starting one.
+    #
+    # A Mach-O records the dependency as an absolute store path instead, which
+    # the bundler follows, so the macOS bundle already carried it. Staged on
+    # both anyway: it lands the same single file there, and it makes the rule
+    # "everything this binary links directly is in $out/lib" true on both.
+    #
+    # Only what is MISSING is staged. Copying a library the module bundles also
+    # ship would put one name in lib/ and beside a module, which is the skew
+    # nix/link-gate.nix exists to reject.
+    ${pkgs.lib.optionalString (!pkgs.stdenv.hostPlatform.isWindows) ''
+    _yaml=0
+    # Versioned names only, on both platforms: the unversioned libyaml-cpp.dylib
+    # / .so is the link-time symlink and no binary here names it.
+    for f in "${pkgs.yaml-cpp}/lib/"libyaml-cpp.*.dylib "${pkgs.yaml-cpp}/lib/"libyaml-cpp.so.*; do
+      if [ -f "$f" ]; then
+        cp -L "$f" "$_libdest/" || true
+        _yaml=$((_yaml + 1))
+      fi
+    done
+    if [ "$_yaml" -eq 0 ]; then
+      echo "ERROR: staged no yaml-cpp library from ${pkgs.yaml-cpp}/lib" >&2
+      ls -la "${pkgs.yaml-cpp}/lib" >&2 || true
+      exit 1
+    fi
+    echo "Installed $_yaml yaml-cpp librar(y|ies) into $_libdest"
+    ''}
     # Assert rather than trust: this loop silently copying zero is exactly the
     # defect above, and it exits 0 either way.
     if [ "$_copied" -eq 0 ]; then

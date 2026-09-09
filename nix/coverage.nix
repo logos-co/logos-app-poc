@@ -45,6 +45,11 @@ pkgs.stdenv.mkDerivation {
   buildInputs = [
     pkgs.qt6.qtbase
     pkgs.qt6.qtdeclarative   # Qt::Qml — InstallEnums.h includes <QtQml/qqml.h>
+    # This derivation reuses tests/CMakeLists.txt verbatim, so it needs every
+    # library a test declares as a `// libdeps:` — a missing one is a configure
+    # error naming the test, not a skip.
+    pkgs.spdlog
+    pkgs.yaml-cpp
   ];
 
   dontUseCmakeConfigure = true;
