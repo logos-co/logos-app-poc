@@ -250,6 +250,21 @@ jobs:
           nix build .#symbol-gate -L
           nix build .#symbol-gate-negative -L
 
+      # The gate above reads what we SHIP -- one liblogos_protocol in $out/lib
+      # -- which stays true while qt-host was compiled against a second one that
+      # only the closure names, and that is an 8-byte heap overrun on every
+      # getClient(). The rule lives in logos-protocol, where the ABI is owned;
+      # run it from the revision we lock, not master, so the check and the build
+      # agree. It reads the lock, so one platform covers both.
+      - name: qt-host/protocol pairing
+        run: |
+          nix build .#app -o result-abi-subject -L
+          # Resolve the ROOT logos-protocol edge. The flat node of that name
+          # belongs to whichever edge claimed it first, which is not ours.
+          rev=$(nix flake metadata --json |
+            jq -r '.locks as $l | $l.nodes[$l.nodes[$l.root].inputs["logos-protocol"]].locked.rev')
+          nix run "github:logos-co/logos-protocol/$rev#abi-closure-check" -- ./result-abi-subject
+
       # Report-only non-blocking for now
       - name: Coverage report
         continue-on-error: true
