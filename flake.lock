@@ -34148,11 +34148,11 @@
         "logos-package-manager": "logos-package-manager_22"
       },
       "locked": {
-        "lastModified": 1788803121,
-        "narHash": "sha256-JY/muWBPL/AcGXOP7XD2/3SnYJ4dLykgUSoAVca2484=",
+        "lastModified": 1789066157,
+        "narHash": "sha256-JQLIOHj6dZ2/qY/ESf9un2SEC+cIH3z/Dw+wjuMFbuA=",
         "owner": "logos-co",
         "repo": "logos-package-manager-module",
-        "rev": "6f2b84fce9a8730d4d2599f1442fa7effcb672dd",
+        "rev": "e991615120228844003fa5be78db76b8dce44924",
         "type": "github"
       },
       "original": {
