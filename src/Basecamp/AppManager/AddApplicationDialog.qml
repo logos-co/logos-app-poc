@@ -21,17 +21,9 @@ Dialog {
     signal versionChangeRequested(string name, string repositoryUrl, var versionPins)
     signal uninstallRequested(string name, string repositoryUrl)
 
-    // Width of the version column, folded from what the rows report needing.
-    readonly property real versionColumnWidth: d.versionColumnWidth
-    function clampVersionColumn(w) {
-        return Math.max(d.versionColumnMin,
-                        Math.min(d.versionColumnMax, Math.ceil(w || 0)))
-    }
-
     function openWith(metadata_) {
         root.metadata = metadata_ || ({})
         d.pickedVersions = ({})
-        d.versionColumnWidth = d.versionColumnMin
         root.installStage = root.metadata.installStage || InstallStage.None
         root.installError = ""   // clear any stale error from a prior open
         open()
@@ -64,15 +56,6 @@ Dialog {
         }
 
         property var pickedVersions: ({})
-
-        readonly property real versionColumnMin: 110
-        // Capped so a long version cannot squeeze out the description column.
-        readonly property real versionColumnMax: 200
-        property real versionColumnWidth: d.versionColumnMin
-        function growVersionColumn(w) {
-            const want = root.clampVersionColumn(w)
-            if (want > d.versionColumnWidth) d.versionColumnWidth = want
-        }
 
         // ── Target app derived fields ──
         readonly property string targetName:        root.metadata.name || ""
@@ -497,9 +480,6 @@ Dialog {
 
                 appRow: model
                 installing: d.installing
-                versionColumnWidth: d.versionColumnWidth
-                onVersionContentWidthChanged: d.growVersionColumn(versionContentWidth)
-                Component.onCompleted: d.growVersionColumn(versionContentWidth)
 
                 onVersionPicked: function(rowName, newVersion) {
                     var nextPicks = Object.assign({}, d.pickedVersions)
