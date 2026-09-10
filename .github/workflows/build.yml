@@ -107,47 +107,16 @@ jobs:
           nix build .#packages.x86_64-windows.symbol-gate -L
           nix build .#packages.x86_64-windows.symbol-gate-negative -L
 
-      - name: Build the Windows bundle
-        run: nix build .#packages.x86_64-windows.bin-bundle-dir -L
-
-      # `zip`, not tar.gz: this is the one artifact here whose users are on
-      # Windows, where Explorer opens a .zip and nothing opens a .tar.gz.
-      #
-      # -r through `result/` DEREFERENCES: the bundle's DLLs are symlinks into
-      # the nix store, and an archive of dangling links extracts to a tree that
-      # cannot start. nix-bundle-lgx shipped exactly that bug -- `cp -a` implied
-      # --no-dereference, the payload lost 75% of its files, and the step exited
-      # 0. The count assertion below is why it cannot recur silently.
-      - name: Package the bundle as a zip
-        run: |
-          set -euo pipefail
-          src=$(readlink -f result)
-          staged=$(find -L "$src" -type f | wc -l | tr -d ' ')
-          [ "$staged" -gt 0 ] || { echo "::error::the bundle is empty"; exit 1; }
-          mkdir -p pkg/logos-basecamp
-          # --no-preserve=mode is load-bearing: store dirs are r-xr-xr-x, and
-          # copying that leaves a pkg/ tree nothing can later unlink.
-          cp -rL --no-preserve=mode,ownership "$src"/. pkg/logos-basecamp/
-          ( cd pkg && zip -qr ../logos-basecamp-x86_64-windows.zip logos-basecamp )
-          zipped=$(unzip -l logos-basecamp-x86_64-windows.zip | tail -1 | awk '{print $2}')
-          echo "bundle $staged file(s) -> zip $zipped entr(ies)"
-          # A dropped symlink is invisible in an exit code. Compare the counts.
-          if [ "$zipped" -lt "$staged" ]; then
-            echo "::error::the zip holds $zipped entries but the bundle has $staged files."
-            echo "::error::Something was not dereferenced; the extracted tree would be"
-            echo "::error::missing DLLs and could not start."
-            exit 1
-          fi
-          # A PE with no .exe is a bundle nobody can run.
-          n_exe=$(find pkg -name '*.exe' | wc -l | tr -d ' ')
-          [ "$n_exe" -gt 0 ] || { echo "::error::no .exe in the bundle"; exit 1; }
-          echo "exe(s): $n_exe"
-
-      # Wraps the SAME bundle the zip step above just realised, so this costs
-      # only the makensis run. The installer carries a Windows-GUI subsystem
-      # assertion on LogosBasecamp.exe -- see nix/windows-installer.nix -- which
-      # is the one place a regression to a console build gets caught, since CI
-      # never runs the binary.
+      # The installer is the only Windows artifact. It builds bin-bundle-dir
+      # transitively, so dropping the separate bundle + zip steps costs no
+      # coverage: the two assertions the zip step carried -- that the tree was
+      # DEREFERENCED (its DLLs are symlinks into the nix store, and an archive
+      # of dangling links extracts to a tree that cannot start) and that it
+      # holds a runnable .exe -- moved into nix/windows-installer.nix, where
+      # they now run on every `nix build` rather than only here. That file also
+      # asserts LogosBasecamp.exe is subsystem 00000002: CI cross-builds this
+      # and never runs it, so a build-time check is the only signal a
+      # regression to a console-subsystem image would produce.
       - name: Build the Windows installer
         run: nix build .#packages.x86_64-windows.bin-installer -L -o result-installer
 
@@ -160,9 +129,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows-x86_64
-          path: |
-            logos-basecamp-x86_64-windows.zip
-            *-setup.exe
+          path: '*-setup.exe'
 
   build-macos-app:
     environment: ${{ github.ref == 'refs/heads/master' && 'public-cache' || '' }}
@@ -394,5 +361,4 @@ jobs:
           files: |
             artifacts/*.AppImage
             artifacts/*.app.tar.gz
-            artifacts/*-windows.zip
             artifacts/*-setup.exe

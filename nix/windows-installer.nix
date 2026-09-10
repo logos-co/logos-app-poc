@@ -44,6 +44,17 @@ pkgs.runCommand "${slug}-installer-${version}"
     staged=$(find "$stage" -type f | wc -l | tr -d ' ')
     echo "staging $staged file(s) from ${bundle}"
     [ "$staged" -gt 0 ] || { echo "the bundle staged empty"; exit 1; }
+
+    # Assert the dereference DIRECTLY rather than inferring it from a file
+    # count. A staging that quietly kept links is invisible in an exit code,
+    # and this is the only check standing between that and a shipped installer.
+    links=$(find "$stage" -type l | wc -l | tr -d ' ')
+    [ "$links" -eq 0 ] || {
+      echo "$links symlink(s) survived staging; the installed tree would carry"
+      echo "dangling links into /nix/store and die 0xC0000135 before main()"
+      find "$stage" -type l | head -5
+      exit 1
+    }
     [ -f "$stage/bin/${exeName}" ] || {
       echo "no bin/${exeName} staged; the installer would have nothing to launch"
       exit 1
