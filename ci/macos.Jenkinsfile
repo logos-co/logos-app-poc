@@ -70,7 +70,7 @@ pipeline {
 
     stage('Upload') {
       steps { script {
-        env.PKG_URL = s5cmd.upload(env.ARTIFACT)
+        env.PKG_URL = s5cmd.upload(env.ARTIFACT, retriesCount: 5)
         jenkins.setBuildDesc(DMG: env.PKG_URL)
       } }
     }
