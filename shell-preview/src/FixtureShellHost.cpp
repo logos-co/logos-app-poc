@@ -20,7 +20,6 @@ int  FixtureShellHost::currentSectionIndex() const { return m_backend.currentAct
 void FixtureShellHost::setCurrentSectionIndex(int index)
 {
     m_backend.setCurrentActiveSectionIndex(index);
-    if (m_observer) m_observer->onSectionIndexChanged(index);
 }
 
 void FixtureShellHost::loadUiModule(const QString& name)

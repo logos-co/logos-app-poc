@@ -43,14 +43,22 @@ IShellView* resolveShell(const QString& shellPath)
     }
     qFatal("No static plugin implements IShellView; was main_ui linked with Q_IMPORT_PLUGIN?");
 #else
-    auto* loader = new QPluginLoader(shellPath, QCoreApplication::instance());
+    QString path = shellPath;
+#if defined(Q_OS_ANDROID)
+    // applicationDirPath() is empty on Android (the process is the JVM); the
+    // APK's native library dir, where androiddeployqt put libmain_ui.so, is
+    // the first library path.
+    if (path.isEmpty())
+        path = QCoreApplication::libraryPaths().value(0) + "/libmain_ui.so";
+#endif
+    auto* loader = new QPluginLoader(path, QCoreApplication::instance());
     if (!loader->load())
         qFatal("Failed to load the shell from %s: %s",
-               qUtf8Printable(shellPath), qUtf8Printable(loader->errorString()));
+               qUtf8Printable(path), qUtf8Printable(loader->errorString()));
 
     auto* shell = qobject_cast<IShellView*>(loader->instance());
     if (!shell)
-        qFatal("%s does not implement IShellView", qUtf8Printable(shellPath));
+        qFatal("%s does not implement IShellView", qUtf8Printable(path));
     return shell;
 #endif
 }
@@ -73,6 +81,7 @@ int main(int argc, char* argv[])
     parser.process(app);
 
     QString shellPath = parser.value(shellOpt);
+#if !defined(Q_OS_ANDROID)
     if (shellPath.isEmpty()) {
 #if defined(Q_OS_WIN)
         const QString ext = ".dll";
@@ -84,6 +93,7 @@ int main(int argc, char* argv[])
         shellPath = QDir::cleanPath(QCoreApplication::applicationDirPath()
                                     + "/../plugins/main_ui/main_ui" + ext);
     }
+#endif
 
     QJsonObject fixture;
     const QString fixturePath = parser.value(fixtureOpt);
@@ -114,7 +124,7 @@ int main(int argc, char* argv[])
     window.setWindowTitle("Logos Basecamp — shell preview (fixture data)");
     window.setCentralWidget(shell->createShell(&host));
     host.replaySection();
-#if defined(Q_OS_IOS)
+#if defined(Q_OS_ANDROID) || defined(Q_OS_IOS)
     window.showFullScreen();
 #else
     window.resize(1280, 860);

@@ -121,13 +121,39 @@
       # opt-in and carry their own cross package set. The design system is a
       # QML-only library, so it is built here from its source with that set
       # instead of through its own flake, which only enumerates forAllTargets.
+      mobileDesignSystemFor = pkgs: import "${logos-design-system}/nix/library.nix" {
+        inherit pkgs;
+        common = import "${logos-design-system}/nix/common.nix" { inherit pkgs; };
+      };
       forAllMobileTargets = f: logos-nix.lib.forAllMobileTargets ({ system, pkgs, buildSystem }:
-        let
-          dsCommon = import "${logos-design-system}/nix/common.nix" { inherit pkgs; };
-        in f {
+        f {
           inherit system pkgs buildSystem;
-          logosDesignSystem = import "${logos-design-system}/nix/library.nix" { inherit pkgs; common = dsCommon; };
+          logosDesignSystem = mobileDesignSystemFor pkgs;
         });
+
+      # The Shell plugin and the Shell preview APK over one Android package
+      # set. logos-nix pins the aarch64-android pseudo-system to an x86_64-linux
+      # build platform, so `packages.aarch64-android.*` is the canonical set and
+      # the same function over legacyPackages.<system>.pkgsAndroid is how a Mac
+      # builds the APK it installs.
+      androidPackages = { pkgs, logosDesignSystem }:
+        let
+          # Only pname/version/meta/nativeBuildInputs are read; the runtime
+          # inputs never reach these derivations.
+          common = import ./nix/default.nix {
+            inherit pkgs;
+            logosSdk = null; logosProtocolPkg = null; logosQtHost = null;
+            logosModule = null; logosLiblogos = null;
+          };
+          mainUIPlugin = import ./nix/main-ui.nix {
+            inherit pkgs common logosDesignSystem; src = ./.;
+          };
+        in {
+          main-ui-plugin = mainUIPlugin;
+          shell-preview-android = import ./nix/shell-preview-android.nix {
+            inherit pkgs common mainUIPlugin logosDesignSystem; src = ./.;
+          };
+        };
       forAllSystems = f: logos-nix.lib.forAllTargets ({ system, pkgs }:
         let buildSystem = buildSystemFor system; in f {
         inherit system pkgs;
@@ -194,7 +220,6 @@
     in
     {
       packages = forAllMobileTargets ({ pkgs, system, buildSystem, logosDesignSystem }: {
-        # Slices 04/06 add main-ui-plugin, shell-preview-android/ios here.
         design-system = logosDesignSystem;
       } // nixpkgs.lib.optionalAttrs (nixpkgs.lib.hasPrefix "aarch64-ios" system) (
         # iOS replaces design-system too: its stages must compile on Xcode's
@@ -211,7 +236,9 @@
           }).version;
           designSystemSrc = logos-design-system;
         }
-      )) // forAllSystems ({ pkgs, system, logosSdk, logosSdkBuild, logosProtocolPkg, logosQtHost, logosQtSdk, logosModule, logosLiblogos, logosLiblogosPortable, logosPackageManagerLibrary, logosPackageManagerModule, logosPackageManagerModuleLib, logosPackageManagerModuleLibPortable, logosPackageDownloaderModule, logosPackageDownloaderModuleLib, logosPackageLib, logosPackageHeaders, logosPackageManagerUI, logosCapabilityModule, logosModulesStateModule, logosDesignSystem, logosViewModuleRuntime, logosQtMcp, installDev, installPortable, dirBundler, ... }:
+      ) // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isAndroid
+        (androidPackages { inherit pkgs logosDesignSystem; })
+      ) // forAllSystems ({ pkgs, system, logosSdk, logosSdkBuild, logosProtocolPkg, logosQtHost, logosQtSdk, logosModule, logosLiblogos, logosLiblogosPortable, logosPackageManagerLibrary, logosPackageManagerModule, logosPackageManagerModuleLib, logosPackageManagerModuleLibPortable, logosPackageDownloaderModule, logosPackageDownloaderModuleLib, logosPackageLib, logosPackageHeaders, logosPackageManagerUI, logosCapabilityModule, logosModulesStateModule, logosDesignSystem, logosViewModuleRuntime, logosQtMcp, installDev, installPortable, dirBundler, ... }:
         let
           # Common configuration
           common = import ./nix/default.nix {
@@ -609,6 +636,13 @@
 
           # Default package
           default = app;
+        } // pkgs.lib.optionalAttrs (builtins.elem system logos-nix.lib.androidBuildSystems) {
+          # The Shell preview APK built FROM this machine; on x86_64-linux it is
+          # the same derivation as packages.aarch64-android.shell-preview-android.
+          # Run: nix run .#run-android
+          shell-preview-android =
+            let pkgs = logos-nix.legacyPackages.${system}.pkgsAndroid;
+            in (androidPackages { inherit pkgs; logosDesignSystem = mobileDesignSystemFor pkgs; }).shell-preview-android;
         } // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
           bin-appimage = nix-bundle-appimage.lib.${system}.mkAppImage {
             drv = appDistributed;
@@ -641,7 +675,7 @@
 
       # nix run .                   → dev build  (depends on /nix/store at runtime)
       # nix run .#bin-bundle-dir    → self-contained bundle (Qt frameworks in lib/)
-      apps = forAllSystems ({ system, ... }: {
+      apps = forAllSystems ({ system, pkgs, ... }: {
         default = {
           type = "app";
           program = "${self.packages.${system}.app}/bin/LogosBasecamp";
@@ -656,6 +690,13 @@
         run-ios-sim = {
           type = "app";
           program = "${self.packages.aarch64-ios-simulator.run-ios-sim}/bin/run-ios-sim";
+        };
+      } // pkgs.lib.optionalAttrs (builtins.elem system logos-nix.lib.androidBuildSystems) {
+        # Installs the Shell preview APK on the attached device and launches it
+        # (--device <serial> or ANDROID_SERIAL when several are attached).
+        run-android = {
+          type = "app";
+          program = "${self.packages.${system}.shell-preview-android.runner}/bin/run-android";
         };
       });
 

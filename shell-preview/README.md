@@ -94,6 +94,24 @@ the desktop layout's 800px minimum clips on a phone, expected for now. Logs:
 Gotcha: Qt registers default plugins only from its own prefix, so the static
 qsvg plugin from the qtsvg prefix is linked by hand in `platform/ios/app`.
 
+## Android
+
+The same host and the same `libmain_ui.so`, packaged as a debug-signed APK by
+`nix/shell-preview-android.nix` (`pkgs.mkQtAndroidApk` from logos-nix, with the
+manifest and icon in `platform/android/`). The Shell stays a dynamic plugin:
+androiddeployqt ships it as an extra library and `main.cpp` loads it from the
+APK's native library directory.
+
+```bash
+nix run .#run-android                 # build, install on the attached device, launch
+nix build .#packages.aarch64-android.shell-preview-android   # the APK, x86_64-linux builder
+nix build .#packages.aarch64-darwin.shell-preview-android    # the same APK, built from a Mac
+```
+
+With several devices attached pass `--device <serial>` (or set `ANDROID_SERIAL`).
+The widget host is unchanged, so on a phone the shell is legible but not usable:
+`MainContainer` has an 800x600 minimum and the content is clipped.
+
 ## For mobile
 
 The host is a desktop one — `QApplication`, `QMainWindow`, `QQuickWidget`. A

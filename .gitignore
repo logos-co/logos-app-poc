@@ -25,3 +25,4 @@ testdata/
 # agent build logs and simulator screenshots (a dirty tree copies untracked files into src = ./.)
 *.log
 shell-ios-sim*.png
+shell-android*.png
