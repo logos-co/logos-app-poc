@@ -691,6 +691,12 @@
           type = "app";
           program = "${self.packages.aarch64-ios-simulator.run-ios-sim}/bin/run-ios-sim";
         };
+        # nix run .#run-ios-device -- same, for iphoneos: automatic signing
+        # with LOGOS_IOS_TEAM_ID, then devicectl (--device <udid> when several).
+        run-ios-device = {
+          type = "app";
+          program = "${self.packages.aarch64-ios.run-ios-device}/bin/run-ios-device";
+        };
       } // pkgs.lib.optionalAttrs (builtins.elem system logos-nix.lib.androidBuildSystems) {
         # Installs the Shell preview APK on the attached device and launches it
         # (--device <serial> or ANDROID_SERIAL when several are attached).

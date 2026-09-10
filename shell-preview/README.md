@@ -94,6 +94,23 @@ the desktop layout's 800px minimum clips on a phone, expected for now. Logs:
 Gotcha: Qt registers default plugins only from its own prefix, so the static
 qsvg plugin from the qtsvg prefix is linked by hand in `platform/ios/app`.
 
+### iPhone / iPad
+
+The same stages under the `aarch64-ios` (`iphoneos`) package set, signed
+automatically for the team in `LOGOS_IOS_TEAM_ID` (Xcode > Settings >
+Accounts) and deployed with `devicectl` to the one available device, or the
+one named by `--device <udid>` / `LOGOS_IOS_DEVICE`:
+
+```bash
+nix build .#packages.aarch64-ios.shell-preview-ios
+LOGOS_IOS_TEAM_ID=ABCDE12345 nix run .#run-ios-device
+LOGOS_IOS_TEAM_ID=ABCDE12345 nix run .#run-ios-device -- --device <udid>
+```
+
+A missing team id or device fails before anything is configured. Xcode must be
+signed into an Apple ID in that team, and the device must have Developer Mode
+on; `xcrun devicectl list devices` shows what is paired and available.
+
 ## Android
 
 The same host and the same `libmain_ui.so`, packaged as a debug-signed APK by

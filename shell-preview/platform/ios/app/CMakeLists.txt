@@ -1,5 +1,6 @@
 # The impure half: configured with the Xcode generator by
-# `nix run .#run-ios-sim` against the store archives from the Ninja stages.
+# `nix run .#run-ios-sim` / `.#run-ios-device` against the store archives
+# from the Ninja stages.
 # Only main.cpp and the fixture resource are compiled here.
 cmake_minimum_required(VERSION 3.24)
 project(BasecampShellPreviewIos LANGUAGES CXX)
@@ -60,7 +61,20 @@ set_target_properties(BasecampShellPreview PROPERTIES
     MACOSX_BUNDLE_BUNDLE_VERSION 1
     MACOSX_BUNDLE_SHORT_VERSION_STRING 0.1
     XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER co.logos.basecamp.shellpreview
-    XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED NO
-    XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED NO
-    XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY ""
 )
+
+# A team id means a device build with automatic signing (the runner adds
+# -allowProvisioningUpdates); empty means the unsigned simulator build.
+set(BASECAMP_IOS_DEVELOPMENT_TEAM "" CACHE STRING "Apple development team id for automatic signing")
+if(BASECAMP_IOS_DEVELOPMENT_TEAM)
+    set_target_properties(BasecampShellPreview PROPERTIES
+        XCODE_ATTRIBUTE_CODE_SIGN_STYLE Automatic
+        XCODE_ATTRIBUTE_DEVELOPMENT_TEAM ${BASECAMP_IOS_DEVELOPMENT_TEAM}
+    )
+else()
+    set_target_properties(BasecampShellPreview PROPERTIES
+        XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED NO
+        XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED NO
+        XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY ""
+    )
+endif()
