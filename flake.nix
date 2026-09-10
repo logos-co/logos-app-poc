@@ -117,6 +117,17 @@
       # attributes evaluate anywhere and realise on x86_64-linux. Keying it as a
       # system rather than a package-name suffix is what lets the 34
       # `dep.packages.${system}.x` interpolations below stay untouched.
+      # Mobile pseudo-systems (aarch64-android, aarch64-ios-simulator) are
+      # opt-in and carry their own cross package set. The design system is a
+      # QML-only library, so it is built here from its source with that set
+      # instead of through its own flake, which only enumerates forAllTargets.
+      forAllMobileTargets = f: logos-nix.lib.forAllMobileTargets ({ system, pkgs, buildSystem }:
+        let
+          dsCommon = import "${logos-design-system}/nix/common.nix" { inherit pkgs; };
+        in f {
+          inherit system pkgs buildSystem;
+          logosDesignSystem = import "${logos-design-system}/nix/library.nix" { inherit pkgs; common = dsCommon; };
+        });
       forAllSystems = f: logos-nix.lib.forAllTargets ({ system, pkgs }:
         let buildSystem = buildSystemFor system; in f {
         inherit system pkgs;
@@ -182,7 +193,10 @@
       });
     in
     {
-      packages = forAllSystems ({ pkgs, system, logosSdk, logosSdkBuild, logosProtocolPkg, logosQtHost, logosQtSdk, logosModule, logosLiblogos, logosLiblogosPortable, logosPackageManagerLibrary, logosPackageManagerModule, logosPackageManagerModuleLib, logosPackageManagerModuleLibPortable, logosPackageDownloaderModule, logosPackageDownloaderModuleLib, logosPackageLib, logosPackageHeaders, logosPackageManagerUI, logosCapabilityModule, logosModulesStateModule, logosDesignSystem, logosViewModuleRuntime, logosQtMcp, installDev, installPortable, dirBundler, ... }:
+      packages = forAllMobileTargets ({ pkgs, system, buildSystem, logosDesignSystem }: {
+        # Slices 04/06 add main-ui-plugin, shell-preview-android/ios here.
+        design-system = logosDesignSystem;
+      }) // forAllSystems ({ pkgs, system, logosSdk, logosSdkBuild, logosProtocolPkg, logosQtHost, logosQtSdk, logosModule, logosLiblogos, logosLiblogosPortable, logosPackageManagerLibrary, logosPackageManagerModule, logosPackageManagerModuleLib, logosPackageManagerModuleLibPortable, logosPackageDownloaderModule, logosPackageDownloaderModuleLib, logosPackageLib, logosPackageHeaders, logosPackageManagerUI, logosCapabilityModule, logosModulesStateModule, logosDesignSystem, logosViewModuleRuntime, logosQtMcp, installDev, installPortable, dirBundler, ... }:
         let
           # Common configuration
           common = import ./nix/default.nix {
