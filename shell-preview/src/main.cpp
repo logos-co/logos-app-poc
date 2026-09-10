@@ -25,6 +25,38 @@
 #include <QMainWindow>
 #include <QPluginLoader>
 
+#if defined(SHELL_PREVIEW_STATIC_SHELL)
+// main_ui built with MAIN_UI_STATIC is linked in (always on iOS, where static
+// Qt cannot dlopen a plugin) and reached through staticInstances() instead.
+Q_IMPORT_PLUGIN(MainShellView)
+#endif
+
+namespace {
+
+IShellView* resolveShell(const QString& shellPath)
+{
+#if defined(SHELL_PREVIEW_STATIC_SHELL)
+    Q_UNUSED(shellPath);
+    for (QObject* instance : QPluginLoader::staticInstances()) {
+        if (auto* shell = qobject_cast<IShellView*>(instance))
+            return shell;
+    }
+    qFatal("No static plugin implements IShellView; was main_ui linked with Q_IMPORT_PLUGIN?");
+#else
+    auto* loader = new QPluginLoader(shellPath, QCoreApplication::instance());
+    if (!loader->load())
+        qFatal("Failed to load the shell from %s: %s",
+               qUtf8Printable(shellPath), qUtf8Printable(loader->errorString()));
+
+    auto* shell = qobject_cast<IShellView*>(loader->instance());
+    if (!shell)
+        qFatal("%s does not implement IShellView", qUtf8Printable(shellPath));
+    return shell;
+#endif
+}
+
+} // namespace
+
 int main(int argc, char* argv[])
 {
     QApplication app(argc, argv);
@@ -66,28 +98,28 @@ int main(int argc, char* argv[])
             fixture = QJsonDocument::fromJson(f.readAll()).object();
     }
 
-    QPluginLoader loader(shellPath);
-    if (!loader.load())
-        qFatal("Failed to load the shell from %s: %s",
-               qUtf8Printable(shellPath), qUtf8Printable(loader.errorString()));
-
-    auto* shell = qobject_cast<IShellView*>(loader.instance());
-    if (!shell)
-        qFatal("%s does not implement IShellView", qUtf8Printable(shellPath));
+    IShellView* shell = resolveShell(shellPath);
 
     // Same check the real host makes: a shell built against a different
     // revision of IShellHost.h would jump through a mismatched vtable.
     if (shell->hostAbiVersion() != IShellHost_abi)
         qFatal("shell was built against IShellHost ABI %d, host is %d",
                shell->hostAbiVersion(), IShellHost_abi);
+    qInfo("shell-preview: shell reports IShellHost ABI %d, host has %d", shell->hostAbiVersion(),
+          IShellHost_abi);
 
     FixtureShellHost host(fixture);
 
     QMainWindow window;
     window.setWindowTitle("Logos Basecamp — shell preview (fixture data)");
     window.setCentralWidget(shell->createShell(&host));
+    host.replaySection();
+#if defined(Q_OS_IOS)
+    window.showFullScreen();
+#else
     window.resize(1280, 860);
     window.show();
+#endif
 
     const int rc = app.exec();
     shell->destroyShell(window.centralWidget());

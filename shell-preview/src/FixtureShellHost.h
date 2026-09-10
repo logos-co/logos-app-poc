@@ -26,6 +26,11 @@ public:
     QString  displayNameFor(const QString& name) const override;
     void     setObserver(IShellObserver* observer) override;
 
+    // Call once after the shell is created: announces a fixture that opens
+    // on a section other than the workspace. Later changes reach the
+    // observer through the signal connected in the constructor.
+    void replaySection();
+
 private:
     FixtureBackend  m_backend;
     IShellObserver* m_observer = nullptr;

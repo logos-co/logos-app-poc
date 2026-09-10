@@ -51,10 +51,22 @@ set(SOURCES
     ${BASECAMP_INTERFACES}/BasecampModelRoles.h
 )
 
+# iOS cannot dlopen a Qt plugin against static Qt frameworks: the
+# host imports the archive with Q_IMPORT_PLUGIN instead of QPluginLoader.
+option(MAIN_UI_STATIC "Build main_ui as a static archive for Q_IMPORT_PLUGIN" OFF)
+
 # SHARED, not MODULE: QPluginLoader is happy with either, and with the
 # PREFIX/SUFFIX block below SHARED produces exactly the artefact names
 # app/window.cpp and the bundler look for.
-add_library(main_ui SHARED ${SOURCES})
+if(MAIN_UI_STATIC)
+    # Not qt_add_plugin(STATIC): that adds a main_ui_init object with its own
+    # Q_IMPORT_PLUGIN for consumers, duplicating the host's explicit import.
+    add_library(main_ui STATIC ${SOURCES})
+    # moc emits qt_static_plugin_MainShellView() only under this define.
+    target_compile_definitions(main_ui PRIVATE QT_STATICPLUGIN)
+else()
+    add_library(main_ui SHARED ${SOURCES})
+endif()
 
 # ── QML modules ─────────────────────────────────────────────────────────────
 # QML_FILES/RESOURCES resolve against CMAKE_CURRENT_SOURCE_DIR, and a `../`
@@ -71,6 +83,7 @@ qt_add_qml_module(basecamp_backend_qml
     URI Basecamp.Backend
     VERSION 1.0
     STATIC
+    OUTPUT_TARGETS basecamp_backend_qml_extra_targets
     RESOURCE_PREFIX /qt/qml
     OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Basecamp/Backend
     SOURCES
@@ -87,6 +100,7 @@ qt_add_qml_module(basecamp_common_qml
     URI Basecamp.Common
     VERSION 1.0
     STATIC
+    OUTPUT_TARGETS basecamp_common_qml_extra_targets
     RESOURCE_PREFIX /qt/qml
     OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Basecamp/Common
     QML_FILES
@@ -98,6 +112,7 @@ qt_add_qml_module(basecamp_sidebar_qml
     URI Basecamp.Sidebar
     VERSION 1.0
     STATIC
+    OUTPUT_TARGETS basecamp_sidebar_qml_extra_targets
     RESOURCE_PREFIX /qt/qml
     OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Basecamp/Sidebar
     QML_FILES
@@ -111,6 +126,7 @@ qt_add_qml_module(basecamp_appmanager_qml
     URI Basecamp.AppManager
     VERSION 1.0
     STATIC
+    OUTPUT_TARGETS basecamp_appmanager_qml_extra_targets
     RESOURCE_PREFIX /qt/qml
     OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Basecamp/AppManager
     QML_FILES
@@ -131,6 +147,7 @@ qt_add_qml_module(basecamp_settings_qml
     URI Basecamp.Settings
     VERSION 1.0
     STATIC
+    OUTPUT_TARGETS basecamp_settings_qml_extra_targets
     RESOURCE_PREFIX /qt/qml
     OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Basecamp/Settings
     QML_FILES
@@ -149,6 +166,7 @@ qt_add_qml_module(basecamp_shell_qml
     URI Basecamp.Shell
     VERSION 1.0
     STATIC
+    OUTPUT_TARGETS basecamp_shell_qml_extra_targets
     RESOURCE_PREFIX /qt/qml
     OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Basecamp/Shell
     QML_FILES
@@ -166,6 +184,7 @@ qt_add_qml_module(basecamp_icons_qml
     URI Basecamp.Icons
     VERSION 1.0
     STATIC
+    OUTPUT_TARGETS basecamp_icons_qml_extra_targets
     RESOURCE_PREFIX /qt/qml
     OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Basecamp/Icons
     QML_FILES
@@ -209,16 +228,54 @@ target_link_libraries(main_ui
         basecamp_settings_qml
         basecamp_shell_qml
         basecamp_icons_qml
-        $<LINK_LIBRARY:WHOLE_ARCHIVE,basecamp_backend_qmlplugin>
-        $<LINK_LIBRARY:WHOLE_ARCHIVE,basecamp_common_qmlplugin>
-        $<LINK_LIBRARY:WHOLE_ARCHIVE,basecamp_sidebar_qmlplugin>
-        $<LINK_LIBRARY:WHOLE_ARCHIVE,basecamp_appmanager_qmlplugin>
-        $<LINK_LIBRARY:WHOLE_ARCHIVE,basecamp_settings_qmlplugin>
-        $<LINK_LIBRARY:WHOLE_ARCHIVE,basecamp_shell_qmlplugin>
-        $<LINK_LIBRARY:WHOLE_ARCHIVE,basecamp_icons_qmlplugin>
+        $<LINK_LIBRARY:WHOLE_ARCHIVE,$<TARGET_NAME:basecamp_backend_qmlplugin>>
+        $<LINK_LIBRARY:WHOLE_ARCHIVE,$<TARGET_NAME:basecamp_common_qmlplugin>>
+        $<LINK_LIBRARY:WHOLE_ARCHIVE,$<TARGET_NAME:basecamp_sidebar_qmlplugin>>
+        $<LINK_LIBRARY:WHOLE_ARCHIVE,$<TARGET_NAME:basecamp_appmanager_qmlplugin>>
+        $<LINK_LIBRARY:WHOLE_ARCHIVE,$<TARGET_NAME:basecamp_settings_qmlplugin>>
+        $<LINK_LIBRARY:WHOLE_ARCHIVE,$<TARGET_NAME:basecamp_shell_qmlplugin>>
+        $<LINK_LIBRARY:WHOLE_ARCHIVE,$<TARGET_NAME:basecamp_icons_qmlplugin>>
 )
 
-if(APPLE)
+if(MAIN_UI_STATIC)
+    # Exported as Basecamp::MainUI. Qt's resource/init OBJECT libraries must be
+    # in the set too or the imported link interface dangles (as LogosDesignSystem).
+    set_target_properties(main_ui PROPERTIES EXPORT_NAME MainUI)
+    install(TARGETS main_ui
+        basecamp_backend_qml    basecamp_backend_qmlplugin
+        basecamp_common_qml     basecamp_common_qmlplugin
+        basecamp_sidebar_qml    basecamp_sidebar_qmlplugin
+        basecamp_appmanager_qml basecamp_appmanager_qmlplugin
+        basecamp_settings_qml   basecamp_settings_qmlplugin
+        basecamp_shell_qml      basecamp_shell_qmlplugin
+        basecamp_icons_qml      basecamp_icons_qmlplugin
+        ${basecamp_backend_qml_extra_targets}
+        ${basecamp_common_qml_extra_targets}
+        ${basecamp_sidebar_qml_extra_targets}
+        ${basecamp_appmanager_qml_extra_targets}
+        ${basecamp_settings_qml_extra_targets}
+        ${basecamp_shell_qml_extra_targets}
+        ${basecamp_icons_qml_extra_targets}
+        EXPORT BasecampMainUITargets
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin
+        OBJECTS DESTINATION lib/objects
+    )
+    install(EXPORT BasecampMainUITargets
+        FILE BasecampMainUITargets.cmake
+        NAMESPACE Basecamp::
+        DESTINATION lib/cmake/BasecampMainUI
+    )
+    file(CONFIGURE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/BasecampMainUIConfig.cmake CONTENT [[
+include(CMakeFindDependencyMacro)
+find_dependency(Qt6 COMPONENTS Core Gui Widgets Quick Qml QuickWidgets QuickControls2)
+find_dependency(LogosDesignSystem CONFIG)
+include("${CMAKE_CURRENT_LIST_DIR}/BasecampMainUITargets.cmake")
+]] @ONLY)
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/BasecampMainUIConfig.cmake
+        DESTINATION lib/cmake/BasecampMainUI)
+elseif(APPLE)
     set_target_properties(main_ui PROPERTIES
         BUNDLE FALSE
         FRAMEWORK FALSE
@@ -241,4 +298,6 @@ else()
     )
 endif()
 
-install(TARGETS main_ui LIBRARY DESTINATION lib RUNTIME DESTINATION lib)
+if(NOT MAIN_UI_STATIC)
+    install(TARGETS main_ui LIBRARY DESTINATION lib RUNTIME DESTINATION lib)
+endif()

@@ -71,6 +71,29 @@ binary.
 QML actually touches ~130 members, concentrated in `Shell/ContentViews.qml` and
 `Sidebar/SidebarPanel.qml`. Adding a view usually means adding a property here.
 
+## iOS simulator
+
+Static Qt cannot dlopen the shell, so on iOS `main_ui` (built with `MAIN_UI_STATIC`)
+is linked into the host (`SHELL_PREVIEW_STATIC_SHELL`, usable on any platform)
+and reached through `QPluginLoader::staticInstances()`; the
+`IShellView` contract and the ABI check are the same. The pure half builds the
+archives on Xcode's clang in nix, the impure half links and launches:
+
+```bash
+nix build .#packages.aarch64-ios-simulator.shell-preview-ios   # static archives only
+nix run .#run-ios-sim                                          # xcodebuild + simctl, unsigned
+nix run .#run-ios-sim -- --fixture /abs/path.json              # arguments reach the app
+```
+
+Sources: `platform/ios/stage` (Ninja, the fixture host archive) and
+`platform/ios/app` (Xcode generator, `main.cpp` and the bundle). A fixture may
+set `currentActiveSectionIndex` to open on App Manager (1) or Settings (3);
+the desktop layout's 800px minimum clips on a phone, expected for now. Logs:
+`xcrun simctl spawn booted log stream --level info --predicate 'process == "BasecampShellPreview"'`.
+
+Gotcha: Qt registers default plugins only from its own prefix, so the static
+qsvg plugin from the qtsvg prefix is linked by hand in `platform/ios/app`.
+
 ## For mobile
 
 The host is a desktop one — `QApplication`, `QMainWindow`, `QQuickWidget`. A
