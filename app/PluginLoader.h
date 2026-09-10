@@ -19,6 +19,7 @@ class ViewModuleHost;
 class LogosQmlBridge;
 class IntentBridgeAdapter;
 class CoreModuleManager;
+class CoreDependencyLoader;
 
 enum class UIPluginType {
     Legacy,
@@ -127,6 +128,10 @@ private:
 
     IntentBridgeAdapter* m_intentAdapter = nullptr;
     CoreModuleManager* m_coreModuleManager;   // not owned
+
+    // Runs each plugin's core dependencies off the GUI thread. Owned, and its
+    // worker holds only the CoreModuleManager pointer, never this.
+    CoreDependencyLoader* m_depLoader = nullptr;
 
     // name -> that plugin's admitted identity (its LogosAPI is parented to
     // this, so owned here). Cached because a LogosAPI captures its store by
