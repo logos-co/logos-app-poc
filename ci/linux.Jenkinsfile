@@ -25,7 +25,7 @@ pipeline {
   options {
     timestamps()
     ansiColor('xterm')
-    timeout(time: 30, unit: 'MINUTES')
+    timeout(time: 60, unit: 'MINUTES')
     buildDiscarder(logRotator(
       numToKeepStr: '10',
       daysToKeepStr: '30',
@@ -65,7 +65,7 @@ pipeline {
 
     stage('Upload') {
       steps { script {
-        env.PKG_URL = s5cmd.upload(env.ARTIFACT)
+        env.PKG_URL = s5cmd.upload(env.ARTIFACT, retriesCount: 5)
         jenkins.setBuildDesc(AppImage: env.PKG_URL)
       } }
     }
