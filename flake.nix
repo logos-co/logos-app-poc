@@ -179,10 +179,14 @@
         installDev = nix-bundle-logos-module-install.bundlers.${system}.dev;
         installPortable = nix-bundle-logos-module-install.bundlers.${system}.portable;
         dirBundler = nix-bundle-dir.bundlers.${buildSystem}.qtApp;
+        # Plain nixpkgs, not the logos-nix-overlaid `pkgs` above: the only
+        # consumer is nix/windows-installer.nix, whose three tools (makensis,
+        # imagemagick, binutils) the overlay does not touch.
+        buildPkgs = nixpkgs.legacyPackages.${buildSystem};
       });
     in
     {
-      packages = forAllSystems ({ pkgs, system, logosSdk, logosSdkBuild, logosProtocolPkg, logosQtHost, logosQtSdk, logosModule, logosLiblogos, logosLiblogosPortable, logosPackageManagerLibrary, logosPackageManagerModule, logosPackageManagerModuleLib, logosPackageManagerModuleLibPortable, logosPackageDownloaderModule, logosPackageDownloaderModuleLib, logosPackageLib, logosPackageHeaders, logosPackageManagerUI, logosCapabilityModule, logosModulesStateModule, logosDesignSystem, logosViewModuleRuntime, logosQtMcp, installDev, installPortable, dirBundler, ... }:
+      packages = forAllSystems ({ pkgs, system, logosSdk, logosSdkBuild, logosProtocolPkg, logosQtHost, logosQtSdk, logosModule, logosLiblogos, logosLiblogosPortable, logosPackageManagerLibrary, logosPackageManagerModule, logosPackageManagerModuleLib, logosPackageManagerModuleLibPortable, logosPackageDownloaderModule, logosPackageDownloaderModuleLib, logosPackageLib, logosPackageHeaders, logosPackageManagerUI, logosCapabilityModule, logosModulesStateModule, logosDesignSystem, logosViewModuleRuntime, logosQtMcp, installDev, installPortable, dirBundler, buildPkgs, ... }:
         let
           # Common configuration
           common = import ./nix/default.nix {
@@ -424,6 +428,18 @@
           #    is an x86_64-linux derivation, so it cannot run on an
           #    aarch64-darwin host without one.)
           binBundleDir = withMainProgram (dirBundler appDistributed);
+
+          # The Windows installer wraps the SAME tree bin-bundle-dir ships --
+          # it is a delivery format, not a second build. Its two modes (install
+          # / extract-only) therefore carry identical bits, which is the only
+          # thing that could be true here: portable is compile-time on Windows
+          # (LOGOS_PORTABLE_BUILD) and appDistributed already chose it.
+          windowsInstaller = import ./nix/windows-installer.nix {
+            pkgs = buildPkgs;
+            bundle = binBundleDir;
+            version = common.version;
+            icon = ./app/icons/logos.png;
+          };
           binBundleDirMock = withMainProgram (dirBundler appMockPortable);
           binBundleDirInspector = withMainProgram (dirBundler appDistributedWithInspector);
 
@@ -580,6 +596,9 @@
 
           # Default package
           default = app;
+        } // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isWindows {
+          # nix build .#packages.x86_64-windows.bin-installer
+          bin-installer = windowsInstaller;
         } // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
           bin-appimage = nix-bundle-appimage.lib.${system}.mkAppImage {
             drv = appDistributed;

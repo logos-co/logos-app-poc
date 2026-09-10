@@ -143,10 +143,26 @@ jobs:
           [ "$n_exe" -gt 0 ] || { echo "::error::no .exe in the bundle"; exit 1; }
           echo "exe(s): $n_exe"
 
+      # Wraps the SAME bundle the zip step above just realised, so this costs
+      # only the makensis run. The installer carries a Windows-GUI subsystem
+      # assertion on LogosBasecamp.exe -- see nix/windows-installer.nix -- which
+      # is the one place a regression to a console build gets caught, since CI
+      # never runs the binary.
+      - name: Build the Windows installer
+        run: nix build .#packages.x86_64-windows.bin-installer -L -o result-installer
+
+      - name: Stage the installer
+        run: |
+          set -euo pipefail
+          cp -L result-installer/*-setup.exe .
+          ls -la ./*-setup.exe
+
       - uses: actions/upload-artifact@v4
         with:
           name: windows-x86_64
-          path: logos-basecamp-x86_64-windows.zip
+          path: |
+            logos-basecamp-x86_64-windows.zip
+            *-setup.exe
 
   build-macos-app:
     environment: ${{ github.ref == 'refs/heads/master' && 'public-cache' || '' }}
@@ -379,3 +395,4 @@ jobs:
             artifacts/*.AppImage
             artifacts/*.app.tar.gz
             artifacts/*-windows.zip
+            artifacts/*-setup.exe
