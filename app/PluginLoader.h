@@ -31,6 +31,10 @@ struct PluginLoadRequest {
     QString pluginPath;
     QString iconPath;
     QVariantList coreDependencies;
+    // Best-effort: loaded after the required ones, and a failure here never
+    // fails the plugin. A plugin that does not REQUIRE a module must still
+    // mount when that module is absent or broken.
+    QVariantList optionalCoreDependencies;
 
     // ui_qml module fields
     QString installDir;      // Module install directory (import paths root)

@@ -109,7 +109,7 @@ logos::ConsumerIdentity PluginLoader::consumerFor(const QString& name)
 
 void PluginLoader::startLoad(const PluginLoadRequest& request)
 {
-    if (request.coreDependencies.isEmpty()) {
+    if (request.coreDependencies.isEmpty() && request.optionalCoreDependencies.isEmpty()) {
         continueLoad(request);
         return;
     }
@@ -161,6 +161,27 @@ void PluginLoader::loadCoreDependencies(const PluginLoadRequest& request)
             return;
         }
     }
+
+    // Optional dependencies: every failure here is a warning, never a refusal.
+    // The plugin declared it does not need these, so an absent or broken one
+    // must not stop it mounting -- the same rule the blocking gate follows.
+    for (const QVariant& dep : request.optionalCoreDependencies) {
+        const logos::DependencyEntry entry = logos::readDependencyEntry(dep);
+        if (entry.kind == logos::DependencyEntryKind::Unrecognised) {
+            qWarning() << "Unrecognised optional dependency entry" << dep
+                       << "for" << request.name << "- skipping";
+            continue;
+        }
+        if (!m_coreModuleManager) {
+            break;
+        }
+        qDebug() << "Loading optional dependency for" << request.name << ":" << entry.name;
+        if (!m_coreModuleManager->loadModule(entry.name)) {
+            qInfo() << "Optional dependency" << entry.name << "for" << request.name
+                    << "is unavailable; continuing without it";
+        }
+    }
+
     continueLoad(request);
 }
 
