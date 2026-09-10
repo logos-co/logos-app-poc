@@ -5,6 +5,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QIcon>
 #include <QMutexLocker>
 #include <QPluginLoader>
@@ -14,12 +15,15 @@
 #include <QQmlEngine>
 #include <QQmlError>
 #include <QQuickWidget>
+#include <QScreen>
 #include <QThread>
 #include <QTimer>
 #include <QUrl>
 
+#include <cmath>
 #include <memory>
 
+#include "CoreDependencyLoader.h"
 #include "CoreModuleManager.h"
 #include "IComponent.h"
 #include "IntentBridgeAdapter.h"
@@ -37,7 +41,22 @@ PluginLoader::PluginLoader(LogosAPI* logosAPI,
     , m_logosAPI(logosAPI)
     , m_coreModuleManager(coreModuleManager)
 {
+    m_depLoader = new CoreDependencyLoader(this);
 }
+
+namespace {
+
+// Two frames of the primary screen's refresh, floored at one 60 Hz frame.
+int spinnerPaintDelayMs()
+{
+    qreal hz = 0;
+    if (const QScreen* screen = QGuiApplication::primaryScreen())
+        hz = screen->refreshRate();
+    if (hz < 1.0) hz = 60.0;
+    return qBound(16, static_cast<int>(std::ceil(2000.0 / hz)), 50);
+}
+
+}  // namespace
 
 void PluginLoader::load(const PluginLoadRequest& request)
 {
@@ -48,8 +67,11 @@ void PluginLoader::load(const PluginLoadRequest& request)
 
     setLoading(request.name, true);
 
-    // Yield to the event loop so the UI can paint the loading state
-    QTimer::singleShot(0, this, [this, request]() {
+    // Let the spinner reach the screen before anything blocks. A zero timer
+    // does not: measured on Qt 6.9.2, singleShot(0) paints ZERO frames — and
+    // so does four of them nested, because zero timers all drain in one
+    // event-loop pass while a QQuickWidget's first paint lands a frame later.
+    QTimer::singleShot(spinnerPaintDelayMs(), this, [this, request]() {
         startLoad(request);
     });
 }
@@ -109,7 +131,7 @@ logos::ConsumerIdentity PluginLoader::consumerFor(const QString& name)
 
 void PluginLoader::startLoad(const PluginLoadRequest& request)
 {
-    if (request.coreDependencies.isEmpty()) {
+    if (request.coreDependencies.isEmpty() && request.optionalCoreDependencies.isEmpty()) {
         continueLoad(request);
         return;
     }
@@ -119,9 +141,9 @@ void PluginLoader::startLoad(const PluginLoadRequest& request)
 
 void PluginLoader::loadCoreDependencies(const PluginLoadRequest& request)
 {
-    // liblogos is not thread-safe for plugin loading; call only from the GUI thread.
-    // Every core-plugin load goes through CoreModuleManager so the logos_core_*
-    // C API is centralised in one place.
+    // Resolve the names here, on the GUI thread: a malformed manifest is a
+    // caller error and should be reported without spawning anything.
+    QStringList depNames;
     for (const QVariant& dep : request.coreDependencies) {
         // Bare name or {"name": …, "version": …, "signer": …} — either way we
         // need the name. See utils/DependencyEntry.h for why this must not be
@@ -142,26 +164,56 @@ void PluginLoader::loadCoreDependencies(const PluginLoadRequest& request)
                     + request.name + QStringLiteral("'s manifest"));
             return;
         }
-        const QString depName = entry.name;
-        if (!m_coreModuleManager) {
-            qWarning() << "Failed to load core dependency" << depName
-                       << "for" << request.name;
-            setLoading(request.name, false);
-            emit pluginLoadFailed(request.name,
-                QStringLiteral("Failed to load core dependencies for ") + request.name);
-            return;
-        }
-        qDebug() << "Loading core dependency for" << request.name << ":" << depName;
-        if (!m_coreModuleManager->loadModule(depName)) {
-            qWarning() << "Failed to load core dependency" << depName
-                       << "for" << request.name;
-            setLoading(request.name, false);
-            emit pluginLoadFailed(request.name,
-                QStringLiteral("Failed to load core dependencies for ") + request.name);
-            return;
-        }
+        depNames << entry.name;
     }
-    continueLoad(request);
+
+    // Optional dependencies: every failure here is a warning, never a refusal.
+    // The plugin declared it does not need these, so an absent or broken one
+    // must not stop it mounting -- the same rule the blocking gate follows.
+    QStringList optionalDepNames;
+    for (const QVariant& dep : request.optionalCoreDependencies) {
+        const logos::DependencyEntry entry = logos::readDependencyEntry(dep);
+        if (entry.kind == logos::DependencyEntryKind::Unrecognised) {
+            qWarning() << "Unrecognised optional dependency entry" << dep
+                       << "for" << request.name << "- skipping";
+            continue;
+        }
+        optionalDepNames << entry.name;
+    }
+
+    qDebug() << "Loading core dependencies for" << request.name << ":" << depNames;
+
+    // Off the GUI thread — see CoreDependencyLoader. continueLoad still runs
+    // here, after every dependency has reported, so the steps below it keep
+    // the ordering they had when this loop was synchronous.
+    //
+    // The load callable takes the runtime BY VALUE rather than `this`: it runs
+    // on the worker, which must not read a PluginLoader that is already
+    // part-way through destruction when its loader joins.
+    m_depLoader->enqueue(depNames, optionalDepNames,
+        [core = m_coreModuleManager, name = request.name](const QString& dep, bool required) {
+            if (!core)
+                return false;
+            if (!required)
+                qDebug() << "Loading optional dependency for" << name << ":" << dep;
+            if (core->loadModule(dep))
+                return true;
+            if (!required) {
+                qInfo() << "Optional dependency" << dep << "for" << name
+                        << "is unavailable; continuing without it";
+            }
+            return false;
+        },
+        [this, request]() {
+            continueLoad(request);
+        },
+        [this, request](const QString& failedDependency) {
+            qWarning() << "Failed to load core dependency" << failedDependency
+                       << "for" << request.name;
+            setLoading(request.name, false);
+            emit pluginLoadFailed(request.name,
+                QStringLiteral("Failed to load core dependencies for ") + request.name);
+        });
 }
 
 void PluginLoader::continueLoad(const PluginLoadRequest& request)
