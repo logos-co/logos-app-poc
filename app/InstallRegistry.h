@@ -66,12 +66,16 @@ public:
                const QString& targetHash,
                const QString& startedByTopLevel,
                const QString& repositoryUrl = {});
+    // Aggregate-initialised positionally by callers and tests
+    // ({name, version, rootHash, size}), so ADD NEW FIELDS AT THE END —
+    // inserting one in the middle silently re-binds every existing
+    // initialiser.
     struct PlannedPackage {
         QString name;
-        QString repositoryUrl;   // the repo this entry resolved from
         QString version;
         QString rootHash;
         quint64 size = 0;
+        QString repositoryUrl;   // the repo this entry resolved from
     };
 
     void beginPlan(const QString& topLevel, const QList<PlannedPackage>& plan);
