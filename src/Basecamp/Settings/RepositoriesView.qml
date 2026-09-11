@@ -31,6 +31,39 @@ Item {
         property string newRepoUrl: ""
         property string lastError: ""
         property string pendingRemoveUrl: ""
+
+        // Display names claimed by more than one configured repository.
+        readonly property var duplicateNames: {
+            const counts = ({})
+            const originals = ({})
+            const repos = root.repositories || []
+            for (let i = 0; i < repos.length; ++i) {
+                const label = String(repos[i].displayName || repos[i].name || "")
+                if (label.length === 0) continue
+                const key = label.toLowerCase()
+                counts[key] = (counts[key] || 0) + 1
+                if (originals[key] === undefined) originals[key] = label
+            }
+            const dupes = []
+            for (const key in counts)
+                if (counts[key] > 1) dupes.push(originals[key])
+            dupes.sort()
+            return dupes
+        }
+
+        function isDuplicateName(label) {
+            const l = String(label || "").toLowerCase()
+            if (l.length === 0) return false
+            for (let i = 0; i < duplicateNames.length; ++i)
+                if (String(duplicateNames[i]).toLowerCase() === l) return true
+            return false
+        }
+
+        readonly property string duplicateSignature: duplicateNames.join("\u0001")
+        property string dismissedDuplicateSignature: ""
+        readonly property bool showDuplicateWarning:
+            duplicateNames.length > 0
+            && duplicateSignature !== dismissedDuplicateSignature
     }
 
     LogosScrollView {
@@ -113,6 +146,36 @@ Item {
                 }
             }
 
+            // Duplicate-name warning. Derived from the current repository
+            // list rather than raised once on add, so it stays visible for
+            // as long as the clash exists and can't be missed by an add
+            // that completes while the user is elsewhere.
+            LogosNotice {
+                id: duplicateNameNotice
+                objectName: "repositories.duplicateNameWarning"
+                Layout.fillWidth: true
+                severity: LogosNotice.Warning
+                closable: true
+                shown: false
+                title: d.duplicateNames.length === 1
+                       ? qsTr("More than one repository calls itself “%1”.")
+                             .arg(d.duplicateNames[0])
+                       : qsTr("These names are each claimed by more than one repository: %1.")
+                             .arg(d.duplicateNames.join(qsTr(", ")))
+                message: qsTr("A repository's name comes from its own logos-repo.json, so any "
+                            + "repository can claim any name. Check the URLs below to tell "
+                            + "them apart before installing.")
+                onDismissed: d.dismissedDuplicateSignature = d.duplicateSignature
+                Component.onCompleted: shown = d.showDuplicateWarning
+            }
+
+            Connections {
+                target: d
+                function onShowDuplicateWarningChanged() {
+                    duplicateNameNotice.shown = d.showDuplicateWarning
+                }
+            }
+
             // Add a repository form.
             ColumnLayout {
                 Layout.fillWidth: true
@@ -169,7 +232,8 @@ Item {
                     required property var modelData
 
                     readonly property string url:          modelData.url || ""
-                    readonly property string displayName:  modelData.displayName || modelData.name || ""
+                    readonly property string displayName:  modelData.displayLabel || modelData.displayName || modelData.name || ""
+                    readonly property string claimedName:  modelData.displayName || modelData.name || ""
                     readonly property string description:  modelData.description || ""
                     readonly property string resolveError: modelData.resolveError || ""
                     readonly property bool   isDefault:    modelData.isDefault === true
@@ -210,6 +274,12 @@ Item {
                                 visible: !isEnabled
                                 text: qsTr("Disabled")
                                 color: Theme.palette.textTertiary
+                            }
+                            LogosBadge {
+                                objectName: "repositories.duplicateNameBadge." + url
+                                visible: d.isDuplicateName(claimedName)
+                                text: qsTr("Name reused")
+                                color: Theme.palette.warning
                             }
                             LogosBadge {
                                 visible: resolveError.length > 0

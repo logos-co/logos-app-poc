@@ -82,10 +82,10 @@ QVariant AppsModel::data(const QModelIndex& index, int role) const
     case InstallStatusRole:    return static_cast<int>(r.installStatus);
     case InstallTypeRole:      return r.installType;
     case ActionRole: {
-        if (m_installRegistry) {
-            if (m_installRegistry->isInFlight(r.name))
+        if (InstallRegistry* reg = registryFor(r)) {
+            if (reg->isInFlight(r.name))
                 return QStringLiteral("installing");
-            if (m_installRegistry->stage(r.name) == InstallStage::Installed)
+            if (reg->stage(r.name) == InstallStage::Installed)
                 return QStringLiteral("installed");
         }
         return r.action;
@@ -93,26 +93,34 @@ QVariant AppsModel::data(const QModelIndex& index, int role) const
     case ToVersionRole:        return r.toVersion;
     case IsTopLevelRole:       return r.isTopLevel;
     case ResolverErrorRole:    return r.resolverError;
-    case InstallStageRole:
-        return m_installRegistry ? m_installRegistry->stage(r.name)
-                            : static_cast<int>(InstallStage::None);
-    case InstallErrorRole:
-        return m_installRegistry ? m_installRegistry->error(r.name) : QString();
-    case DownloadReceivedRole:
-        return QVariant::fromValue(
-            m_installRegistry ? m_installRegistry->downloadReceived(r.name) : quint64(0));
-    case DownloadTotalRole:
-        return QVariant::fromValue(
-            m_installRegistry ? m_installRegistry->downloadTotal(r.name) : quint64(0));
-    case PlanDownloadReceivedRole:
-        return QVariant::fromValue(
-            m_installRegistry ? m_installRegistry->planDownloadReceived(r.name) : quint64(0));
-    case PlanDownloadTotalRole:
-        return QVariant::fromValue(
-            m_installRegistry ? m_installRegistry->planDownloadTotal(r.name) : quint64(0));
-    case PlanInstallStageRole:
-        return m_installRegistry ? m_installRegistry->planStage(r.name)
-                                 : static_cast<int>(InstallStage::None);
+    case InstallStageRole: {
+        InstallRegistry* reg = registryFor(r);
+        return reg ? reg->stage(r.name) : static_cast<int>(InstallStage::None);
+    }
+    case InstallErrorRole: {
+        InstallRegistry* reg = registryFor(r);
+        return reg ? reg->error(r.name) : QString();
+    }
+    case DownloadReceivedRole: {
+        InstallRegistry* reg = registryFor(r);
+        return QVariant::fromValue(reg ? reg->downloadReceived(r.name) : quint64(0));
+    }
+    case DownloadTotalRole: {
+        InstallRegistry* reg = registryFor(r);
+        return QVariant::fromValue(reg ? reg->downloadTotal(r.name) : quint64(0));
+    }
+    case PlanDownloadReceivedRole: {
+        InstallRegistry* reg = registryFor(r);
+        return QVariant::fromValue(reg ? reg->planDownloadReceived(r.name) : quint64(0));
+    }
+    case PlanDownloadTotalRole: {
+        InstallRegistry* reg = registryFor(r);
+        return QVariant::fromValue(reg ? reg->planDownloadTotal(r.name) : quint64(0));
+    }
+    case PlanInstallStageRole: {
+        InstallRegistry* reg = registryFor(r);
+        return reg ? reg->planStage(r.name) : static_cast<int>(InstallStage::None);
+    }
     }
     return {};
 }
@@ -604,6 +612,21 @@ void AppsModel::setMissingDeps(const QString& name, const QStringList& missing)
 }
 
 // ── Wiring: live install state ────────────────────────────────────────────
+
+// The install registry is keyed by package NAME, but a name is not unique
+// across repositories — two repos can publish the same package, and this
+// model renders a row for each. Only the row whose repository the
+// operation targets may show its in-flight state; otherwise installing
+// from one repo animates the other repo's copy of the row too.
+//
+// Returns nullptr for a row the operation does not belong to, so callers
+// fall through to the same defaults they use when no registry is set.
+InstallRegistry* AppsModel::registryFor(const Row& r) const
+{
+    if (!m_installRegistry) return nullptr;
+    return m_installRegistry->belongsTo(r.name, r.repositoryUrl)
+               ? m_installRegistry : nullptr;
+}
 
 void AppsModel::setInstallRegistry(InstallRegistry* installRegistry)
 {

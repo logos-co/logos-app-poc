@@ -260,12 +260,11 @@ Rectangle {
                                         excludeMainUi: false
                                     }
 
-                                    title: modelData.isDefault === true
-                                        ? qsTr("Starter Apps")
-                                        : (modelData.displayName
+                                    title: modelData.displayLabel
+                                           || modelData.displayName
                                            || modelData.name
                                            || modelData.url
-                                           || qsTr("Repository"))
+                                           || qsTr("Repository")
                                     count: repoFilter.visibleCount
                                     modulesSource: repoFilter
                                     viewMode: d.viewMode
