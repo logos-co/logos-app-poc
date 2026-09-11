@@ -189,6 +189,18 @@ bool LogSink::start(const Options& opts)
         m_linkPath.clear();
     };
 
+#ifdef Q_OS_WIN
+    // A GUI-subsystem process started without a console has no stdio at all:
+    // the CRT leaves stdout/stderr at _NO_CONSOLE_FILENO (-2), so the dup below
+    // fails, start() returns false and the app runs with NO file logging --
+    // silently, because the only channel that could have said so is the one
+    // that is missing. Bind them to NUL so the redirect has a real fd to take
+    // over; the mirror at the bottom of the reader then writes to NUL, which is
+    // where a console-less process's terminal output was going anyway.
+    if (::_fileno(stdout) < 0) ::freopen("NUL", "w", stdout);
+    if (::_fileno(stderr) < 0) ::freopen("NUL", "w", stderr);
+#endif
+
     m_originalStdout = ::dup(fileno(stdout));
     m_originalStderr = ::dup(fileno(stderr));
     if (m_originalStdout < 0 || m_originalStderr < 0) {
