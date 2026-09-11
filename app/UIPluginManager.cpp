@@ -294,6 +294,7 @@ void UIPluginManager::loadUiModule(const QString& moduleName)
         if (hasBackendPlugin(moduleName))
             request.mainFilePath = meta.value("mainFilePath").toString();
         request.coreDependencies = meta.value("dependencies").toList();
+        request.optionalCoreDependencies = meta.value("optionalDependencies").toList();
 
         m_pluginLoader->load(request);
         return;
@@ -1145,6 +1146,8 @@ void UIPluginManager::loadLegacyUiModule(const QString& moduleName)
     request.iconPath = pluginIconUrl(moduleName, true);
     if (m_uiPluginMetadata.contains(moduleName)) {
         request.coreDependencies = m_uiPluginMetadata[moduleName].value("dependencies").toList();
+        request.optionalCoreDependencies =
+            m_uiPluginMetadata[moduleName].value("optionalDependencies").toList();
     }
 
     m_pluginLoader->load(request);
