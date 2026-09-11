@@ -2835,6 +2835,379 @@ test("app manager: dialog wording for an already-installed app", async (app) => 
   await closeAddApplicationDialog(app, dialogId);
 });
 
+// --- Settings (A16): Dashboard shows version, build type and commits ---
+//
+// Spec §2.A A16. Gates, all derived from the backend: backend.buildVersion
+// rendered when non-empty, Version row hidden when empty (dirty local builds
+// bake "") · "Commits" heading · commit-row count equals
+// backend.buildCommits.length (≥ 1) · first row shows buildCommits[0] ·
+// "Portable build" iff backend.isPortableBuild else "Dev build", never both.
+//
+// DashboardView has no objectNames, so the gates run as one JS tree walk
+// scoped to the view (which also keeps the sidebar footer's own build-type
+// token out of the never-both check). Commit rows are the children of the
+// "Commits" column that hold exactly two text nodes: name, then commit.
+
+test("settings: Dashboard shows version, build type and commit list", async (app) => {
+  await app.click("Settings", sidebarSection);
+  await app.waitFor(
+    async () => { await app.expectTexts(["Dashboard", "Apps Inspector", "Module Inspector"]); },
+    { timeout: 10000, interval: 500, description: "Settings entries to render" }
+  );
+  await app.click("Dashboard", { type: "LogosItemDelegate" });
+
+  // DashboardView is instantiated eagerly; only visible proves it is selected.
+  let dashboard = null;
+  await app.waitFor(async () => {
+    const res = await app.inspector.send("findByType", { typeName: "DashboardView" });
+    if (res.error) throw new Error(`findByType(DashboardView) failed: ${res.error}`);
+    dashboard = (res.matches ?? [])[0] || null;
+    if (!dashboard) throw new Error("no DashboardView instance in the QML tree");
+    const visible = await evalOn(app, dashboard.id, "visible");
+    if (visible !== true) {
+      throw new Error(`DashboardView visible=${visible} (expected true)`);
+    }
+  }, { timeout: 10000, interval: 500, description: "Dashboard view to become visible" });
+
+  // Expected values, one primitive per evaluate call. Empty buildVersion is valid.
+  const buildVersion = await evalOn(app, dashboard.id, "backend.buildVersion");
+  if (typeof buildVersion !== "string") {
+    throw new Error(
+      `backend.buildVersion=${JSON.stringify(buildVersion)} (expected string)`);
+  }
+  const commitCount = await evalOn(app, dashboard.id, "backend.buildCommits.length");
+  if (typeof commitCount !== "number" || commitCount < 1) {
+    throw new Error(
+      `backend.buildCommits.length=${JSON.stringify(commitCount)} (expected ≥ 1)`);
+  }
+  const firstName = await evalOn(app, dashboard.id, "backend.buildCommits[0].name");
+  const firstCommit = await evalOn(app, dashboard.id, "backend.buildCommits[0].commit");
+  if (typeof firstName !== "string" || firstName.length === 0 ||
+      typeof firstCommit !== "string" || firstCommit.length === 0) {
+    throw new Error(
+      `backend.buildCommits[0] name=${JSON.stringify(firstName)} ` +
+      `commit=${JSON.stringify(firstCommit)} (expected non-empty strings)`);
+  }
+  const isPortable = await evalOn(app, dashboard.id, "backend.isPortableBuild");
+  if (typeof isPortable !== "boolean") {
+    throw new Error(
+      `backend.isPortableBuild=${JSON.stringify(isPortable)} (expected boolean)`);
+  }
+
+  // One walk per attempt, returned as JSON (evaluate only round-trips primitives).
+  const snapshotDashboard = async () => {
+    const res = await app.inspector.send("evaluate", {
+      objectId: dashboard.id,
+      expression: `(() => {
+        const out = {
+          hasVersion: false, versionLabelVisible: false, hasCommits: false,
+          hasPortable: false, hasDev: false, rows: null,
+        };
+        const walk = (node) => {
+          if (!node) return;
+          if (node.text === ${JSON.stringify(buildVersion)}) out.hasVersion = true;
+          // Item.visible is effective visibility, so it tracks the hidden row.
+          if (node.text === "Version" && node.visible === true) {
+            out.versionLabelVisible = true;
+          }
+          if (node.text === "Portable build") out.hasPortable = true;
+          if (node.text === "Dev build") out.hasDev = true;
+          const kids = node.children;
+          if (!kids || typeof kids.length !== "number") return;
+          let hasHeading = false;
+          for (let i = 0; i < kids.length; i += 1) {
+            if (kids[i] && kids[i].text === "Commits") hasHeading = true;
+          }
+          if (hasHeading) {
+            out.hasCommits = true;
+            out.rows = [];
+            for (let i = 0; i < kids.length; i += 1) {
+              const k = kids[i];
+              const two =
+                k && k.children && k.children.length === 2 ? k.children : null;
+              if (two && typeof two[0].text === "string" &&
+                  typeof two[1].text === "string") {
+                out.rows.push({ name: two[0].text, commit: two[1].text });
+              }
+            }
+            return;
+          }
+          for (let i = 0; i < kids.length; i += 1) walk(kids[i]);
+        };
+        walk(this);
+        return JSON.stringify(out);
+      })()`,
+    });
+    if (res.error) throw new Error(`evaluate(dashboard snapshot) failed: ${res.error}`);
+    return JSON.parse(res.result);
+  };
+
+  const expectedType = isPortable ? "Portable build" : "Dev build";
+  const otherType = isPortable ? "Dev build" : "Portable build";
+  await app.waitFor(async () => {
+    const snap = await snapshotDashboard();
+
+    // Gate 1: non-empty version rendered, empty version hides the row.
+    if (buildVersion.length > 0) {
+      if (snap.hasVersion !== true) {
+        throw new Error(
+          `no text equal to buildVersion=${JSON.stringify(buildVersion)} ` +
+          `in the Dashboard view`);
+      }
+    } else if (snap.versionLabelVisible !== false) {
+      throw new Error(
+        'the "Version" row is visible although backend.buildVersion is empty');
+    }
+
+    // Gate 2: "Commits" heading.
+    if (snap.hasCommits !== true) {
+      throw new Error('"Commits" heading not found in the Dashboard view');
+    }
+
+    // Gate 3: row count equals backend.buildCommits.length.
+    if (!Array.isArray(snap.rows) || snap.rows.length !== commitCount) {
+      throw new Error(
+        `${Array.isArray(snap.rows) ? snap.rows.length : "no"} commit rows ` +
+        `rendered (expected backend.buildCommits.length=${commitCount})`);
+    }
+
+    // Gate 4: first row shows buildCommits[0].
+    if (snap.rows[0].name !== firstName || snap.rows[0].commit !== firstCommit) {
+      throw new Error(
+        `first commit row=${JSON.stringify(snap.rows[0])} (expected ` +
+        `name=${JSON.stringify(firstName)} commit=${JSON.stringify(firstCommit)})`);
+    }
+
+    // Gate 5: the matching build-type text, never the other one.
+    const hasExpected = isPortable ? snap.hasPortable : snap.hasDev;
+    const hasOther = isPortable ? snap.hasDev : snap.hasPortable;
+    if (hasExpected !== true || hasOther !== false) {
+      throw new Error(
+        `build-type texts: "${expectedType}"=${hasExpected} ` +
+        `"${otherType}"=${hasOther} (isPortableBuild=${isPortable} — ` +
+        `expected the matching one alone, never both)`);
+    }
+  }, { timeout: 10000, interval: 500,
+       description: "Dashboard to render version, build type and commit rows" });
+});
+
+// --- Settings (A17): Apps Inspector search filters the table ---
+//
+// Settings → Apps Inspector → type "package", then "zzz", then clear into
+// settings.searchField. Gates: "package" keeps exactly the rows whose
+// name/label/statusText/description/version contains it (≥ 1, since
+// package_manager_ui is always installed); "zzz" leaves 0 rows and no
+// "Loaded"/"Not loaded" badge text rendered inside the table; clearing
+// restores the pre-search row count.
+//
+// The search bar is SettingsView's page-level LogosSearchBar
+// (settings.searchField), shared by both inspectors and reset on every
+// section switch. Text is set through inspector evaluate on the field's
+// `text`; that breaks the `text: d.searchText` binding, which is harmless
+// because onTextChanged still feeds d.searchText and the test ends cleared.
+//
+// Counts come from appsInspector.table's model (the ModulesFilterProxy) as
+// visibleCount/totalCount. The expected "package" count is derived from a
+// snapshot of the five roles the proxy matches (ModulesFilterProxy.cpp,
+// role numbers from BasecampModelRoles.h ModuleInstanceRoles), never
+// hardcoded. The "zzz" absence check walks rendered text under the table;
+// a positive control with the search empty first proves the walk reaches
+// the badges, so an empty result cannot pass vacuously.
+
+test("apps inspector: search filters the table", async (app) => {
+  await openAppsInspector(app);
+
+  // AppsInspectorView is instantiated eagerly; only `visible` proves the
+  // section is selected.
+  let view = null;
+  await app.waitFor(async () => {
+    view = await findByObjectName(app.inspector, "appsInspectorView");
+    if (!view) throw new Error("appsInspectorView not in the QML tree");
+    const visible = await evalOn(app, view.id, "visible");
+    if (visible !== true) {
+      throw new Error(`appsInspectorView visible=${visible} (expected true)`);
+    }
+  }, { timeout: 10000, interval: 500,
+       description: "Apps Inspector view to become visible" });
+
+  let table = null;
+  await app.waitFor(async () => {
+    table = await findByObjectName(app.inspector, "appsInspector.table");
+    if (!table) throw new Error("appsInspector.table not in the QML tree");
+  }, { timeout: 10000, interval: 500, description: "apps table to exist" });
+
+  let field = null;
+  await app.waitFor(async () => {
+    field = await findByObjectName(app.inspector, "settings.searchField");
+    if (!field) throw new Error("settings.searchField not in the QML tree");
+  }, { timeout: 10000, interval: 500,
+       description: "settings search field to exist" });
+
+  const setSearch = async (value) => {
+    const res = await app.inspector.send("evaluate", {
+      objectId: field.id, expression: `text = ${JSON.stringify(value)}`,
+    });
+    if (res.error) {
+      throw new Error(
+        `setting search text to ${JSON.stringify(value)} failed: ${res.error}`);
+    }
+  };
+
+  // The bar may carry leftover text if an earlier run broke its binding.
+  const initialText = await evalOn(app, field.id, "text");
+  if (typeof initialText !== "string") {
+    throw new Error(
+      `search field text=${JSON.stringify(initialText)} (expected string)`);
+  }
+  if (initialText !== "") await setSearch("");
+
+  // Pre-search invariant: ≥ 1 row and every row visible. The post-clear
+  // gate compares against this count.
+  let initialCount = 0;
+  await app.waitFor(async () => {
+    const total = await evalOn(app, table.id, "model.totalCount");
+    const visible = await evalOn(app, table.id, "model.visibleCount");
+    if (typeof total !== "number" || total < 1) {
+      throw new Error(`model.totalCount=${JSON.stringify(total)} (expected ≥ 1)`);
+    }
+    if (visible !== total) {
+      throw new Error(
+        `model.visibleCount=${visible} !== totalCount=${total} with an ` +
+        `empty search (expected every row visible)`);
+    }
+    initialCount = visible;
+  }, { timeout: 10000, interval: 500, description: "apps table to populate" });
+
+  // Snapshot the five roles the filter matches, over every row.
+  const SEARCH_ROLES = [
+    ["name",        "Qt.UserRole + 1"],  // ModuleInstanceRoles::NameRole
+    ["label",       "Qt.UserRole + 2"],  // ModuleInstanceRoles::LabelRole
+    ["statusText",  "Qt.UserRole + 12"], // ModuleInstanceRoles::StatusTextRole
+    ["description", "Qt.UserRole + 3"],  // ModuleInstanceRoles::DescriptionRole
+    ["version",     "Qt.UserRole + 6"],  // ModuleInstanceRoles::VersionRole
+  ];
+  const rows = [];
+  for (let i = 0; i < initialCount; i += 1) {
+    const row = {};
+    for (const [key, roleExpr] of SEARCH_ROLES) {
+      row[key] = await evalOn(
+        app, table.id,
+        `String(model.data(model.index(${i}, 0), ${roleExpr}) || "")`);
+    }
+    rows.push(row);
+  }
+  const expectedMatches = rows.filter((row) =>
+    Object.values(row).some((v) => v.toLowerCase().includes("package"))).length;
+  if (expectedMatches < 1) {
+    throw new Error(
+      `no snapshot row matches "package" across name/label/statusText/` +
+      `description/version, yet package_manager_ui is always installed, so ` +
+      `either the snapshot or the table is wrong (rows=${JSON.stringify(rows)})`);
+  }
+
+  const collectStatusTexts = async () => {
+    const res = await app.inspector.send("evaluate", {
+      objectId: table.id,
+      expression: `(() => {
+        const bad = [];
+        const walk = (node) => {
+          if (!node) return;
+          if (typeof node.text === "string") {
+            const t = node.text.replace(/[()]/g, "").trim().toLowerCase();
+            if (t === "loaded" || t === "not loaded") bad.push(node.text);
+          }
+          const kids = node.children;
+          if (!kids || typeof kids.length !== "number") return;
+          for (let i = 0; i < kids.length; i += 1) walk(kids[i]);
+        };
+        walk(this);
+        return JSON.stringify(bad);
+      })()`,
+    });
+    if (res.error) {
+      throw new Error(`evaluate(status-text walk) failed: ${res.error}`);
+    }
+    return JSON.parse(res.result);
+  };
+
+  // Positive control for the "zzz" absence walk: with the search empty the
+  // walk must find at least the snapshot's "Loaded"/"Not loaded" rows
+  // (other rows carry "Main UI" / dependency wording, hence at-least).
+  const badgeRows = rows.filter((row) => {
+    const t = row.statusText.trim().toLowerCase();
+    return t === "loaded" || t === "not loaded";
+  }).length;
+  if (badgeRows >= 1) {
+    await app.waitFor(async () => {
+      const found = await collectStatusTexts();
+      if (found.length < badgeRows) {
+        throw new Error(
+          `status-text walk found ${found.length} badge texts ` +
+          `(${JSON.stringify(found)}) with the search empty, but the ` +
+          `snapshot has ${badgeRows} "Loaded"/"Not loaded" rows; the walk ` +
+          `cannot reach the table's badges, so its "zzz" absence gate ` +
+          `would be vacuous`);
+      }
+    }, { timeout: 5000, interval: 250,
+         description: "status-text walk to see the rendered badges" });
+  }
+
+  await setSearch("package");
+  await app.waitFor(async () => {
+    const text = await evalOn(app, field.id, "text");
+    if (text !== "package") {
+      throw new Error(
+        `search text=${JSON.stringify(text)} did not round-trip ` +
+        `(expected "package")`);
+    }
+    const visible = await evalOn(app, table.id, "model.visibleCount");
+    if (visible !== expectedMatches) {
+      throw new Error(
+        `model.visibleCount=${visible} for "package" (expected the ` +
+        `snapshot-derived ${expectedMatches} of ${initialCount} rows)`);
+    }
+  }, { timeout: 5000, interval: 250,
+       description: '"package" search to keep exactly the matching rows' });
+
+  // Filtered-out rows destroy their delegates; no badge text may remain.
+  await setSearch("zzz");
+  await app.waitFor(async () => {
+    const text = await evalOn(app, field.id, "text");
+    if (text !== "zzz") {
+      throw new Error(
+        `search text=${JSON.stringify(text)} did not round-trip (expected "zzz")`);
+    }
+    const visible = await evalOn(app, table.id, "model.visibleCount");
+    if (visible !== 0) {
+      throw new Error(`model.visibleCount=${visible} for "zzz" (expected 0)`);
+    }
+    const leftovers = await collectStatusTexts();
+    if (leftovers.length !== 0) {
+      throw new Error(
+        `status texts still rendered in the table with zero matches: ` +
+        `${JSON.stringify(leftovers)}`);
+    }
+  }, { timeout: 5000, interval: 250,
+       description: '"zzz" search to empty the table' });
+
+  // The cleared search is the suite-visible end state.
+  await setSearch("");
+  await app.waitFor(async () => {
+    const text = await evalOn(app, field.id, "text");
+    if (text !== "") {
+      throw new Error(
+        `search text=${JSON.stringify(text)} after clear (expected "")`);
+    }
+    const visible = await evalOn(app, table.id, "model.visibleCount");
+    if (visible !== initialCount) {
+      throw new Error(
+        `model.visibleCount=${visible} after clearing the search ` +
+        `(expected the recorded pre-search ${initialCount})`);
+    }
+  }, { timeout: 5000, interval: 250,
+       description: "cleared search to restore every row" });
+});
+
 // --- Package Manager ---
 //
 // PMUI is no longer launched from the sidebar app launcher (filtered out

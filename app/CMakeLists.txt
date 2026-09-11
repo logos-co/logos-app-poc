@@ -307,6 +307,7 @@ set(PROJECT_SOURCES
     IntentBridgeAdapter.cpp
     UIPluginPresenter.cpp
     CoreModuleManager.cpp
+    CoreDependencyLoader.cpp
     RecentlyClosedStore.cpp
     UIPluginManager.cpp
     PackageCoordinator.cpp
@@ -343,6 +344,17 @@ qt_add_executable(LogosBasecamp
     ${CORE_RUNTIME_SOURCES}
     ${PROJECT_SOURCES}
 )
+
+if(WIN32)
+    # Without this the PE links as Windows CUI and the OS hands the process a
+    # console window before main() runs -- so a user who double-clicks the app
+    # gets a terminal that then sits behind the GUI for the whole session.
+    #
+    # Also the switch that gives the image an entry point: Qt6::Core links
+    # Qt6::EntryPointPrivate (which supplies the WinMain that calls main())
+    # under $<BOOL:$<TARGET_PROPERTY:WIN32_EXECUTABLE>> and nowhere else.
+    set_target_properties(LogosBasecamp PROPERTIES WIN32_EXECUTABLE TRUE)
+endif()
 
 # The UI shell's seven qt_add_qml_module targets live in ../src. They are STATIC
 # modules registering their types from a static initializer, so they link into

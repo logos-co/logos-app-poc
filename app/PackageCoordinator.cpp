@@ -7,9 +7,11 @@
 #include "LogosBasecampPaths.h"
 #include "utils/DependencyBlocker.h"
 
+#include <QCoreApplication>
 #include <QDebug>
 #include <QDir>
 #include <QFile>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -1095,6 +1097,63 @@ void PackageCoordinator::populateAppsModel(
 
 // ── Package repository management ──────────────────────────────────────────
 
+// Stamp each repository with `displayLabel`, the one string every view
+// should show for it
+static QVariantList withDisplayLabels(const QVariantList& repos)
+{
+    // Comparison keys only — the rendered label keeps the repo's own
+    // spelling. Trimmed and case-folded so neither a stray space nor a
+    // different capitalisation of the same GitHub account (which GitHub
+    // treats as one account) can slip past the collision check and leave
+    // two repos rendering the same bare name.
+    auto nameOf = [](const QVariantMap& r) {
+        return r.value("displayName").toString().trimmed().toLower();
+    };
+    auto pairOf = [&](const QVariantMap& r) {
+        return nameOf(r) + QChar(0x01)
+             + r.value("sourceOwner").toString().trimmed().toLower();
+    };
+
+    // Counts first: a label depends on how many OTHER repos contest the name.
+    QHash<QString, int> byName, byNameAndOwner;
+    for (const QVariant& v : repos) {
+        const QVariantMap r = v.toMap();
+        byName[nameOf(r)]++;
+        byNameAndOwner[pairOf(r)]++;
+    }
+
+    QVariantList out;
+    out.reserve(repos.size());
+    for (const QVariant& v : repos) {
+        QVariantMap r = v.toMap();
+        // Trimmed to match the collision keys above; a trailing space is
+        // invisible on screen but would otherwise dodge the check.
+        QString label = r.value("displayName").toString().trimmed();
+        if (label.isEmpty()) label = r.value("name").toString().trimmed();
+
+        const QString owner = r.value("sourceOwner").toString();
+        const QString repo  = r.value("sourceRepo").toString();
+        const QString host  = r.value("sourceHost").toString();
+        QString shortSource = owner.isEmpty() ? host : owner;
+        QString longSource  = (owner.isEmpty() || repo.isEmpty())
+                                  ? shortSource
+                                  : owner + QLatin1Char('/') + repo;
+        if (shortSource.isEmpty()) shortSource = r.value("url").toString();
+        if (longSource.isEmpty())  longSource  = shortSource;
+
+        if (label.isEmpty()) {
+            label = longSource;                    // nothing to qualify
+        } else if (byName.value(nameOf(r)) > 1 && !shortSource.isEmpty()) {
+            label = QCoreApplication::translate("PackageCoordinator", "%1 (%2)")
+                        .arg(label, byNameAndOwner.value(pairOf(r)) > 1
+                                        ? longSource : shortSource);
+        }
+        r.insert(QStringLiteral("displayLabel"), label);
+        out.append(r);
+    }
+    return out;
+}
+
 void PackageCoordinator::refreshRepositories()
 {
     LogosAPIClient* dlClient = m_logosAPI
@@ -1111,7 +1170,7 @@ void PackageCoordinator::refreshRepositories()
         "package_downloader", "listRepositories", QVariantList{},
         [self](QVariant result) {
             if (!self) return;
-            self->m_repositories = result.toList();
+            self->m_repositories = withDisplayLabels(result.toList());
             const int remaining = --self->m_repositoriesLoadingCount;
             emit self->repositoriesChanged();
             if (remaining == 0) emit self->repositoriesLoadingChanged();
@@ -1731,13 +1790,14 @@ void PackageCoordinator::confirmCatalogInstall(const QString& name,
             plan.append({rowName,
                          m.value("version").toString(),
                          m.value("rootHash").toString(),
-                         m.value("size").toULongLong()});
+                         m.value("size").toULongLong(),
+                         m.value("repositoryUrl").toString()});
         }
         if (!plan.isEmpty()) {
             m_installRegistry->beginPlan(name, plan);
         } else {
             m_installRegistry->begin(name, /*targetVersion=*/{}, /*targetHash=*/{},
-                                     /*startedByTopLevel=*/name);
+                                     /*startedByTopLevel=*/name, repositoryUrl);
         }
     }
 
@@ -1777,8 +1837,9 @@ void PackageCoordinator::confirmCatalogInstall(const QString& name,
                     || installedHash.isEmpty()
                     || resolvedHash == installedHash;
                 if (versionMatches && hashMatches) {
-                    self->m_installRegistry->beginOrTrack(rowName, resolvedVersion,
-                                                    resolvedHash, name);
+                    self->m_installRegistry->beginOrTrack(
+                        rowName, resolvedVersion, resolvedHash, name,
+                        m.value("repositoryUrl").toString());
                     self->m_installRegistry->setStage(rowName, InstallStage::Installed);
                     continue;
                 }
@@ -1805,7 +1866,8 @@ void PackageCoordinator::confirmCatalogInstall(const QString& name,
                 self->m_installRegistry->beginOrTrack(rowName,
                     m.value("version").toString(),
                     m.value("rootHash").toString(),
-                    name);
+                    name,
+                    m.value("repositoryUrl").toString());
                 self->m_installRegistry->setStage(rowName, InstallStage::Queued);
             }
 
@@ -1938,7 +2000,8 @@ void PackageCoordinator::installResultsSequential(const QVariantList& results,
              << "topLevel=" << topLevelName;
     if (!rowName.isEmpty()) {
         m_installRegistry->beginOrTrack(rowName, dl.value("version").toString(),
-                                   dl.value("rootHash").toString(), topLevelName);
+                                   dl.value("rootHash").toString(), topLevelName,
+                                   dl.value("repositoryUrl").toString());
         m_installRegistry->setStage(rowName, InstallStage::Installing);
     }
 

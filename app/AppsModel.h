@@ -123,6 +123,10 @@ private:
     void recomputeVersionDerivedFields(Row& r);
     void recomputeInstallStatus(Row& r);
 
+    // The registry, but only when its in-flight entry belongs to this
+    // row's repository. nullptr otherwise — see the .cpp for why.
+    InstallRegistry* registryFor(const Row& r) const;
+
     QList<Row>          m_rows;
     QHash<QString, int> m_indexByKey;     // (repo + "\n" + name) → row index
     QMultiHash<QString, int> m_indicesByName;

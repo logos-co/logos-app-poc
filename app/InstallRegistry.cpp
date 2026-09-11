@@ -121,15 +121,26 @@ int InstallRegistry::planStage(const QString& name) const
     return int(InstallStage::None);
 }
 
+bool InstallRegistry::belongsTo(const QString& name,
+                                const QString& repositoryUrl) const
+{
+    auto it = m_ops.constFind(name);
+    if (it == m_ops.constEnd()) return true;   // nothing in flight to gate
+    if (it->repositoryUrl.isEmpty()) return true;   // not attributable
+    return it->repositoryUrl == repositoryUrl;
+}
+
 void InstallRegistry::begin(const QString& name,
                        const QString& targetVersion,
                        const QString& targetHash,
-                       const QString& startedByTopLevel)
+                       const QString& startedByTopLevel,
+                       const QString& repositoryUrl)
 {
     if (name.isEmpty()) return;
     const bool added = !m_ops.contains(name);
     Entry& e = m_ops[name];
     e.name              = name;
+    e.repositoryUrl     = repositoryUrl;
     e.targetVersion     = targetVersion;
     e.targetHash        = targetHash;
     e.stage             = InstallStage::Downloading;
@@ -151,6 +162,7 @@ void InstallRegistry::beginPlan(const QString& topLevel,
             added = true;
             Entry& e = m_ops[p.name];
             e.name          = p.name;
+            e.repositoryUrl = p.repositoryUrl;
             e.targetVersion = p.version;
             e.targetHash    = p.rootHash;
             e.stage         = InstallStage::Queued;
@@ -261,14 +273,19 @@ void InstallRegistry::clearByTopLevel(const QString& topLevelName)
 void InstallRegistry::beginOrTrack(const QString& name,
                               const QString& targetVersion,
                               const QString& targetHash,
-                              const QString& startedByTopLevel)
+                              const QString& startedByTopLevel,
+                              const QString& repositoryUrl)
 {
     if (name.isEmpty()) return;
     if (!m_ops.contains(name)) {
-        begin(name, targetVersion, targetHash, startedByTopLevel);
+        begin(name, targetVersion, targetHash, startedByTopLevel, repositoryUrl);
         return;
     }
     Entry& e = m_ops[name];
+    // Fill in attribution a beginPlan seed may not have had; never
+    // overwrite one that is already set, or a later dep would re-point an
+    // entry that belongs to the repo the user actually clicked.
+    if (e.repositoryUrl.isEmpty())     e.repositoryUrl = repositoryUrl;
     if (!targetVersion.isEmpty()) e.targetVersion = targetVersion;
     if (!targetHash.isEmpty())    e.targetHash    = targetHash;
     // Track the additional owner: an entry seeded by beginPlan, or shared
