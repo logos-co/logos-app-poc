@@ -1101,11 +1101,17 @@ void PackageCoordinator::populateAppsModel(
 // should show for it
 static QVariantList withDisplayLabels(const QVariantList& repos)
 {
+    // Comparison keys only — the rendered label keeps the repo's own
+    // spelling. Trimmed and case-folded so neither a stray space nor a
+    // different capitalisation of the same GitHub account (which GitHub
+    // treats as one account) can slip past the collision check and leave
+    // two repos rendering the same bare name.
     auto nameOf = [](const QVariantMap& r) {
-        return r.value("displayName").toString().toLower();
+        return r.value("displayName").toString().trimmed().toLower();
     };
     auto pairOf = [&](const QVariantMap& r) {
-        return nameOf(r) + QChar(0x01) + r.value("sourceOwner").toString();
+        return nameOf(r) + QChar(0x01)
+             + r.value("sourceOwner").toString().trimmed().toLower();
     };
 
     // Counts first: a label depends on how many OTHER repos contest the name.
@@ -1120,8 +1126,10 @@ static QVariantList withDisplayLabels(const QVariantList& repos)
     out.reserve(repos.size());
     for (const QVariant& v : repos) {
         QVariantMap r = v.toMap();
-        QString label = r.value("displayName").toString();
-        if (label.isEmpty()) label = r.value("name").toString();
+        // Trimmed to match the collision keys above; a trailing space is
+        // invisible on screen but would otherwise dodge the check.
+        QString label = r.value("displayName").toString().trimmed();
+        if (label.isEmpty()) label = r.value("name").toString().trimmed();
 
         const QString owner = r.value("sourceOwner").toString();
         const QString repo  = r.value("sourceRepo").toString();
@@ -1780,10 +1788,10 @@ void PackageCoordinator::confirmCatalogInstall(const QString& name,
             if (rowName.isEmpty() || !m.value("error").toString().isEmpty())
                 continue;
             plan.append({rowName,
-                         m.value("repositoryUrl").toString(),
                          m.value("version").toString(),
                          m.value("rootHash").toString(),
-                         m.value("size").toULongLong()});
+                         m.value("size").toULongLong(),
+                         m.value("repositoryUrl").toString()});
         }
         if (!plan.isEmpty()) {
             m_installRegistry->beginPlan(name, plan);
